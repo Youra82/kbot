@@ -82,6 +82,7 @@ def channel_backtest(df, channels, start_capital=1000):
     trades = []
     channel_types = []
     ch_idx = channels.index
+    equity_curve = [capital]
     for i in range(1, len(channels)):
         price = df.loc[ch_idx[i], 'close']
         high = channels['high'].iloc[i]
@@ -99,6 +100,7 @@ def channel_backtest(df, channels, start_capital=1000):
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
             trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital,'kanaltyp':ctype})
+            equity_curve.append(capital)
             position = 0
     # Offene Position am Ende schließen
     if position == 1:
@@ -108,11 +110,20 @@ def channel_backtest(df, channels, start_capital=1000):
         pnl = (price - entry_price) / entry_price * capital
         capital += pnl
         trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital,'kanaltyp':ctype})
+        equity_curve.append(capital)
     total_return = (capital - start_capital) / start_capital * 100
     num_trades = len([t for t in trades if t['type']=='SELL'])
     win_trades = [t for t in trades if t.get('pnl',0)>0]
     win_rate = len(win_trades) / num_trades * 100 if num_trades else 0
-    return capital, total_return, num_trades, win_rate, trades
+    # Maximaler Drawdown berechnen
+    eq = np.array(equity_curve)
+    if len(eq) > 1:
+        peak = np.maximum.accumulate(eq)
+        dd = (eq - peak) / peak
+        max_dd = dd.min() * 100  # in Prozent
+    else:
+        max_dd = 0.0
+    return capital, total_return, num_trades, win_rate, trades, max_dd
 
 
 def main():
@@ -141,13 +152,14 @@ def main():
         sys.exit(1)
 
     channels = detect_channels(df, window=50)
-    capital, total_return, num_trades, win_rate, trades = channel_backtest(df, channels, start_capital=args.start_capital)
+    capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(df, channels, start_capital=args.start_capital)
 
     print("Ergebnisse:")
     print(f"  Endkapital:   {capital:.2f} USD")
     print(f"  Gesamtrendite: {total_return:.2f} %")
     print(f"  Trades:        {num_trades}")
-    print(f"  Gewinnquote:   {win_rate:.1f} %\n")
+    print(f"  Gewinnquote:   {win_rate:.1f} %")
+    print(f"  Max. Drawdown: {max_dd:.2f} %\n")
 
     if trades:
         # Zähle wie oft jeder Kanaltyp verwendet wurde

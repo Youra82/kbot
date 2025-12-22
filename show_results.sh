@@ -6,7 +6,11 @@ echo "-----------------------------------------"
 read -p "Symbol (z.B. BTCUSDT): " symbol
 read -p "Timeframe (z.B. 4h): " timeframe
 read -p "Startdatum (YYYY-MM-DD): " start_date
-read -p "Enddatum (YYYY-MM-DD): " end_date
+
+read -p "Enddatum (YYYY-MM-DD, Enter = heute): " end_date
+if [ -z "$end_date" ]; then
+	end_date=$(date +%F)
+fi
 
 read -p "Startkapital (USD, z.B. 1000): " start_capital
 

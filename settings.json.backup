@@ -1,6 +1,6 @@
 {
   "live_trading_settings": {
-    "use_auto_optimizer_results": false,
+    // entfernt: use_auto_optimizer_results
     "active_strategies": [
       {
         "symbol": "SOL/USDT:USDT",

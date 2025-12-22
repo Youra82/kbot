@@ -1,4 +1,18 @@
 #!/bin/bash
+# show_results.sh: Backtest- und Ergebnis-Tool für KBot (ohne ML)
+
+echo "KBot Backtest-Tool (ohne Machine Learning)"
+echo "-----------------------------------------"
+read -p "Symbol (z.B. BTCUSDT): " symbol
+read -p "Timeframe (z.B. 4h): " timeframe
+read -p "Startdatum (YYYY-MM-DD): " start_date
+read -p "Enddatum (YYYY-MM-DD): " end_date
+
+# Hier kann ein Python-Backtest-Skript für Kanal-Trading aufgerufen werden
+# Beispiel: python3 src/kbot/strategy/backtest_channels.py --symbol "$symbol" --timeframe "$timeframe" --start_date "$start_date" --end_date "$end_date"
+
+echo "(Backtest-Logik bitte in Python implementieren, z.B. src/kbot/strategy/backtest_channels.py)"
+#!/bin/bash
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'

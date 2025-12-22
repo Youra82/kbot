@@ -5,8 +5,7 @@ import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
+## entfernt: ML-Imports
 import logging
 import warnings # Import für Warnungen hinzugefügt
 
@@ -24,7 +23,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='keras')
 
 try:
     from jaegerbot.analysis.backtester import load_data
-    from jaegerbot.utils.ann_model import prepare_data_for_ann
+    # entfernt: ann_model Import
 except ImportError as e:
     print(f"Fehler: Konnte Bot-Module nicht importieren. Stelle sicher, dass du im .venv bist. Fehler: {e}")
     sys.exit(1)
@@ -106,7 +105,7 @@ def analyze_feature_importance(symbol, timeframe, start_date, end_date):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="JaegerBot Feature-Wichtigkeits-Analyse")
+    parser = argparse.ArgumentParser(description="KBot Feature-Analyse (ohne ML)")
     parser.add_argument('--symbol', required=True, type=str, help="Symbol (z.B. BTC)")
     parser.add_argument('--timeframe', required=True, type=str, help="Timeframe (z.B. 4h)")
     parser.add_argument('--start_date', required=True, type=str, help="Startdatum (JJJJ-MM-TT)")

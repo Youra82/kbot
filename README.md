@@ -1,41 +1,26 @@
 -----
 
-# JaegerBot
 
-Ein vollautomatischer Trading-Bot für Krypto-Futures auf der Bitget-Börse, basierend auf einem neuronalen Netzwerk (ANN) zur Vorhersage signifikanter Preisbewegungen.
+# KBot
 
-Dieses System wurde für den Betrieb auf einem Ubuntu-Server entwickelt und umfasst neben dem Live-Trading-Modul eine hochentwickelte, automatisierte Pipeline zur Modellerstellung und Strategie-Optimierung.
 
-## Kernstrategie
+Ein vollautomatischer Trading-Bot für Krypto-Futures auf der Bitget-Börse, der ausschließlich nach Chart-Kanälen (parallel, Dreieck, Keil) handelt. Es gibt keine Machine-Learning- oder Modell-Logik mehr.
 
-Der Bot implementiert eine prädiktive Handelsstrategie, die darauf abzielt, statistische Vorteile in den Marktdaten zu nutzen.
 
-  * **Feature-Analyse:** Vor jeder Entscheidung analysiert der Bot eine Vielzahl von Indikatoren, darunter Volatilität (Bollinger Bänder), Volumen (OBV), Momentum (RSI, MACD), zeitbasierte Muster (Stunde, Wochentag) und Preisveränderungen der letzten Kerzen.
-  * **Vorhersage-Ziel:** Das Modell wurde darauf trainiert, nicht die nächste Kerze, sondern eine **signifikante Preisbewegung** über einen zukünftigen Zeitraum vorherzusagen. Dies filtert kurzfristiges Marktrauschen heraus.
-  * **Einstieg:** Ein Trade wird nur dann initiiert, wenn die vom Modell berechnete Wahrscheinlichkeit für eine bevorstehende Bewegung einen in der Konfiguration festgelegten Schwellenwert überschreitet.
-  * **Ausstieg & Risikomanagement:**
-      * Die **Positionsgröße** wird dynamisch vor jedem Trade berechnet. Sie basiert auf einem festen Prozentsatz (`risk_per_trade_pct`) des **aktuellen, live von der Börse abgerufenen Kontostandes**.
-      * Nach der Trade-Eröffnung werden sofort ein fester **Stop Loss** und ein fester **Take Profit** platziert, basierend auf dem konfigurierten Risiko-Ertrags-Verhältnis (`risk_reward_ratio`).
-      * Alle Preise werden vor dem Senden an die Börse **automatisch auf die korrekte Anzahl an Nachkommastellen gerundet**, um API-Fehler zu vermeiden.
+Dieses System ist für den Betrieb auf einem Ubuntu-Server ausgelegt und benötigt keine Trainings- oder Optimierungs-Pipeline mehr.
 
-## Architektur & Arbeitsablauf
 
-Der Bot arbeitet mit einem präzisen, automatisierten und ressourcenschonenden System.
+## Strategie
 
-1.  **Der Cronjob (Der Wecker):** Ein einziger, simpler Cronjob läuft in einem kurzen Intervall (z.B. alle 15 Minuten). Er hat nur eine Aufgabe: den intelligenten Master-Runner zu starten.
+KBot erkennt Chart-Kanäle automatisch (parallel, Dreieck, Keil), informiert per Telegram und handelt eigenständig von Kanalrand zu Kanalrand mit SL/TP. Es gibt keine KI- oder Trainingslogik mehr.
 
-2.  **Der Master-Runner (Der Dirigent):** Das `master_runner.py`-Skript ist das Herz der Automatisierung. Bei jedem Aufruf:
 
-      * Liest es alle aktiven Strategien aus der `settings.json`.
-      * Prüft es für jede Strategie, ob ein **neuer, exakter Zeit-Block** begonnen hat (z.B. eine neue 4-Stunden-Kerze um 08:00 Uhr UTC).
-      * Nur wenn eine Strategie an der Reihe ist, startet es den eigentlichen Handelsprozess für diese eine Strategie.
-      * Es **sammelt die komplette Log-Ausgabe** des Handelsprozesses und schreibt sie in die zentrale `cron.log`.
+## Arbeitsweise
 
-3.  **Der Handelsprozess (Der Agent):**
-
-      * Die `run.py` wird für eine spezifische Strategie gestartet.
-      * Der **Guardian-Decorator** führt zuerst eine Reihe von **automatisierten Sicherheits-Checks** durch (Konfiguration, Verbindung, etc.). Schlägt ein Check fehl, wird der Start verhindert und ein Alarm gesendet.
-      * Die Kernlogik in `trade_manager.py` wird ausgeführt: Kontostand abrufen, Aufräumen, Markt analysieren, ggf. handeln und absichern.
+1. KBot erkennt automatisch Chart-Kanäle im Markt (parallel, Dreieck, Keil).
+2. Bei jedem neuen Kanal wird eine Telegram-Nachricht mit Typ und Koordinaten gesendet.
+3. Liegt der aktuelle Preis am Kanalrand, wird automatisch ein Trade mit SL/TP eröffnet (Long am unteren, Short am oberen Rand).
+4. Es gibt keine Machine-Learning-Modelle, keine Trainings- oder Optimierungslogik mehr.
 
 -----
 

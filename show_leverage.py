@@ -24,7 +24,7 @@ def main():
             settings = json.load(f)
         
         live_settings = settings.get('live_trading_settings', {})
-        use_auto = live_settings.get('use_auto_optimizer_results', False)
+        # entfernt: use_auto_optimizer_results
         
         active_files = []
 

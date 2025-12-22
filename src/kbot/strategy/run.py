@@ -2,6 +2,7 @@
 # src/kbot/strategy/run.py
 # KBot: Kanal-Trading-Bot (Basisstruktur)
 
+
 import sys
 import argparse
 import pandas as pd
@@ -16,7 +17,6 @@ except ImportError:
 def load_ohlcv(symbol, start, end, timeframe):
     if web is None:
         raise ImportError("pandas_datareader muss installiert sein (pip install pandas_datareader)")
-    # Mapping für Yahoo Finance
     symbol_map = {
         'BTC': 'BTC-USD',
         'ETH': 'ETH-USD',
@@ -31,53 +31,56 @@ def load_ohlcv(symbol, start, end, timeframe):
     df = df[['open','high','low','close','volume']]
     df.index = pd.to_datetime(df.index)
     if timeframe != '1d':
-        # Resample auf gewünschtes Intervall (z.B. 1h, 4h)
         rule = {'1h':'1H','4h':'4H','6h':'6H','12h':'12H'}.get(timeframe, None)
         if rule:
             df = df.resample(rule).agg({'open':'first','high':'max','low':'min','close':'last','volume':'sum'}).dropna()
     return df
 
-# --- Einfache SMA-Crossover-Strategie ---
-def sma_crossover_backtest(df, fast=20, slow=50, start_capital=1000):
-    df = df.copy()
-    df['sma_fast'] = df['close'].rolling(fast).mean()
-    df['sma_slow'] = df['close'].rolling(slow).mean()
-    df['signal'] = 0
-    df.loc[df['sma_fast'] > df['sma_slow'], 'signal'] = 1
-    df.loc[df['sma_fast'] < df['sma_slow'], 'signal'] = -1
-    df['position'] = df['signal'].shift(1).fillna(0)
-    trades = []
+# --- Kanal-Erkennung per Regression (rollierend) ---
+def detect_channels(df, window=50):
+    highs = df['high'].rolling(window).max()
+    lows = df['low'].rolling(window).min()
+    channels = pd.DataFrame({'high':highs, 'low':lows}, index=df.index)
+    return channels
+
+# --- Kanal-Trading-Backtest ---
+def channel_backtest(df, channels, start_capital=1000):
     capital = start_capital
     position = 0
     entry_price = 0
-    for i, row in df.iterrows():
-        if row['position'] == 1 and position == 0:
-            # Long-Einstieg
+    trades = []
+    for i in range(1, len(df)):
+        price = df['close'].iloc[i]
+        high = channels['high'].iloc[i]
+        low = channels['low'].iloc[i]
+        date = df.index[i]
+        # Einstieg Long am unteren Kanalrand
+        if position == 0 and abs(price - low) < 1e-8 or (position == 0 and price <= low * 1.001):
             position = 1
-            entry_price = row['close']
-            trades.append({'type':'BUY','date':i,'price':entry_price})
-        elif row['position'] == -1 and position == 1:
-            # Long-Exit
-            exit_price = row['close']
-            pnl = (exit_price - entry_price) / entry_price * capital
+            entry_price = price
+            trades.append({'type':'BUY','date':date,'price':price})
+        # Ausstieg Long am oberen Kanalrand
+        elif position == 1 and (price >= high * 0.999):
+            pnl = (price - entry_price) / entry_price * capital
             capital += pnl
-            trades.append({'type':'SELL','date':i,'price':exit_price,'pnl':pnl,'capital':capital})
+            trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital})
             position = 0
     # Offene Position am Ende schließen
     if position == 1:
-        exit_price = df['close'].iloc[-1]
-        pnl = (exit_price - entry_price) / entry_price * capital
+        price = df['close'].iloc[-1]
+        date = df.index[-1]
+        pnl = (price - entry_price) / entry_price * capital
         capital += pnl
-        trades.append({'type':'SELL','date':df.index[-1],'price':exit_price,'pnl':pnl,'capital':capital})
-    # Performance-Kennzahlen
+        trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital})
     total_return = (capital - start_capital) / start_capital * 100
     num_trades = len([t for t in trades if t['type']=='SELL'])
     win_trades = [t for t in trades if t.get('pnl',0)>0]
     win_rate = len(win_trades) / num_trades * 100 if num_trades else 0
     return capital, total_return, num_trades, win_rate, trades
 
+
 def main():
-    parser = argparse.ArgumentParser(description="KBot Backtest (SMA-Crossover)")
+    parser = argparse.ArgumentParser(description="KBot Backtest (Kanalstrategie)")
     parser.add_argument('--symbol', type=str, required=True, help='Symbol(e), z.B. BTCUSDT')
     parser.add_argument('--timeframe', type=str, required=True, help='Timeframe(s), z.B. 4h')
     parser.add_argument('--start_date', type=str, required=True, help='Startdatum (YYYY-MM-DD)')
@@ -85,8 +88,8 @@ def main():
     parser.add_argument('--start_capital', type=float, default=1000, help='Startkapital in USD')
     args = parser.parse_args()
 
-    print("\nKBot Backtest (SMA-Crossover)")
-    print("-----------------------------")
+    print("\nKBot Backtest (Kanalstrategie)")
+    print("------------------------------")
     print(f"Symbol:     {args.symbol}")
     print(f"Timeframe:  {args.timeframe}")
     print(f"Zeitraum:   {args.start_date} bis {args.end_date}")
@@ -101,7 +104,8 @@ def main():
         print("Nicht genügend Kursdaten für Backtest.")
         sys.exit(1)
 
-    capital, total_return, num_trades, win_rate, trades = sma_crossover_backtest(df, fast=20, slow=50, start_capital=args.start_capital)
+    channels = detect_channels(df, window=50)
+    capital, total_return, num_trades, win_rate, trades = channel_backtest(df, channels, start_capital=args.start_capital)
 
     print("Ergebnisse:")
     print(f"  Endkapital:   {capital:.2f} USD")

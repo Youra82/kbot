@@ -8,9 +8,11 @@ read -p "Timeframe (z.B. 4h): " timeframe
 read -p "Startdatum (YYYY-MM-DD): " start_date
 read -p "Enddatum (YYYY-MM-DD): " end_date
 
+read -p "Startkapital (USD, z.B. 1000): " start_capital
+
 echo "(Backtest-Logik bitte in Python implementieren, z.B. src/kbot/strategy/backtest_channels.py)"
 echo "Starte Backtest..."
 # Hier wird das KBot-Backtest-Script aufgerufen (Dummy-Ausgabe, Implementierung folgt)
-python3 src/kbot/strategy/run.py --symbol "$symbol" --timeframe "$timeframe" --start_date "$start_date" --end_date "$end_date"
+python3 src/kbot/strategy/run.py --symbol "$symbol" --timeframe "$timeframe" --start_date "$start_date" --end_date "$end_date" --start_capital "$start_capital"
 
 

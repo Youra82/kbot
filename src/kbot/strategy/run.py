@@ -3,38 +3,42 @@
 # KBot: Kanal-Trading-Bot (Basisstruktur)
 
 
+
 import sys
 import argparse
 import pandas as pd
 import numpy as np
 import datetime
-try:
-    import pandas_datareader.data as web
-except ImportError:
-    web = None
+import ccxt
 
-# --- Hilfsfunktion: Kursdaten laden (Yahoo Finance) ---
+# --- Hilfsfunktion: Kursdaten laden (Bitget via ccxt) ---
 def load_ohlcv(symbol, start, end, timeframe):
-    if web is None:
-        raise ImportError("pandas_datareader muss installiert sein (pip install pandas_datareader)")
-    symbol_map = {
-        'BTC': 'BTC-USD',
-        'ETH': 'ETH-USD',
-        'XRP': 'XRP-USD',
-        'ADA': 'ADA-USD',
-        'DOGE': 'DOGE-USD',
-        'SOL': 'SOL-USD',
-    }
-    yf_symbol = symbol_map.get(symbol.upper(), symbol.upper())
-    df = web.DataReader(yf_symbol, 'yahoo', start, end)
-    df = df.rename(columns={'Open':'open','High':'high','Low':'low','Close':'close','Volume':'volume'})
-    df = df[['open','high','low','close','volume']]
-    df.index = pd.to_datetime(df.index)
-    if timeframe != '1d':
-        rule = {'1h':'1H','4h':'4H','6h':'6H','12h':'12H'}.get(timeframe, None)
-        if rule:
-            df = df.resample(rule).agg({'open':'first','high':'max','low':'min','close':'last','volume':'sum'}).dropna()
-    return df
+    exchange = ccxt.bitget()
+    # Bitget-Symbole sind z.B. BTC/USDT:USDT
+    if not symbol.endswith(':USDT'):
+        symbol = symbol.upper() + '/USDT:USDT'
+    since = int(pd.Timestamp(start).timestamp() * 1000)
+    end_ts = int(pd.Timestamp(end).timestamp() * 1000)
+    tf_map = {'1d':'1d','4h':'4h','1h':'1h','6h':'6h','30m':'30m','15m':'15m','5m':'5m'}
+    tf = tf_map.get(timeframe, '1d')
+    all_ohlcv = []
+    limit = 500
+    while since < end_ts:
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=tf, since=since, limit=limit)
+        if not ohlcv:
+            break
+        all_ohlcv += ohlcv
+        last = ohlcv[-1][0]
+        # Bitget gibt Kerzen ab since, also +1ms um Überschneidung zu vermeiden
+        since = last + 1
+        if len(ohlcv) < limit:
+            break
+    if not all_ohlcv:
+        raise Exception(f"Keine Daten von Bitget für {symbol} im Zeitraum {start} bis {end}")
+    df = pd.DataFrame(all_ohlcv, columns=['timestamp','open','high','low','close','volume'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    df = df.set_index('timestamp')
+    return df[['open','high','low','close','volume']]
 
 
 # --- Erweiterte Kanal-Erkennung: parallel, wedge, triangle ---

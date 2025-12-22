@@ -8,36 +8,10 @@ read -p "Timeframe (z.B. 4h): " timeframe
 read -p "Startdatum (YYYY-MM-DD): " start_date
 read -p "Enddatum (YYYY-MM-DD): " end_date
 
-# Hier kann ein Python-Backtest-Skript für Kanal-Trading aufgerufen werden
-# Beispiel: python3 src/kbot/strategy/backtest_channels.py --symbol "$symbol" --timeframe "$timeframe" --start_date "$start_date" --end_date "$end_date"
-
 echo "(Backtest-Logik bitte in Python implementieren, z.B. src/kbot/strategy/backtest_channels.py)"
-#!/bin/bash
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
-VENV_PATH=".venv/bin/activate"
-RESULTS_SCRIPT="src/jaegerbot/analysis/show_results.py"
-OPTIMAL_CONFIGS_FILE=".optimal_configs.tmp"
-UPDATE_SCRIPT="update_settings_from_optimizer.py"
-
-source "$VENV_PATH"
-
-# --- ERWEITERTES MODUS-MENÜ ---
-echo -e "\n${YELLOW}Wähle einen Analyse-Modus:${NC}"
-echo "  1) Einzel-Analyse (jede Strategie wird isoliert getestet)"
-echo "  2) Manuelle Portfolio-Simulation (du wählst das Team)"
-echo "  3) Automatische Portfolio-Optimierung (der Bot wählt das beste Team)"
-read -p "Auswahl (1-3) [Standard: 1]: " MODE
-MODE=${MODE:-1}
-
-python3 "$RESULTS_SCRIPT" --mode "$MODE"
-
-# --- INTERAKTIVE SETTINGS-ÜBERNAHME FÜR OPTION 3 ---
-if [ "$MODE" == "3" ] && [ -f "$OPTIMAL_CONFIGS_FILE" ]; then
-    echo ""
+echo "Starte Backtest..."
+# Hier wird das KBot-Backtest-Script aufgerufen (Dummy-Ausgabe, Implementierung folgt)
+python3 src/kbot/strategy/run.py --symbol "$symbol" --timeframe "$timeframe" --start_date "$start_date" --end_date "$end_date"
     echo -e "${YELLOW}========================================${NC}"
     echo -e "${YELLOW}  SETTINGS AUTOMATISCH AKTUALISIEREN?${NC}"
     echo -e "${YELLOW}========================================${NC}"

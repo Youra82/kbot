@@ -1,63 +1,29 @@
+#!/usr/bin/env python3
 # src/kbot/strategy/run.py
 # KBot: Kanal-Trading-Bot (Basisstruktur)
-import os
 import sys
-import json
-import logging
-from logging.handlers import RotatingFileHandler
-import time
 import argparse
-import numpy as np
-import pandas as pd
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
+# --- Argument-Parser für Shell-Aufruf ---
+def main():
+    parser = argparse.ArgumentParser(description="KBot Backtest (Dummy-Ausgabe)")
+    parser.add_argument('--symbol', type=str, required=True, help='Symbol(e), z.B. BTCUSDT')
+    parser.add_argument('--timeframe', type=str, required=True, help='Timeframe(s), z.B. 4h')
+    parser.add_argument('--start_date', type=str, required=True, help='Startdatum (YYYY-MM-DD)')
+    parser.add_argument('--end_date', type=str, required=True, help='Enddatum (YYYY-MM-DD)')
+    args = parser.parse_args()
 
-from kbot.utils.exchange import Exchange
-from kbot.utils.telegram import send_message
-from kbot.utils.trade_manager import full_trade_cycle
-from kbot.utils.guardian import guardian_decorator
+    print("\nKBot Backtest Dummy-Ausgabe")
+    print("---------------------------")
+    print(f"Symbol(e):   {args.symbol}")
+    print(f"Timeframe(s): {args.timeframe}")
+    print(f"Zeitraum:    {args.start_date} bis {args.end_date}")
+    print("\n[Hier folgt später die Backtest-Logik und Ergebnis-Ausgabe]")
 
-def setup_logging(symbol, timeframe):
-    safe_filename = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-    log_dir = os.path.join(PROJECT_ROOT, 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, f'kbot_{safe_filename}.log')
-    logger = logging.getLogger(f'kbot_{safe_filename}')
-    logger.setLevel(logging.INFO)
-    if not logger.handlers:
-        fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3)
-        fh_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
-        ch = logging.StreamHandler()
-        ch_formatter = logging.Formatter('%(levelname)s: %(message)s')
-        ch.setFormatter(ch_formatter)
-        logger.addHandler(ch)
-    return logger
+if __name__ == "__main__":
+    main()
 
-def load_config(symbol, timeframe):
-    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
-    safe_filename_base = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-    config_filename = f"config_{safe_filename_base}.json"
-    config_path = os.path.join(configs_dir, config_filename)
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Die angeforderte Konfigurationsdatei '{config_filename}' wurde nicht gefunden.")
-    with open(config_path, 'r') as f:
-        return json.load(f)
-
-def detect_channels(df, min_points=20):
-    """
-    Erkenne einfache Kanäle (parallel, Dreieck, Keil) im Preis-DataFrame.
-    Gibt eine Liste von Kanälen mit Typ und Koordinaten zurück.
-    """
-    channels = []
-    closes = df['close'].values
-    highs = df['high'].values
-    lows = df['low'].values
-    idx = np.arange(len(df))
-    # Parallele Kanäle (Regression)
-    for window in range(min_points, len(df), min_points//2):
+# ...existing code...
         for start in range(0, len(df)-window, min_points//2):
             end = start + window
             x = idx[start:end]

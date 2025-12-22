@@ -36,42 +36,74 @@ def load_ohlcv(symbol, start, end, timeframe):
             df = df.resample(rule).agg({'open':'first','high':'max','low':'min','close':'last','volume':'sum'}).dropna()
     return df
 
-# --- Kanal-Erkennung per Regression (rollierend) ---
+
+# --- Erweiterte Kanal-Erkennung: parallel, wedge, triangle ---
 def detect_channels(df, window=50):
-    highs = df['high'].rolling(window).max()
-    lows = df['low'].rolling(window).min()
-    channels = pd.DataFrame({'high':highs, 'low':lows}, index=df.index)
-    return channels
+    idx = np.arange(len(df))
+    channel_types = []
+    highs = df['high'].values
+    lows = df['low'].values
+    channels = []
+    for i in range(window, len(df)):
+        x = idx[i-window:i]
+        y_high = highs[i-window:i]
+        y_low = lows[i-window:i]
+        coef_high = np.polyfit(x, y_high, 1)
+        coef_low = np.polyfit(x, y_low, 1)
+        # Parallelkanal: ähnliche Steigung
+        if abs(coef_high[0] - coef_low[0]) < 0.1 * max(abs(coef_high[0]), 1e-8):
+            ctype = 'parallel'
+        # Keil: beide Linien gleiche Richtung, Abstand wird kleiner
+        elif np.sign(coef_high[0]) == np.sign(coef_low[0]) and abs(coef_high[0]) > 0.05 and abs(coef_low[0]) > 0.05:
+            ctype = 'wedge'
+        # Dreieck: Linien laufen aufeinander zu (entgegengesetzte Steigung)
+        elif coef_high[0] < 0 and coef_low[0] > 0:
+            ctype = 'triangle'
+        else:
+            ctype = 'none'
+        high_val = np.polyval(coef_high, x[-1])
+        low_val = np.polyval(coef_low, x[-1])
+        channels.append({'high': high_val, 'low': low_val, 'type': ctype, 'index': df.index[i]})
+    # DataFrame mit Kanaltypen
+    ch_df = pd.DataFrame(channels)
+    ch_df.index = ch_df['index']
+    return ch_df[['high','low','type']]
 
 # --- Kanal-Trading-Backtest ---
+
 def channel_backtest(df, channels, start_capital=1000):
     capital = start_capital
     position = 0
     entry_price = 0
     trades = []
-    for i in range(1, len(df)):
-        price = df['close'].iloc[i]
+    channel_types = []
+    ch_idx = channels.index
+    for i in range(1, len(channels)):
+        price = df.loc[ch_idx[i], 'close']
         high = channels['high'].iloc[i]
         low = channels['low'].iloc[i]
-        date = df.index[i]
-        # Einstieg Long am unteren Kanalrand
-        if position == 0 and abs(price - low) < 1e-8 or (position == 0 and price <= low * 1.001):
+        ctype = channels['type'].iloc[i]
+        date = ch_idx[i]
+        channel_types.append(ctype)
+        # Einstieg Long am unteren Kanalrand (nur bei erkanntem Kanaltyp)
+        if position == 0 and ctype != 'none' and (abs(price - low) < 1e-8 or price <= low * 1.001):
             position = 1
             entry_price = price
-            trades.append({'type':'BUY','date':date,'price':price})
+            trades.append({'type':'BUY','date':date,'price':price,'kanaltyp':ctype})
         # Ausstieg Long am oberen Kanalrand
         elif position == 1 and (price >= high * 0.999):
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
-            trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital})
+            trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital,'kanaltyp':ctype})
             position = 0
     # Offene Position am Ende schließen
     if position == 1:
-        price = df['close'].iloc[-1]
-        date = df.index[-1]
+        price = df.loc[ch_idx[-1], 'close']
+        date = ch_idx[-1]
+        ctype = channels['type'].iloc[-1]
         pnl = (price - entry_price) / entry_price * capital
         capital += pnl
-        trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital})
+        trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital,'kanaltyp':ctype})
     total_return = (capital - start_capital) / start_capital * 100
     num_trades = len([t for t in trades if t['type']=='SELL'])
     win_trades = [t for t in trades if t.get('pnl',0)>0]
@@ -115,14 +147,15 @@ def main():
 
     if trades:
         print("Trade-Liste:")
-        print(f"{'Typ':<6} {'Datum':<19} {'Preis':>10} {'P&L':>10} {'Kapital':>10}")
+        print(f"{'Typ':<6} {'Datum':<19} {'Preis':>10} {'P&L':>10} {'Kapital':>10} {'Kanaltyp':>10}")
         for t in trades:
             typ = t['type']
             datum = t['date'].strftime('%Y-%m-%d %H:%M') if hasattr(t['date'],'strftime') else str(t['date'])
             preis = f"{t['price']:.2f}"
             pnl = f"{t.get('pnl',''):>10.2f}" if 'pnl' in t else ' '*10
             cap = f"{t.get('capital',''):>10.2f}" if 'capital' in t else ' '*10
-            print(f"{typ:<6} {datum:<19} {preis:>10} {pnl} {cap}")
+            kanaltyp = t.get('kanaltyp','')
+            print(f"{typ:<6} {datum:<19} {preis:>10} {pnl} {cap} {kanaltyp:>10}")
     else:
         print("Keine Trades im Zeitraum.")
 

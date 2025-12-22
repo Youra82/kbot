@@ -14,4 +14,3 @@ echo "Starte Backtest..."
 python3 src/kbot/strategy/run.py --symbol "$symbol" --timeframe "$timeframe" --start_date "$start_date" --end_date "$end_date"
 
 
-deactivate

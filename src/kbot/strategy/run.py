@@ -150,16 +150,15 @@ def main():
     print(f"  Gewinnquote:   {win_rate:.1f} %\n")
 
     if trades:
-        print("Trade-Liste:")
-        print(f"{'Typ':<6} {'Datum':<19} {'Preis':>10} {'P&L':>10} {'Kapital':>10} {'Kanaltyp':>10}")
-        for t in trades:
-            typ = t['type']
-            datum = t['date'].strftime('%Y-%m-%d %H:%M') if hasattr(t['date'],'strftime') else str(t['date'])
-            preis = f"{t['price']:.2f}"
-            pnl = f"{t.get('pnl',''):>10.2f}" if 'pnl' in t else ' '*10
-            cap = f"{t.get('capital',''):>10.2f}" if 'capital' in t else ' '*10
-            kanaltyp = t.get('kanaltyp','')
-            print(f"{typ:<6} {datum:<19} {preis:>10} {pnl} {cap} {kanaltyp:>10}")
+        # Zähle wie oft jeder Kanaltyp verwendet wurde
+        from collections import Counter
+        kanaltypen = [t.get('kanaltyp','unbekannt') for t in trades if t.get('kanaltyp')]
+        if kanaltypen:
+            print("Verwendete Kanaltypen:")
+            for ktyp, count in Counter(kanaltypen).items():
+                print(f"  {ktyp}: {count}x")
+        else:
+            print("Keine Kanaltypen in Trades gefunden.")
     else:
         print("Keine Trades im Zeitraum.")
 

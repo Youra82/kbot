@@ -43,17 +43,19 @@ if [ -z "$TIMEFRAMES" ]; then
     exit 1
 fi
 
-echo -e "\n${BLUE}Empfehlung für Optimierungs-Zeitraum:${NC}"
-echo "  • 5m, 15m:     15 - 60 Tage"
-echo "  • 30m, 1h:     60 - 180 Tage"
-echo "  • 4h, 2h:      180 - 365 Tage"
-echo "  • 1d:          365 - 730 Tage"
+# Zeitraum-Empfehlungen anzeigen
+echo -e "\n${BLUE}--- Empfehlung: Optimaler Rückblick-Zeitraum ---${NC}"
+printf "+-------------+--------------------------------+\n"
+printf "| Timeframe   | Empfohlener Rückblick (Tage)   |\n"
+printf "+-------------+--------------------------------+\n"
+printf "| 5m, 15m     | 15 - 60 Tage                   |\n"
+printf "| 30m, 1h     | 60 - 180 Tage                  |\n"
+printf "| 2h, 4h      | 180 - 365 Tage                 |\n"
+printf "| 6h, 1d      | 365 - 730 Tage                 |\n"
+printf "+-------------+--------------------------------+\n"
 
-read -p "Startdatum (YYYY-MM-DD): " START_DATE
-if [ -z "$START_DATE" ]; then
-    echo -e "${RED}Keine Startdatum eingegeben!${NC}"
-    exit 1
-fi
+read -p "Startdatum (YYYY-MM-DD) oder 'a' für Automatik [Standard: a]: " START_DATE_INPUT
+START_DATE_INPUT=${START_DATE_INPUT:-a}
 
 read -p "Enddatum (YYYY-MM-DD, Enter = heute): " END_DATE
 if [ -z "$END_DATE" ]; then
@@ -68,20 +70,64 @@ echo -e "\n${YELLOW}--- Optimierung wird gestartet ---${NC}\n"
 # Speichere optimale Konfigurationen
 OPTIMAL_CONFIGS=()
 
+# Hilfsfunktion: Bestimme lookback_days basierend auf Timeframe
+get_lookback_days() {
+    local timeframe=$1
+    case "$timeframe" in
+        5m|15m)
+            echo 60
+            ;;
+        30m|1h)
+            echo 180
+            ;;
+        2h|4h)
+            echo 365
+            ;;
+        6h|1d)
+            echo 730
+            ;;
+        *)
+            echo 365  # Default
+            ;;
+    esac
+}
+
 # Starte Optimierung für jede Symbol/Timeframe-Kombination
 for symbol in $SYMBOLS; do
     for timeframe in $TIMEFRAMES; do
+        echo -e "\n${BLUE}======================================================="
+        echo "   Optimiere: $symbol ($timeframe)"
+        echo -e "=======================================================${NC}"
+        
+        # Bestimme Start- und End-Datum
+        if [ "$START_DATE_INPUT" == "a" ]; then
+            # Automatischer Modus: Zeitraum basierend auf Timeframe
+            lookback_days=$(get_lookback_days "$timeframe")
+            
+            # Berechne Datumsgrenzen
+            CURRENT_START_DATE=$(date -d "$lookback_days days ago" +%F)
+            CURRENT_END_DATE="$END_DATE"
+            
+            echo -e "${GREEN}ℹ Automatischer Modus aktiviert${NC}"
+            echo -e "${YELLOW}  Timeframe: $timeframe → Lookback: $lookback_days Tage${NC}"
+        else
+            # Manueller Modus: Verwende eingegebene Daten
+            CURRENT_START_DATE="$START_DATE_INPUT"
+            CURRENT_END_DATE="$END_DATE"
+            echo -e "${YELLOW}ℹ Manueller Zeitraum gewählt${NC}"
+        fi
+        
+        echo -e "${BLUE}  Datenzeitraum: $CURRENT_START_DATE bis $CURRENT_END_DATE${NC}"
+        
         echo -e "\n${BLUE}>>> Optimiere $symbol ($timeframe)...${NC}"
         
-        python3 "$OPTIMIZER" \
+        if python3 "$OPTIMIZER" \
             --symbol "$symbol" \
             --timeframe "$timeframe" \
-            --start-date "$START_DATE" \
-            --end-date "$END_DATE" \
+            --start-date "$CURRENT_START_DATE" \
+            --end-date "$CURRENT_END_DATE" \
             --start-capital "$START_CAPITAL" \
-            --save-config
-        
-        if [ $? -eq 0 ]; then
+            --save-config; then
             OPTIMAL_CONFIGS+=("$symbol ($timeframe)")
             echo -e "${GREEN}✓ Optimierung für $symbol ($timeframe) abgeschlossen${NC}"
         else

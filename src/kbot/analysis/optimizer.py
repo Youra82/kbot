@@ -9,6 +9,8 @@ import argparse
 import numpy as np
 from datetime import datetime, timedelta
 import logging
+from tqdm import tqdm
+from itertools import product
 
 # Setup Python Path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -76,86 +78,79 @@ def optimize_parameters(symbol, timeframe, start_date, end_date, start_capital=1
             'params': {}
         }
         
-        # Grid-Search
-        total_combinations = 1
-        for key, values in param_grid.items():
-            total_combinations *= len(values)
+        # Erstelle alle Parameter-Kombinationen für Grid-Search
+        param_combinations = list(product(
+            param_grid['window'],
+            param_grid['min_channel_width'],
+            param_grid['slope_threshold'],
+            param_grid['entry_threshold'],
+            param_grid['exit_threshold']
+        ))
         
-        iteration = 0
+        logger.info(f"Starte Grid-Search mit {len(param_combinations)} Kombinationen...")
+        print()  # Leerzeile für schönere Ausgabe
         
-        for window in param_grid['window']:
-            for min_width in param_grid['min_channel_width']:
-                for slope_thresh in param_grid['slope_threshold']:
-                    for entry_thresh in param_grid['entry_threshold']:
-                        for exit_thresh in param_grid['exit_threshold']:
-                            iteration += 1
-                            
-                            # Progress
-                            progress = f"[{iteration}/{total_combinations}]"
-                            
-                            try:
-                                # Erkenne Kanäle mit aktuellen Parametern
-                                channels = detect_channels(
-                                    df,
-                                    window=window,
-                                    min_channel_width=min_width,
-                                    slope_threshold=slope_thresh
-                                )
-                                
-                                # Backtest durchführen
-                                end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
-                                    df,
-                                    channels,
-                                    start_capital=start_capital,
-                                    entry_threshold=entry_thresh,
-                                    exit_threshold=exit_thresh
-                                )
-                                
-                                # Bewertungs-Score berechnen
-                                # Priorität: Return > Win Rate > Drawdown
-                                if num_trades > 0:
-                                    # Risk-adjusted Return
-                                    if max_dd < 0:
-                                        risk_adjusted_return = total_return / abs(max_dd)
-                                    else:
-                                        risk_adjusted_return = total_return * 1.5
-                                    
-                                    score = risk_adjusted_return + (win_rate * 0.5)
-                                else:
-                                    score = -999
-                                
-                                # Update Best
-                                if score > best_result['total_return']:
-                                    best_result = {
-                                        'symbol': symbol,
-                                        'timeframe': timeframe,
-                                        'total_return': total_return,
-                                        'win_rate': win_rate,
-                                        'num_trades': num_trades,
-                                        'max_dd': max_dd,
-                                        'end_capital': end_capital,
-                                        'score': score,
-                                        'params': {
-                                            'window': window,
-                                            'min_channel_width': min_width,
-                                            'slope_threshold': slope_thresh,
-                                            'entry_threshold': entry_thresh,
-                                            'exit_threshold': exit_thresh
-                                        }
-                                    }
-                                    
-                                    # Beste Parameter anzeigen
-                                    if iteration % 10 == 0 or num_trades > 5:
-                                        logger.info(
-                                            f"{progress} Window={window}, Width={min_width:.3f}, "
-                                            f"Slope={slope_thresh:.2f}, Entry={entry_thresh:.3f}, "
-                                            f"Exit={exit_thresh:.3f} => Return={total_return:.2f}%, "
-                                            f"Trades={num_trades}, WR={win_rate:.1f}%, DD={max_dd:.2f}%"
-                                        )
-                            
-                            except Exception as e:
-                                logger.debug(f"{progress} Fehler: {str(e)}")
-                                continue
+        # Grid-Search mit Ladebalken
+        for window, min_width, slope_thresh, entry_thresh, exit_thresh in tqdm(
+            param_combinations,
+            desc=f"Optimiere {symbol} ({timeframe})",
+            unit="combo",
+            ncols=80
+        ):
+            try:
+                # Erkenne Kanäle mit aktuellen Parametern
+                channels = detect_channels(
+                    df,
+                    window=window,
+                    min_channel_width=min_width,
+                    slope_threshold=slope_thresh
+                )
+                
+                # Backtest durchführen
+                end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
+                    df,
+                    channels,
+                    start_capital=start_capital,
+                    entry_threshold=entry_thresh,
+                    exit_threshold=exit_thresh
+                )
+                
+                # Bewertungs-Score berechnen
+                # Priorität: Return > Win Rate > Drawdown
+                if num_trades > 0:
+                    # Risk-adjusted Return
+                    if max_dd < 0:
+                        risk_adjusted_return = total_return / abs(max_dd)
+                    else:
+                        risk_adjusted_return = total_return * 1.5
+                    
+                    score = risk_adjusted_return + (win_rate * 0.5)
+                else:
+                    score = -999
+                
+                # Update Best
+                if score > best_result['total_return']:
+                    best_result = {
+                        'symbol': symbol,
+                        'timeframe': timeframe,
+                        'total_return': total_return,
+                        'win_rate': win_rate,
+                        'num_trades': num_trades,
+                        'max_dd': max_dd,
+                        'end_capital': end_capital,
+                        'score': score,
+                        'params': {
+                            'window': window,
+                            'min_channel_width': min_width,
+                            'slope_threshold': slope_thresh,
+                            'entry_threshold': entry_thresh,
+                            'exit_threshold': exit_thresh
+                        }
+                    }
+            
+            except Exception as e:
+                logger.debug(f"Fehler bei Kombination: {str(e)}")
+                continue
         
         # Ergebnisse anzeigen
         if best_result['num_trades'] > 0:

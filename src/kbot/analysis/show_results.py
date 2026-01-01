@@ -390,7 +390,30 @@ def run_portfolio_optimizer(start_capital, start_date, end_date, max_drawdown, c
             candidates.remove(best_addition)
         else:
             print("Keine weitere Verbesserung möglich. Optimierung beendet.")
-            break\n    \n    # Berechne finale Performance\n    final_capital = start_capital\n    final_trades = 0\n    final_dd = 0.0\n    \n    for strat in best_portfolio:\n        res = strat['result']\n        final_capital += (res['end_capital'] - start_capital)\n        final_trades += res['num_trades']\n        final_dd = min(final_dd, res['max_dd'])\n    \n    final_pnl = final_capital - start_capital\n    final_pnl_pct = (final_pnl / start_capital) * 100\n    \n    return {\n        'portfolio': best_portfolio,\n        'end_capital': final_capital,\n        'total_pnl': final_pnl,\n        'total_pnl_pct': final_pnl_pct,\n        'trade_count': final_trades,\n        'max_dd': final_dd\n    }
+            break
+    
+    # Berechne finale Performance
+    final_capital = start_capital
+    final_trades = 0
+    final_dd = 0.0
+    
+    for strat in best_portfolio:
+        res = strat['result']
+        final_capital += (res['end_capital'] - start_capital)
+        final_trades += res['num_trades']
+        final_dd = min(final_dd, res['max_dd'])
+    
+    final_pnl = final_capital - start_capital
+    final_pnl_pct = (final_pnl / start_capital) * 100
+    
+    return {
+        'portfolio': best_portfolio,
+        'end_capital': final_capital,
+        'total_pnl': final_pnl,
+        'total_pnl_pct': final_pnl_pct,
+        'trade_count': final_trades,
+        'max_dd': final_dd
+    }
 
 
 def mode_3_auto_configs():

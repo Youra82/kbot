@@ -7,6 +7,7 @@ import sys
 import json
 import argparse
 import numpy as np
+import pandas as pd
 from datetime import datetime, timedelta
 import logging
 from tqdm import tqdm
@@ -65,7 +66,20 @@ def optimize_parameters(
             logger.error(f"Nicht genügend Kursdaten für {symbol} ({timeframe})")
             return None
         
-        logger.info(f"Geladen: {len(df)} Kerzen")
+        # Berechne erwartete Kerzen-Anzahl basierend auf Timeframe
+        expected_candles = {
+            '5m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 288),  # 1440/5
+            '15m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 96),   # 1440/15
+            '30m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 48),   # 1440/30
+            '1h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 24),    # 1440/60
+            '2h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 12),    # 1440/120
+            '4h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 6),     # 1440/240
+            '6h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 4),     # 1440/360
+            '1d': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days),
+        }
+        
+        expected = expected_candles.get(timeframe, len(df))
+        logger.info(f"Geladen: {len(df)} Kerzen (erwartet: ~{expected} für {timeframe} im Zeitraum von {(pd.Timestamp(end_date) - pd.Timestamp(start_date)).days} Tagen)")
         
         # Parameter-Grid für Grid-Search
         # window: Fenster-Größe für Kanal-Analyse

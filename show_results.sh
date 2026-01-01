@@ -30,7 +30,7 @@ echo -e "${BLUE}=======================================================${NC}\n"
 
 echo -e "${YELLOW}Wähle einen Analyse-Modus:${NC}"
 echo "  1) Einzel-Analyse (jede Strategie wird isoliert getestet)"
-echo "  2) Manuelle Eingabe (du wählst Symbol, Timeframe, Zeitraum)"
+echo "  2) Manuelle Portfolio-Simulation (du wählst die Strategien)"
 echo "  3) Alle optimierten Configs automatisch backtesten"
 read -p "Auswahl (1-3) [Standard: 1]: " MODE
 MODE=${MODE:-1}

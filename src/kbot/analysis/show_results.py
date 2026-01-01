@@ -212,42 +212,77 @@ def mode_1_single_analysis():
 
 
 def mode_2_manual_input():
-    """Modus 2: Manuelle Eingabe"""
+    """Modus 2: Manuelle Portfolio-Simulation (du wählst die Strategien)"""
     print("\n" + "=" * 60)
-    print("MODUS 2: Manuelle Eingabe")
+    print("MODUS 2: Manuelle Portfolio-Simulation")
     print("=" * 60)
     
-    symbols = input("\nSymbol(e) (z.B. BTC ETH SOL): ").strip().split()
-    if not symbols:
-        print("Keine Symbole eingegeben. Abgebrochen.")
+    configs = get_all_configs()
+    if not configs:
+        print("\n⚠️ Keine optimierten Konfigurationen gefunden!")
+        print("   Bitte führe zuerst ./run_pipeline.sh aus.")
         return
     
-    timeframes = input("Timeframe(s) (z.B. 1d 4h 1h): ").strip().split()
-    if not timeframes:
-        print("Keine Timeframes eingegeben. Abgebrochen.")
+    # Zeige verfügbare Strategien
+    print("\nVerfügbare Strategien:")
+    available_strategies = []
+    for i, cfg in enumerate(configs):
+        market = cfg.get('market', {})
+        symbol = market.get('symbol')
+        timeframe = market.get('timeframe')
+        filename = f"config_{symbol.replace('/', '').replace(':', '')}_{timeframe}.json"
+        available_strategies.append((symbol, timeframe, filename))
+        print(f"  {i+1}) {filename}")
+    
+    # Auswahl
+    selection = input("\nWelche Strategien sollen simuliert werden? (Zahlen mit Komma, z.B. 1,3,4 oder 'alle'): ").strip()
+    
+    selected_configs = []
+    try:
+        if selection.lower() == 'alle':
+            selected_configs = configs
+        else:
+            indices = [int(i.strip()) - 1 for i in selection.split(',')]
+            selected_configs = [configs[idx] for idx in indices if 0 <= idx < len(configs)]
+    except (ValueError, IndexError):
+        print("❌ Ungültige Auswahl. Abgebrochen.")
         return
     
+    if not selected_configs:
+        print("❌ Keine Strategien ausgewählt. Abgebrochen.")
+        return
+    
+    # Frage nach Zeitraum
+    print("\n" + "-" * 60)
     start_date = input("Startdatum (YYYY-MM-DD): ").strip()
     if not start_date:
-        print("Kein Startdatum eingegeben. Abgebrochen.")
+        print("❌ Kein Startdatum eingegeben. Abgebrochen.")
         return
     
     end_date = input("Enddatum (YYYY-MM-DD, Enter = heute): ").strip() or str(date.today())
     
     try:
-        start_capital = float(input("Startkapital (USD, z.B. 1000): ").strip())
+        start_capital = float(input("Startkapital (USD, Standard: 1000): ").strip() or "1000")
     except ValueError:
         start_capital = 1000
     
     print("\n" + "=" * 60)
+    print(f"Starte Backtest für {len(selected_configs)} Strategie(n)...")
+    print("=" * 60)
     
     # Backtests durchführen
     all_results = []
-    for symbol in symbols:
-        for timeframe in timeframes:
-            result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital)
-            if result:
-                all_results.append(result)
+    for cfg in selected_configs:
+        market = cfg.get('market', {})
+        symbol = market.get('symbol')
+        timeframe = market.get('timeframe')
+        
+        if not symbol or not timeframe:
+            continue
+        
+        result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital)
+        if result:
+            all_results.append(result)
     
     # Zusammenfassung
     print_summary(all_results, start_capital)

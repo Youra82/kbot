@@ -288,6 +288,116 @@ def mode_2_manual_input():
     print_summary(all_results, start_capital)
 
 
+def run_portfolio_optimizer(start_capital, start_date, end_date, max_drawdown, configs):
+    """Findet die beste Kombination von Strategien (Greedy-Algorithmus wie JaegerBot)"""
+    print("\n1/3: Analysiere Einzel-Performance jeder Strategie...")
+    
+    single_results = []
+    
+    # Teste jede Strategie einzeln
+    for cfg in configs:
+        market = cfg.get('market', {})
+        symbol = market.get('symbol')
+        timeframe = market.get('timeframe')
+        
+        if not symbol or not timeframe:
+            continue
+        
+        result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital, use_optimal=True)
+        
+        if result and result['num_trades'] > 0 and abs(result['max_dd']) <= max_drawdown:
+            # Risikoadjustierte Rendite (Calmar Ratio)
+            dd_abs = abs(result['max_dd'])
+            score = result['total_return'] / dd_abs if dd_abs > 0 else result['total_return']
+            single_results.append({
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'score': score,
+                'result': result
+            })
+    
+    if not single_results:
+        return None
+    
+    # Sortiere nach Score
+    single_results.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Star-Spieler (beste Einzelstrategie)
+    best_portfolio = [single_results[0]]
+    best_score = single_results[0]['score']
+    
+    print(f"\n2/3: Star-Spieler gefunden: {single_results[0]['symbol']} ({single_results[0]['timeframe']}) (Score: {best_score:.2f})")
+    print("3/3: Suche die besten Team-Kollegen...")
+    
+    # Kandidaten-Pool
+    candidates = single_results[1:]
+    
+    # Greedy: Füge schrittweise Strategien hinzu
+    while candidates:
+        best_addition = None
+        best_new_score = best_score
+        
+        for candidate in candidates:
+            # Teste Portfolio mit dieser zusätzlichen Strategie
+            test_portfolio = best_portfolio + [candidate]
+            
+            # Simuliere kombiniertes Portfolio
+            combined_capital = start_capital
+            combined_trades = 0
+            combined_dd = 0.0
+            
+            for strat in test_portfolio:
+                res = strat['result']
+                combined_capital += (res['end_capital'] - start_capital)
+                combined_trades += res['num_trades']
+                combined_dd = min(combined_dd, res['max_dd'])
+            
+            # Prüfe DD-Limit
+            if abs(combined_dd) > max_drawdown:
+                continue
+            
+            # Berechne Score
+            combined_return = ((combined_capital - start_capital) / start_capital) * 100
+            dd_abs = abs(combined_dd)
+            score = combined_return / dd_abs if dd_abs > 0 else combined_return
+            
+            if score > best_new_score:
+                best_new_score = score
+                best_addition = candidate
+        
+        if best_addition:
+            print(f"-> Füge hinzu: {best_addition['symbol']} ({best_addition['timeframe']}) (Neuer Score: {best_new_score:.2f})")
+            best_portfolio.append(best_addition)
+            best_score = best_new_score
+            candidates.remove(best_addition)
+        else:
+            print("Keine weitere Verbesserung möglich. Optimierung beendet.")
+            break
+    
+    # Berechne finale Performance
+    final_capital = start_capital
+    final_trades = 0
+    final_dd = 0.0
+    
+    for strat in best_portfolio:
+        res = strat['result']
+        final_capital += (res['end_capital'] - start_capital)
+        final_trades += res['num_trades']
+        final_dd = min(final_dd, res['max_dd'])
+    
+    final_pnl = final_capital - start_capital
+    final_pnl_pct = (final_pnl / start_capital) * 100
+    
+    return {
+        'portfolio': best_portfolio,
+        'end_capital': final_capital,
+        'total_pnl': final_pnl,
+        'total_pnl_pct': final_pnl_pct,
+        'trade_count': final_trades,
+        'max_dd': final_dd
+    }
+
+
 def mode_3_auto_configs():
     """Modus 3: Automatische Portfolio-Optimierung"""
     print("\n" + "=" * 60)
@@ -324,30 +434,8 @@ def mode_3_auto_configs():
     print(f"INFO: Starte Optimierung mit maximal {max_drawdown:.2f}% Drawdown-Beschränkung.")
     print("=" * 60)
     
-    # Sammle alle Backtest-Ergebnisse
-    all_results = []
-    total_capital = start_capital
-    total_trades = 0
-    worst_dd = 0.0
-    
-    for cfg in configs:
-        market = cfg.get('market', {})
-        symbol = market.get('symbol')
-        timeframe = market.get('timeframe')
-        
-        if not symbol or not timeframe:
-            continue
-        
-        result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital, use_optimal=True)
-        if result:
-            # Prüfe Drawdown-Beschränkung
-            if abs(result['max_dd']) <= max_drawdown:
-                all_results.append(result)
-                total_capital += (result['end_capital'] - start_capital)
-                total_trades += result['num_trades']
-                worst_dd = min(worst_dd, result['max_dd'])
-            else:
-                print(f"  ⚠️  {symbol} ({timeframe}) überschreitet DD-Limit ({abs(result['max_dd']):.2f}% > {max_drawdown:.2f}%). Ausgeschlossen.")
+    # Portfolio-Optimierung durchführen
+    result = run_portfolio_optimizer(start_capital, start_date, end_date, max_drawdown, configs)
     
     # Berechne Zeitdauer
     try:
@@ -358,42 +446,40 @@ def mode_3_auto_configs():
     except Exception:
         total_days = 0
     
-    days_per_trade_str = ""
-    if total_trades > 0 and total_days > 0:
-        days_per_trade = total_days / total_trades
-        days_per_trade_str = f" (entspricht 1 Trade alle {days_per_trade:.1f} Tage)"
-    
     # Ergebnis anzeigen
     print("\n" + "=" * 60)
     print("     Ergebnis der automatischen Portfolio-Optimierung")
     print("=" * 60)
     
-    if all_results:
+    if result:
+        days_per_trade_str = ""
+        if result['trade_count'] > 0 and total_days > 0:
+            days_per_trade = total_days / result['trade_count']
+            days_per_trade_str = f" (entspricht 1 Trade alle {days_per_trade:.1f} Tage)"
+        
         print(f"Zeitraum: {start_date} bis {end_date} ({total_days} Tage)")
         print(f"Startkapital: {format_currency(start_capital)}")
         print(f"Maximal erlaubter DD: {max_drawdown:.2f}%")
-        print(f"\nOptimales Portfolio gefunden ({len(all_results)} Strategien):")
-        for res in all_results:
-            print(f"  - {res['symbol']} ({res['timeframe']})")
+        print(f"\nOptimales Portfolio gefunden ({len(result['portfolio'])} Strategien):")
+        for strat in result['portfolio']:
+            print(f"  - {strat['symbol']} ({strat['timeframe']})")
         
         print("\n--- Simulierte Performance dieses optimalen Portfolios ---")
-        print(f"Endkapital:       {format_currency(total_capital)}")
-        total_pnl = total_capital - start_capital
-        total_pnl_pct = (total_pnl / start_capital) * 100
-        print(f"Gesamt PnL:       {format_currency(total_pnl):>+} ({total_pnl_pct:.2f}%)")
-        print(f"Anzahl Trades:    {total_trades}{days_per_trade_str}")
-        print(f"Portfolio Max DD: {worst_dd:.2f}%")
+        print(f"Endkapital:       {format_currency(result['end_capital'])}")
+        pnl_sign = '+' if result['total_pnl'] >= 0 else ''
+        print(f"Gesamt PnL:       {pnl_sign}{format_currency(result['total_pnl'])} ({result['total_pnl_pct']:.2f}%)")
+        print(f"Anzahl Trades:    {result['trade_count']}{days_per_trade_str}")
+        print(f"Portfolio Max DD: {result['max_dd']:.2f}%")
         print(f"Liquidiert:       NEIN")
         
         # Speichere optimale Strategien
         optimal_configs_file = os.path.join(PROJECT_ROOT, '.optimal_configs.tmp')
         with open(optimal_configs_file, 'w') as f:
-            for res in all_results:
-                symbol_clean = res['symbol'].replace('/', '').replace(':', '')
-                f.write(f"config_{symbol_clean}_{res['timeframe']}.json\n")
+            for strat in result['portfolio']:
+                symbol_clean = strat['symbol'].replace('/', '').replace(':', '')
+                f.write(f"config_{symbol_clean}_{strat['timeframe']}.json\n")
         
         print("\n--- Export ---")
-        csv_path = os.path.join(PROJECT_ROOT, 'optimal_portfolio_equity.csv')
         print(f"✔ Optimale Configs wurden nach '.optimal_configs.tmp' exportiert.")
         print("=" * 60)
     else:

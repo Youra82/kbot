@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # src/kbot/analysis/show_results.py
-# KBot: Interaktives Backtest-Tool für Kanalstrategie
+# KBot: Interaktives Backtest-Tool für Kanalstrategie (3 Modi wie JaegerBot)
 
 import os
 import sys
 import json
 import argparse
-from datetime import date
+from datetime import date, datetime, timedelta
 
 # Setup Python Path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -17,7 +17,6 @@ from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
 
 def load_optimal_config(symbol, timeframe):
     """Lade optimale Konfiguration aus src/kbot/strategy/configs/"""
-    # Versuche neue Location zuerst (wie JaegerBot)
     config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
     symbol_clean = symbol.replace('/', '').replace(':', '')
     config_file = os.path.join(config_dir, f'config_{symbol_clean}_{timeframe}.json')
@@ -26,23 +25,41 @@ def load_optimal_config(symbol, timeframe):
         try:
             with open(config_file, 'r') as f:
                 config = json.load(f)
-            # Neue Struktur: strategy enthält die Parameter
-            return config.get('strategy', None)
+            return config.get('strategy', None), config_file
         except Exception:
             pass
+    return None, None
+
+
+def get_all_configs():
+    """Hole alle vorhandenen Konfigurationsdateien"""
+    config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
+    if not os.path.exists(config_dir):
+        return []
     
-    # Fallback: alte Location für Rückwärtskompatibilität
-    config_dir_old = os.path.join(PROJECT_ROOT, 'artifacts', 'optimal_configs')
-    config_file_old = os.path.join(config_dir_old, f'optimal_{symbol}_{timeframe}.json')
-    
-    if os.path.exists(config_file_old):
-        try:
-            with open(config_file_old, 'r') as f:
-                config = json.load(f)
-            return config.get('parameters', None)
-        except Exception:
-            return None
-    return None
+    configs = []
+    for filename in os.listdir(config_dir):
+        if filename.startswith('config_') and filename.endswith('.json'):
+            config_path = os.path.join(config_dir, filename)
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                configs.append(config)
+            except Exception:
+                continue
+    return configs
+
+
+def get_lookback_days(timeframe):
+    """Bestimme Lookback-Tage basierend auf Timeframe"""
+    lookback_map = {
+        '5m': 60, '15m': 60,
+        '10m': 365,  # Default für 10m
+        '30m': 180, '1h': 180,
+        '2h': 365, '4h': 365,
+        '6h': 730, '1d': 730
+    }
+    return lookback_map.get(timeframe, 365)
 
 
 def format_currency(value):
@@ -55,90 +72,7 @@ def format_percent(value):
     return f"{value:.2f}%"
 
 
-def run_backtest_interactive():
-    """Interaktiver Backtest mit Einzelsymbolen"""
-    print("\n" + "=" * 60)
-    print("KBot Backtest-Tool (Kanalstrategie)")
-    print("=" * 60)
-    
-    # Input erfassen
-    symbols = input("\nSymbol(e) (z.B. BTCUSDT ETHUSDT): ").strip().split()
-    if not symbols:
-        print("Keine Symbole eingegeben. Abgebrochen.")
-        return
-    
-    timeframes = input("Timeframe(s) (z.B. 4h 1d): ").strip().split()
-    if not timeframes:
-        print("Keine Timeframes eingegeben. Abgebrochen.")
-        return
-    
-    start_date = input("Startdatum (YYYY-MM-DD): ").strip()
-    if not start_date:
-        print("Kein Startdatum eingegeben. Abgebrochen.")
-        return
-    
-    end_date = input("Enddatum (YYYY-MM-DD, Enter = heute): ").strip()
-    if not end_date:
-        end_date = str(date.today())
-    
-    try:
-        start_capital = float(input("Startkapital (USD, z.B. 1000): ").strip())
-    except ValueError:
-        print("Ungültige Eingabe für Startkapital. Standard: 1000 USD")
-        start_capital = 1000
-    
-    print("\n" + "=" * 60)
-    
-    # Backtest durchführen für jede Kombination
-    all_results = []
-    
-    for symbol in symbols:
-        for timeframe in timeframes:
-            result = run_single_backtest(
-                symbol=symbol,
-                timeframe=timeframe,
-                start_date=start_date,
-                end_date=end_date,
-                start_capital=start_capital
-            )
-            if result:
-                all_results.append(result)
-    
-    # Zusammenfassung
-    if all_results:
-        print("\n" + "=" * 60)
-        print("BACKTEST-ZUSAMMENFASSUNG")
-        print("=" * 60)
-        
-        total_capital = start_capital
-        total_trades = 0
-        total_profit = 0
-        
-        print(f"\n{'Symbol':<12} {'TF':<6} {'Endkapital':<15} {'Return':<10} {'Trades':<8} {'Win Rate':<10} {'Max DD':<10}")
-        print("-" * 70)
-        
-        for res in all_results:
-            symbol = res['symbol']
-            timeframe = res['timeframe']
-            end_cap = res['end_capital']
-            ret = res['total_return']
-            trades = res['num_trades']
-            wr = res['win_rate']
-            dd = res['max_dd']
-            
-            total_capital += (end_cap - start_capital)
-            total_trades += trades
-            total_profit += (ret / 100 * start_capital)
-            
-            print(f"{symbol:<12} {timeframe:<6} {format_currency(end_cap):<15} {format_percent(ret):<10} {trades:<8} {format_percent(wr):<10} {format_percent(dd):<10}")
-        
-        print("-" * 70)
-        overall_return = ((total_capital - len(all_results) * start_capital) / (len(all_results) * start_capital)) * 100 if all_results else 0
-        print(f"{'GESAMT':<12} {'':<6} {format_currency(total_capital):<15} {format_percent(overall_return):<10} {total_trades:<8}")
-        print("=" * 60)
-
-
-def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital):
+def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital, use_optimal=True):
     """Führe einen einzelnen Backtest durch"""
     
     print(f"\nStarte Backtest für {symbol} ({timeframe})...")
@@ -153,10 +87,10 @@ def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital):
             return None
         
         # Versuche optimale Konfiguration zu laden
-        optimal_params = load_optimal_config(symbol, timeframe)
+        optimal_params, config_file = load_optimal_config(symbol, timeframe)
         
-        if optimal_params:
-            print(f"  ℹ Nutze optimierte Parameter aus artifacts/optimal_configs/")
+        if optimal_params and use_optimal:
+            print(f"  ℹ Nutze optimierte Parameter aus src/kbot/strategy/configs/")
             channels = detect_channels(
                 df, 
                 window=optimal_params.get('window', 50),
@@ -176,11 +110,10 @@ def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital):
             channels = detect_channels(
                 df, 
                 window=50,
-                min_channel_width=0.002,  # 0.2% Minimum Breite
-                slope_threshold=0.02       # Geringere Slope-Anforderung
+                min_channel_width=0.002,
+                slope_threshold=0.02
             )
             
-            # Backtest durchführen
             end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
                 df, channels, start_capital=start_capital
             )
@@ -224,37 +157,197 @@ def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital):
         return None
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="KBot Interaktives Backtest-Tool",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Beispiele:
-  python3 show_results.py              # Interaktiver Modus
-  python3 show_results.py --symbol BTCUSDT --timeframe 1d --start-date 2025-01-01 --start-capital 1000
-        """
-    )
+def mode_1_single_analysis():
+    """Modus 1: Einzel-Analyse (jede Strategie isoliert)"""
+    print("\n" + "=" * 60)
+    print("MODUS 1: Einzel-Analyse")
+    print("=" * 60)
     
-    parser.add_argument('--symbol', type=str, help='Symbol (z.B. BTCUSDT)')
-    parser.add_argument('--timeframe', type=str, help='Timeframe (z.B. 1d, 4h)')
-    parser.add_argument('--start-date', type=str, help='Startdatum (YYYY-MM-DD)')
-    parser.add_argument('--end-date', type=str, help='Enddatum (YYYY-MM-DD, Standard: heute)')
-    parser.add_argument('--start-capital', type=float, default=1000, help='Startkapital in USD (Standard: 1000)')
+    configs = get_all_configs()
+    if not configs:
+        print("\n⚠️ Keine optimierten Konfigurationen gefunden!")
+        print("   Bitte führe zuerst ./run_pipeline.sh aus.")
+        return
+    
+    print(f"\nGefundene Konfigurationen: {len(configs)}")
+    for cfg in configs:
+        market = cfg.get('market', {})
+        print(f"  • {market.get('symbol')} ({market.get('timeframe')})")
+    
+    # Frage nach Zeitraum
+    print("\n" + "-" * 60)
+    start_date_input = input("Startdatum (YYYY-MM-DD) oder 'a' für automatisch [Standard: a]: ").strip() or 'a'
+    end_date = input("Enddatum (YYYY-MM-DD, Enter = heute): ").strip() or str(date.today())
+    
+    try:
+        start_capital = float(input("Startkapital (USD, Standard: 1000): ").strip() or "1000")
+    except ValueError:
+        start_capital = 1000
+    
+    print("\n" + "=" * 60)
+    
+    # Backtests durchführen
+    all_results = []
+    for cfg in configs:
+        market = cfg.get('market', {})
+        symbol = market.get('symbol')
+        timeframe = market.get('timeframe')
+        
+        if not symbol or not timeframe:
+            continue
+        
+        # Automatisches Datum basierend auf Timeframe
+        if start_date_input.lower() == 'a':
+            lookback_days = get_lookback_days(timeframe)
+            start_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
+        else:
+            start_date = start_date_input
+        
+        result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital)
+        if result:
+            all_results.append(result)
+    
+    # Zusammenfassung
+    print_summary(all_results, start_capital)
+
+
+def mode_2_manual_input():
+    """Modus 2: Manuelle Eingabe"""
+    print("\n" + "=" * 60)
+    print("MODUS 2: Manuelle Eingabe")
+    print("=" * 60)
+    
+    symbols = input("\nSymbol(e) (z.B. BTC ETH SOL): ").strip().split()
+    if not symbols:
+        print("Keine Symbole eingegeben. Abgebrochen.")
+        return
+    
+    timeframes = input("Timeframe(s) (z.B. 1d 4h 1h): ").strip().split()
+    if not timeframes:
+        print("Keine Timeframes eingegeben. Abgebrochen.")
+        return
+    
+    start_date = input("Startdatum (YYYY-MM-DD): ").strip()
+    if not start_date:
+        print("Kein Startdatum eingegeben. Abgebrochen.")
+        return
+    
+    end_date = input("Enddatum (YYYY-MM-DD, Enter = heute): ").strip() or str(date.today())
+    
+    try:
+        start_capital = float(input("Startkapital (USD, z.B. 1000): ").strip())
+    except ValueError:
+        start_capital = 1000
+    
+    print("\n" + "=" * 60)
+    
+    # Backtests durchführen
+    all_results = []
+    for symbol in symbols:
+        for timeframe in timeframes:
+            result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital)
+            if result:
+                all_results.append(result)
+    
+    # Zusammenfassung
+    print_summary(all_results, start_capital)
+
+
+def mode_3_auto_configs():
+    """Modus 3: Alle optimierten Configs automatisch backtesten"""
+    print("\n" + "=" * 60)
+    print("MODUS 3: Alle optimierten Configs automatisch backtesten")
+    print("=" * 60)
+    
+    configs = get_all_configs()
+    if not configs:
+        print("\n⚠️ Keine optimierten Konfigurationen gefunden!")
+        print("   Bitte führe zuerst ./run_pipeline.sh aus.")
+        return
+    
+    print(f"\nGefundene Konfigurationen: {len(configs)}")
+    
+    # Frage nach Startkapital
+    try:
+        start_capital = float(input("Startkapital (USD, Standard: 1000): ").strip() or "1000")
+    except ValueError:
+        start_capital = 1000
+    
+    # Automatische Zeitbestimmung - verwende letztes Jahr
+    end_date = str(date.today())
+    
+    print("\n" + "=" * 60)
+    
+    # Backtests durchführen
+    all_results = []
+    for cfg in configs:
+        market = cfg.get('market', {})
+        symbol = market.get('symbol')
+        timeframe = market.get('timeframe')
+        
+        if not symbol or not timeframe:
+            continue
+        
+        # Automatisches Datum basierend auf Timeframe
+        lookback_days = get_lookback_days(timeframe)
+        start_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
+        
+        result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital)
+        if result:
+            all_results.append(result)
+    
+    # Zusammenfassung
+    print_summary(all_results, start_capital)
+
+
+def print_summary(all_results, start_capital):
+    """Drucke Zusammenfassung aller Backtests"""
+    if not all_results:
+        return
+    
+    print("\n" + "=" * 60)
+    print("BACKTEST-ZUSAMMENFASSUNG")
+    print("=" * 60)
+    
+    total_capital = 0
+    total_trades = 0
+    
+    print(f"\n{'Symbol':<12} {'TF':<6} {'Endkapital':<15} {'Return':<10} {'Trades':<8} {'Win Rate':<10} {'Max DD':<10}")
+    print("-" * 70)
+    
+    for res in all_results:
+        symbol = res['symbol']
+        timeframe = res['timeframe']
+        end_cap = res['end_capital']
+        ret = res['total_return']
+        trades = res['num_trades']
+        wr = res['win_rate']
+        dd = res['max_dd']
+        
+        total_capital += end_cap
+        total_trades += trades
+        
+        print(f"{symbol:<12} {timeframe:<6} {format_currency(end_cap):<15} {format_percent(ret):<10} {trades:<8} {format_percent(wr):<10} {format_percent(dd):<10}")
+    
+    print("-" * 70)
+    overall_return = ((total_capital - len(all_results) * start_capital) / (len(all_results) * start_capital)) * 100 if all_results else 0
+    print(f"{'GESAMT':<12} {'':<6} {format_currency(total_capital):<15} {format_percent(overall_return):<10} {total_trades:<8}")
+    print("=" * 60)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="KBot Interaktives Backtest-Tool")
+    parser.add_argument('--mode', type=int, default=1, choices=[1, 2, 3],
+                       help='Modus: 1=Einzel-Analyse, 2=Manuelle Eingabe, 3=Auto-Configs')
     
     args = parser.parse_args()
     
-    # Wenn alle erforderlichen Argumente vorhanden sind, stille Ausführung
-    if args.symbol and args.timeframe and args.start_date:
-        result = run_single_backtest(
-            symbol=args.symbol,
-            timeframe=args.timeframe,
-            start_date=args.start_date,
-            end_date=args.end_date or date.today().isoformat(),
-            start_capital=args.start_capital
-        )
-    else:
-        # Interaktiver Modus
-        run_backtest_interactive()
+    if args.mode == 1:
+        mode_1_single_analysis()
+    elif args.mode == 2:
+        mode_2_manual_input()
+    elif args.mode == 3:
+        mode_3_auto_configs()
 
 
 if __name__ == "__main__":

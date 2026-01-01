@@ -23,12 +23,20 @@ fi
 
 source "$VENV_PATH"
 
-# Starte das interaktive Backtest-Tool
-echo -e "\n${YELLOW}KBot Backtest-Tool (Kanalstrategie)${NC}"
-echo -e "${YELLOW}=====================================${NC}\n"
+# --- ERWEITERTES MODUS-MENÜ (wie JaegerBot) ---
+echo -e "\n${BLUE}=======================================================${NC}"
+echo -e "${BLUE}     KBot Backtest-Tool (Kanalstrategie)${NC}"
+echo -e "${BLUE}=======================================================${NC}\n"
 
-python3 "$RESULTS_SCRIPT"
+echo -e "${YELLOW}Wähle einen Analyse-Modus:${NC}"
+echo "  1) Einzel-Analyse (jede Strategie wird isoliert getestet)"
+echo "  2) Manuelle Eingabe (du wählst Symbol, Timeframe, Zeitraum)"
+echo "  3) Alle optimierten Configs automatisch backtesten"
+read -p "Auswahl (1-3) [Standard: 1]: " MODE
+MODE=${MODE:-1}
+
+python3 "$RESULTS_SCRIPT" --mode "$MODE"
 
 echo -e "\n${GREEN}✓ Backtest abgeschlossen.${NC}"
 
-
+deactivate

@@ -15,8 +15,15 @@ import ccxt
 def load_ohlcv(symbol, start, end, timeframe):
     exchange = ccxt.bitget()
     # Bitget-Symbole sind z.B. BTC/USDT:USDT
-    if not symbol.endswith(':USDT'):
+    # Konvertiere Input (z.B. BTCUSDT oder BTC) zum richtigen Format
+    if '/' not in symbol:
+        # Entferne 'USDT' am Ende wenn vorhanden
+        if symbol.upper().endswith('USDT'):
+            symbol = symbol[:-4]
         symbol = symbol.upper() + '/USDT:USDT'
+    elif not symbol.endswith(':USDT'):
+        symbol = symbol + ':USDT'
+    
     since = int(pd.Timestamp(start).timestamp() * 1000)
     end_ts = int(pd.Timestamp(end).timestamp() * 1000)
     tf_map = {'1d':'1d','4h':'4h','1h':'1h','6h':'6h','30m':'30m','15m':'15m','5m':'5m'}

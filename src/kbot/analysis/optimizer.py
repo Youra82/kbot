@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import logging
 from tqdm import tqdm
 from itertools import product
+from pathlib import Path
 
 # Setup Python Path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -181,21 +182,36 @@ def optimize_parameters(symbol, timeframe, start_date, end_date, start_capital=1
         return None
 
 
-def save_optimal_config(result, output_dir):
-    """Speichere optimale Konfiguration als JSON"""
+def save_optimal_config(result, output_dir=None):
+    """Speichere optimale Konfiguration als JSON in src/kbot/strategy/configs/ (wie JaegerBot)"""
     
     if not result:
         return None
     
+    # Nutze src/kbot/strategy/configs/ wie bei JaegerBot
+    if output_dir is None:
+        output_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
+    
     os.makedirs(output_dir, exist_ok=True)
     
-    config_filename = f"optimal_{result['symbol']}_{result['timeframe']}.json"
+    # Standardisiertes Dateinamens-Format: config_SYMBOL_TIMEFRAME.json
+    symbol_clean = result['symbol'].replace('/', '').replace(':', '')
+    config_filename = f"config_{symbol_clean}_{result['timeframe']}.json"
     config_path = os.path.join(output_dir, config_filename)
     
+    # Struktur wie JaegerBot: market, strategy, performance, timestamp
     config = {
-        'symbol': result['symbol'],
-        'timeframe': result['timeframe'],
-        'parameters': result['params'],
+        'market': {
+            'symbol': result['symbol'],
+            'timeframe': result['timeframe']
+        },
+        'strategy': {
+            'window': result['params']['window'],
+            'min_channel_width': result['params']['min_channel_width'],
+            'slope_threshold': result['params']['slope_threshold'],
+            'entry_threshold': result['params']['entry_threshold'],
+            'exit_threshold': result['params']['exit_threshold']
+        },
         'performance': {
             'total_return': result['total_return'],
             'win_rate': result['win_rate'],
@@ -236,9 +252,9 @@ def main():
     )
     
     # Speichere Konfiguration wenn gewünscht
+    # Standardmäßig in src/kbot/strategy/configs/ wie bei JaegerBot
     if result and args.save_config:
-        config_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'optimal_configs')
-        save_optimal_config(result, config_dir)
+        save_optimal_config(result)
 
 
 if __name__ == "__main__":

@@ -54,10 +54,35 @@ def main():
         
         strategy_list = []
         if use_autopilot:
-            print("Modus: Autopilot. Lese Strategien aus den Optimierungs-Ergebnissen...")
-            with open(optimization_results_file, 'r') as f:
-                strategy_config = json.load(f)
-            strategy_list = strategy_config.get('optimal_portfolio', [])
+            print("Modus: Autopilot. Lese Strategien aus optimierten Konfigurationen...")
+            # Lade alle Konfigurationen aus src/kbot/strategy/configs/
+            config_dir = os.path.join(SCRIPT_DIR, 'src', 'kbot', 'strategy', 'configs')
+            if os.path.exists(config_dir):
+                for config_file in os.listdir(config_dir):
+                    if config_file.startswith('config_') and config_file.endswith('.json'):
+                        try:
+                            config_path = os.path.join(config_dir, config_file)
+                            with open(config_path, 'r') as f:
+                                config = json.load(f)
+                            
+                            market = config.get('market', {})
+                            symbol = market.get('symbol')
+                            timeframe = market.get('timeframe')
+                            
+                            if symbol and timeframe:
+                                strategy_list.append({
+                                    'symbol': symbol,
+                                    'timeframe': timeframe,
+                                    'active': True,
+                                    'use_macd_filter': False,
+                                    'config_file': config_file
+                                })
+                                print(f"  ✓ Geladen: {symbol} ({timeframe})")
+                        except Exception as e:
+                            print(f"  ✗ Fehler beim Laden von {config_file}: {e}")
+            else:
+                print(f"  ⚠ Konfigurationsverzeichnis nicht gefunden: {config_dir}")
+                print(f"    Bitte führe zuerst das Pipeline-Script aus: ./run_pipeline.sh")
         else:
             print("Modus: Manuell. Lese Strategien aus den manuellen Einstellungen...")
             strategy_list = live_settings.get('active_strategies', [])

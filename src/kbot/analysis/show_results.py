@@ -16,13 +16,28 @@ from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
 
 
 def load_optimal_config(symbol, timeframe):
-    """Lade optimale Konfiguration falls vorhanden"""
-    config_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'optimal_configs')
-    config_file = os.path.join(config_dir, f'optimal_{symbol}_{timeframe}.json')
+    """Lade optimale Konfiguration aus src/kbot/strategy/configs/"""
+    # Versuche neue Location zuerst (wie JaegerBot)
+    config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
+    symbol_clean = symbol.replace('/', '').replace(':', '')
+    config_file = os.path.join(config_dir, f'config_{symbol_clean}_{timeframe}.json')
     
     if os.path.exists(config_file):
         try:
             with open(config_file, 'r') as f:
+                config = json.load(f)
+            # Neue Struktur: strategy enthält die Parameter
+            return config.get('strategy', None)
+        except Exception:
+            pass
+    
+    # Fallback: alte Location für Rückwärtskompatibilität
+    config_dir_old = os.path.join(PROJECT_ROOT, 'artifacts', 'optimal_configs')
+    config_file_old = os.path.join(config_dir_old, f'optimal_{symbol}_{timeframe}.json')
+    
+    if os.path.exists(config_file_old):
+        try:
+            with open(config_file_old, 'r') as f:
                 config = json.load(f)
             return config.get('parameters', None)
         except Exception:

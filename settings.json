@@ -1,6 +1,6 @@
 {
   "live_trading_settings": {
-    // entfernt: use_auto_optimizer_results
+    "use_auto_optimizer_results": false,
     "active_strategies": [
       {
         "symbol": "DOGE/USDT:USDT",

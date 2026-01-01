@@ -13,6 +13,7 @@ VENV_PATH=".venv/bin/activate"
 
 # Python-Script Pfad
 RESULTS_SCRIPT="src/kbot/analysis/show_results.py"
+UPDATE_SETTINGS_SCRIPT="update_settings_from_optimizer.py"
 
 # Aktiviere venv
 if [ ! -f "$VENV_PATH" ]; then
@@ -36,6 +37,48 @@ read -p "Auswahl (1-3) [Standard: 1]: " MODE
 MODE=${MODE:-1}
 
 python3 "$RESULTS_SCRIPT" --mode "$MODE"
+
+# --- NACH MODUS 3: SETTINGS-UPDATE ANGEBOT ---
+if [ "$MODE" = "3" ] && [ -f ".optimal_configs.tmp" ]; then
+	echo -e "\n${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+	echo -e "${YELLOW}Sollen die optimierten Strategien übernommen werden?${NC}"
+	read -p "Antwort (j/n) [Standard: n]: " UPDATE_SETTINGS
+	UPDATE_SETTINGS=${UPDATE_SETTINGS:-n}
+	
+	if [ "$UPDATE_SETTINGS" = "j" ] || [ "$UPDATE_SETTINGS" = "J" ]; then
+		echo -e "\n${BLUE}Lese optimale Konfigurationen...${NC}"
+		
+		# Lese Config-Namen aus .optimal_configs.tmp
+		configs=""
+		while IFS= read -r config_name; do
+			configs="$configs $config_name"
+		done < .optimal_configs.tmp
+		
+		# Rufe Update-Script auf
+		if [ -f "$UPDATE_SETTINGS_SCRIPT" ]; then
+			echo -e "${BLUE}Aktualisiere settings.json...${NC}"
+			python3 "$UPDATE_SETTINGS_SCRIPT" $configs
+			UPDATE_EXIT=$?
+			
+			if [ $UPDATE_EXIT -eq 0 ]; then
+				echo -e "\n${GREEN}✓ Settings erfolgreich aktualisiert!${NC}"
+				echo -e "${GREEN}  Die optimierten Strategien sind jetzt aktiv.${NC}"
+			else
+				echo -e "\n${RED}❌ Fehler beim Aktualisieren der Settings.${NC}"
+				echo -e "${YELLOW}Backup vorhanden unter: settings.json.backup${NC}"
+			fi
+		else
+			echo -e "${RED}❌ Script nicht gefunden: $UPDATE_SETTINGS_SCRIPT${NC}"
+		fi
+		
+		# Lösche temporäre Datei
+		rm -f .optimal_configs.tmp
+	else
+		echo -e "${YELLOW}✓ Keine Änderungen durchgeführt.${NC}"
+		rm -f .optimal_configs.tmp
+	fi
+	echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+fi
 
 echo -e "\n${GREEN}✓ Backtest abgeschlossen.${NC}"
 

@@ -494,7 +494,7 @@ def mode_3_auto_configs():
         print(f"Portfolio Max DD: {result['max_dd']:.2f}%")
         print(f"Liquidiert:       NEIN")
         
-        # Speichere optimale Strategien
+        # Speichere optimale Strategien in .optimal_configs.tmp
         optimal_configs_file = os.path.join(PROJECT_ROOT, '.optimal_configs.tmp')
         with open(optimal_configs_file, 'w') as f:
             for strat in result['portfolio']:

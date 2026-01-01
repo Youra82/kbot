@@ -1,137 +1,159 @@
 #!/usr/bin/env python3
 """
-Script um die settings.json basierend auf den Optimierungs-Ergebnissen zu aktualisieren.
+Update settings.json with optimized portfolio configurations.
+Reads config names from command line and updates settings.json accordingly.
 """
-import json
-import os
+
 import sys
+import os
+import json
+import shutil
 from pathlib import Path
 
-def parse_config_filename(filename):
-    """
-    Extrahiert Symbol und Timeframe aus einem Config-Dateinamen.
-    z.B. "config_SOLUSDTUSDT_15m.json" -> ("SOL/USDT:USDT", "15m")
-    """
-    # Entferne "config_" und ".json"
-    base = filename.replace('config_', '').replace('.json', '')
-    
-    # Timeframes die möglich sind
-    timeframes = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d', '1w']
-    
-    # Finde Timeframe am Ende
-    timeframe = None
-    for tf in timeframes:
-        if base.endswith('_' + tf):
-            timeframe = tf
-            symbol_part = base[:-len('_' + tf)]
-            break
-    
-    if not timeframe:
+
+def get_project_root():
+    """Determine project root directory."""
+    return Path(__file__).parent
+
+
+def parse_config_name(filename):
+    """Parse config filename to extract symbol and timeframe."""
+    # Example: config_BTCUSDT_1d.json -> ('BTCUSDT', '1d')
+    if not filename.startswith('config_') or not filename.endswith('.json'):
         return None, None
     
-    # Konvertiere z.B. "SOLUSDTUSDT" -> "SOL/USDT:USDT"
-    # Format: BASEUSDTUSDT -> BASE/USDT:USDT
-    if symbol_part.endswith('USDTUSDT'):
-        base_currency = symbol_part[:-8]  # Entferne "USDTUSDT"
-        symbol = f"{base_currency}/USDT:USDT"
-    else:
-        # Fallback für andere Formate
-        symbol = symbol_part
+    parts = filename[7:-5]  # Remove 'config_' and '.json'
+    elements = parts.rsplit('_', 1)  # Split from right to get timeframe
     
-    return symbol, timeframe
+    if len(elements) == 2:
+        symbol, timeframe = elements
+        return symbol, timeframe
+    return None, None
 
 
-def update_settings_with_optimal_strategies(optimal_configs, settings_path='settings.json'):
-    """
-    Aktualisiert die settings.json mit den optimalen Strategien.
+def symbol_to_trading_pair(symbol):
+    """Convert symbol like BTCUSDT to trading pair like BTC/USDT."""
+    # If already in format XXXUSDT, convert to XXX/USDT
+    if symbol.endswith('USDT') and len(symbol) > 4:
+        base = symbol[:-4]  # Remove USDT
+        return f"{base}/USDT"
+    return f"{symbol}/USDT"
+
+
+def load_settings_json(project_root):
+    """Load current settings.json."""
+    settings_path = project_root / 'settings.json'
+    if not settings_path.exists():
+        print(f"❌ Fehler: settings.json nicht gefunden unter {settings_path}")
+        return None
     
-    Args:
-        optimal_configs: Liste von Config-Dateinamen (z.B. ["config_SOLUSDTUSDT_15m.json"])
-        settings_path: Pfad zur settings.json
-    """
-    # Lade aktuelle settings
-    with open(settings_path, 'r', encoding='utf-8') as f:
-        settings = json.load(f)
+    try:
+        with open(settings_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"❌ Fehler beim Laden von settings.json: {e}")
+        return None
+
+
+def load_config_json(project_root, config_name):
+    """Load a strategy config JSON file."""
+    config_path = project_root / 'src' / 'kbot' / 'strategy' / 'configs' / config_name
+    if not config_path.exists():
+        print(f"⚠️  Warnung: Config-Datei nicht gefunden: {config_name}")
+        return None
     
-    # Parse optimale Strategien
-    optimal_strategies = []
-    for config_file in optimal_configs:
-        symbol, timeframe = parse_config_filename(config_file)
-        if symbol and timeframe:
-            optimal_strategies.append({
-                'symbol': symbol,
-                'timeframe': timeframe,
-                'use_macd_filter': False,
-                'active': True
-            })
-    
-    if not optimal_strategies:
-        print("❌ Konnte keine Strategien aus den Config-Dateien parsen.")
-        return False
-    
-    # Backup erstellen
-    backup_path = settings_path + '.backup'
-    with open(backup_path, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, indent=2)
-    print(f"✔ Backup erstellt: {backup_path}")
-    
-    # Ersetze active_strategies mit den optimalen
-    old_count = len(settings['live_trading_settings']['active_strategies'])
-    settings['live_trading_settings']['active_strategies'] = optimal_strategies
-    settings['live_trading_settings']['use_auto_optimizer_results'] = True
-    
-    # Speichere aktualisierte settings
-    with open(settings_path, 'w', encoding='utf-8') as f:
-        json.dump(settings, f, indent=2)
-    
-    print("\n" + "="*60)
-    print("✅ SETTINGS.JSON ERFOLGREICH AKTUALISIERT")
-    print("="*60)
-    print(f"Alte Anzahl Strategien: {old_count}")
-    print(f"Neue Anzahl Strategien: {len(optimal_strategies)}")
-    print("\nAktive Strategien:")
-    for strat in optimal_strategies:
-        print(f"  ✔ {strat['symbol']} {strat['timeframe']}")
-    print("="*60)
-    
-    return True
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"❌ Fehler beim Laden von {config_name}: {e}")
+        return None
+
+
+def build_strategy_entry(symbol, config_data):
+    """Build a strategy entry for settings.json from config data."""
+    strategy = config_data.get('strategy', {})
+    return {
+        'symbol': symbol_to_trading_pair(symbol),
+        'interval': config_data.get('market', {}).get('timeframe', '1d'),
+        'params': {
+            'buy': strategy.get('buy', {}),
+            'sell': strategy.get('sell', {}),
+            'roi': strategy.get('roi', {}),
+            'stoploss': strategy.get('stoploss', -0.05),
+            'trailing_stop': strategy.get('trailing_stop', False)
+        }
+    }
 
 
 def main():
-    """
-    Hauptfunktion - erwartet Config-Dateinamen als Argumente.
-    """
+    """Main function."""
+    project_root = get_project_root()
+    
     if len(sys.argv) < 2:
-        print("❌ Fehler: Keine Config-Dateien angegeben.")
-        print("Usage: python update_settings_from_optimizer.py config1.json config2.json ...")
+        print("❌ Fehler: Keine Config-Dateien angegeben")
+        print("Verwendung: python3 update_settings_from_optimizer.py config1.json config2.json ...")
         sys.exit(1)
     
-    # Hole Config-Dateinamen aus Argumenten
-    optimal_configs = sys.argv[1:]
+    config_names = sys.argv[1:]
     
     print("\n" + "="*60)
-    print("AKTUALISIERE SETTINGS.JSON MIT OPTIMALEN STRATEGIEN")
-    print("="*60)
-    print(f"Anzahl optimale Strategien: {len(optimal_configs)}")
-    for config in optimal_configs:
-        print(f"  - {config}")
+    print("Aktualisiere settings.json mit optimierten Strategien...")
+    print("="*60 + "\n")
     
-    # Finde settings.json (im Projekt-Root)
-    script_dir = Path(__file__).parent
-    settings_path = script_dir / 'settings.json'
-    
-    if not settings_path.exists():
-        print(f"❌ Konnte settings.json nicht finden: {settings_path}")
+    # Load current settings
+    settings = load_settings_json(project_root)
+    if settings is None:
         sys.exit(1)
     
-    # Aktualisiere settings
-    success = update_settings_with_optimal_strategies(optimal_configs, str(settings_path))
+    # Create backup
+    settings_path = project_root / 'settings.json'
+    backup_path = project_root / 'settings.json.backup'
+    try:
+        shutil.copy2(settings_path, backup_path)
+        print(f"✓ Backup erstellt: settings.json.backup")
+    except Exception as e:
+        print(f"❌ Fehler beim Erstellen von Backup: {e}")
+        sys.exit(1)
     
-    if success:
-        print("\n💡 HINWEIS: Du kannst die Änderungen rückgängig machen mit:")
-        print(f"   cp {settings_path}.backup {settings_path}")
+    # Build new strategies list
+    new_strategies = []
+    successful_configs = 0
+    
+    for config_name in config_names:
+        config_name = config_name.strip()
+        symbol, timeframe = parse_config_name(config_name)
+        
+        if symbol is None:
+            print(f"⚠️  Warnung: Konnte {config_name} nicht parsen")
+            continue
+        
+        config_data = load_config_json(project_root, config_name)
+        if config_data is None:
+            continue
+        
+        strategy_entry = build_strategy_entry(symbol, config_data)
+        new_strategies.append(strategy_entry)
+        successful_configs += 1
+        print(f"  ✓ {config_name}")
+    
+    if successful_configs == 0:
+        print("❌ Fehler: Keine Strategien konnten geladen werden")
+        sys.exit(1)
+    
+    # Update settings
+    settings['strategies'] = new_strategies
+    
+    # Save updated settings
+    try:
+        with open(settings_path, 'w') as f:
+            json.dump(settings, f, indent=2)
+        print(f"\n✓ settings.json wurde mit {successful_configs} Strategien aktualisiert")
+        print("="*60)
         sys.exit(0)
-    else:
+    except Exception as e:
+        print(f"❌ Fehler beim Speichern von settings.json: {e}")
+        print("   Backup: settings.json.backup bleibt erhalten")
         sys.exit(1)
 
 

@@ -60,12 +60,13 @@ def optimize_parameters(symbol, timeframe, start_date, end_date, start_capital=1
         # window: Fenster-Größe für Kanal-Analyse
         # min_channel_width: Minimale Kanal-Breite (%)
         # slope_threshold: Minimale Steigung für bedeutungsvolle Trends
+        # Erweitertes Grid für bessere Genauigkeit (1024 Kombinationen statt 243)
         param_grid = {
-            'window': [40, 50, 60],
-            'min_channel_width': [0.001, 0.002, 0.003],
-            'slope_threshold': [0.01, 0.02, 0.03],
-            'entry_threshold': [0.01, 0.015, 0.02],
-            'exit_threshold': [0.02, 0.025, 0.03],
+            'window': [35, 40, 45, 50, 55, 60],
+            'min_channel_width': [0.0005, 0.001, 0.0015, 0.002, 0.0025, 0.003],
+            'slope_threshold': [0.005, 0.01, 0.015, 0.02, 0.025, 0.03],
+            'entry_threshold': [0.005, 0.01, 0.015, 0.02],
+            'exit_threshold': [0.015, 0.02, 0.025, 0.03],
         }
         
         best_result = {

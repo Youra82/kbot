@@ -1,171 +1,196 @@
------
+# 📊 KBot - Channel Pattern Trading Bot
 
+<div align="center">
 
-# KBot
+![KBot Logo](https://img.shields.io/badge/KBot-v1.0-blue?style=for-the-badge)
+[![Python](https://img.shields.io/badge/Python-3.8+-green?style=for-the-badge&logo=python)](https://www.python.org/)
+[![CCXT](https://img.shields.io/badge/CCXT-4.3.5-red?style=for-the-badge)](https://github.com/ccxt/ccxt)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
+**Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Chart-Kanal-Erkennung und automatischem Risikomanagement**
 
-Ein vollautomatischer Trading-Bot für Krypto-Futures auf der Bitget-Börse, der ausschließlich nach Chart-Kanälen (parallel, Dreieck, Keil) handelt. Es gibt keine Machine-Learning- oder Modell-Logik mehr.
+[Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Monitoring](#-monitoring) • [Wartung](#-wartung)
 
+</div>
 
-Dieses System ist für den Betrieb auf einem Ubuntu-Server ausgelegt und benötigt keine Trainings- oder Optimierungs-Pipeline mehr.
+---
 
+## 📊 Übersicht
 
-## Strategie
+KBot ist ein spezialisierter Trading-Bot, der automatisch Chart-Kanäle (parallel, Dreieck, Keil) auf dem Kryptowährungsmarkt erkennt und eigenständig von Kanalrand zu Kanalrand handelt. Das System benötigt keine Machine-Learning-Modelle oder Trainings-Pipelines und ist optimiert für stabilen Betrieb auf Ubuntu-Servern.
 
-KBot erkennt Chart-Kanäle automatisch (parallel, Dreieck, Keil), informiert per Telegram und handelt eigenständig von Kanalrand zu Kanalrand mit SL/TP. Es gibt keine KI- oder Trainingslogik mehr.
+### 🧭 Trading-Logik (Kurzfassung)
+- **Channel Detection**: Automatische Erkennung von parallelen, dreieckigen und keilförmigen Chart-Kanälen
+- **Signal-Engine**: Bei neuen Kanälen wird eine Telegram-Nachricht mit Typ und Koordinaten gesendet
+- **Entry-Logik**: Automatischer Trade-Eröffnung am Kanalrand (Long unten, Short oben)
+- **Risk Layer**: Fester Stop-Loss und Take-Profit basierend auf Kanal-Dimensionen
+- **Execution**: CCXT für Order-Platzierung mit realistischer Slippage-Simulation
 
+### 🔍 Strategie-Visualisierung
+```mermaid
+flowchart LR
+    A["OHLCV Marktdaten"]
+    B["Channel Detection<br/>Parallel/Dreieck/Keil"]
+    C["Signal Check<br/>Preis am Rand?"]
+    D["Telegram Notify<br/>Kanal erkannt"]
+    E["Risk Engine<br/>SL/TP Setup"]
+    F["Order Router (CCXT)"]
 
-## Arbeitsweise
-
-1. KBot erkennt automatisch Chart-Kanäle im Markt (parallel, Dreieck, Keil).
-2. Bei jedem neuen Kanal wird eine Telegram-Nachricht mit Typ und Koordinaten gesendet.
-3. Liegt der aktuelle Preis am Kanalrand, wird automatisch ein Trade mit SL/TP eröffnet (Long am unteren, Short am oberen Rand).
-4. Es gibt keine Machine-Learning-Modelle, keine Trainings- oder Optimierungslogik mehr.
-
------
-
-## Installation 🚀
-
-Führe die folgenden Schritte auf einem frischen Ubuntu-Server aus.
-
-#### 1\. Projekt klonen
-
-```bash
-git clone https://github.com/Youra82/jaegerbot.git
+    A --> B --> C --> D
+    C --> E --> F
 ```
 
-#### 2\. Installations-Skript ausführen
+### 📈 Trade-Beispiel (Entry/SL/TP)
+- **Setup**: Paralleler Kanal erkannt; oberer Widerstand bei 45.000, untere Unterstützung bei 43.000
+- **Entry**: Long bei Touchpoint an untere Linie (43.000) mit Telegram-Alert
+- **SL**: 2% unter Entry (42.140) zur Vermeidung von Fehlausbrüchen
+- **TP**: An oberer Kanal-Linie (45.000) oder teilweise bei 44.000
+- **Management**: Nach Erreichen von TP wird Position geschlossen; Kanal wird erneut gescannt
+
+---
+
+## 🚀 Features
+
+### Trading Features
+- ✅ Automatische Channel-Pattern-Erkennung (Parallel, Dreieck, Keil)
+- ✅ Unterstützt mehrere Kryptowährungspaare (BTC, ETH, SOL, DOGE, etc.)
+- ✅ Flexible Timeframe-Unterstützung (15m, 30m, 1h, 4h, 1d)
+- ✅ Automatische Positionsgröße basierend auf verfügbarem Kapital
+- ✅ Fester Stop-Loss und Take-Profit Management
+- ✅ Telegram-Benachrichtigungen bei neuen Kanälen und Trades
+
+### Technical Features
+- ✅ CCXT Integration für mehrere Börsen
+- ✅ Automatische Channel-Detektion mit Geometrie-Algorithmen
+- ✅ Backtesting mit realistischer Slippage-Simulation
+- ✅ Robust Error-Handling und Logging
+- ✅ Keine ML/Deep-Learning-Abhängigkeiten (leichte Installation)
+
+---
+
+## 📋 Systemanforderungen
+
+### Hardware
+- **CPU**: Multi-Core Prozessor (Intel i5 oder besser empfohlen)
+- **RAM**: Minimum 2GB, empfohlen 4GB+
+- **Speicher**: 1GB freier Speicherplatz
+
+### Software
+- **OS**: Linux (Ubuntu 20.04+), macOS, Windows 10/11
+- **Python**: Version 3.8 oder höher
+- **Git**: Für Repository-Verwaltung
+
+---
+
+## 💻 Installation
+
+### 1. Repository klonen
 
 ```bash
-cd jaegerbot
+git clone <repository-url>
+cd kbot
 ```
-Installation aktivieren (einmalig):
+
+### 2. Automatische Installation (empfohlen)
+
 ```bash
+# Linux/macOS
 chmod +x install.sh
-```
-Installation ausführen:
-```bash
-bash ./install.sh
-```
+./install.sh
 
-#### 3\. API-Schlüssel eintragen
-
-Erstelle eine Kopie der Vorlage und trage deine Schlüssel ein.
-
-```bash
-cp secret.json.example secret.json
-nano secret.json
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Speichere mit `Strg + X`, dann `Y`, dann `Enter`.
+Das Installations-Script führt folgende Schritte aus:
+- ✅ Erstellt eine virtuelle Python-Umgebung (`.venv`)
+- ✅ Installiert alle erforderlichen Abhängigkeiten
+- ✅ Erstellt notwendige Verzeichnisse (`data/`, `logs/`, `artifacts/`)
+- ✅ Initialisiert Konfigurationsdateien
 
------
+### 3. API-Credentials konfigurieren
 
-## Konfiguration & Automatisierung
-
-#### 1\. Strategien finden (Optional, rechenintensiv)
-
-Führe die interaktive Pipeline aus, um neue Strategie-Konfigurationen für bestimmte Handelspaare zu finden.
-Run_pipeline aktivieren (einmalig):
-```bash
-chmod +x run_pipeline.sh
-```
-
-```bash
-bash ./run_pipeline.sh
-```
-Backtest aktivieren (einmalig):
-```bash
-chmod +x show_results.sh
-```
-Backtest ausführen:
-```bash
-bash show_results.sh
-```
-Ergebnisse (CSV) liegen hier:
-```bash
-ls -l *.csv
-```
-Ergebnisse (CSV) an Telegram zuschicken:
-```bash
-chmod +x send_report.sh
-```
-```bash
-./send_report.sh optimal_portfolio_equity.csv
-```
-
-```bash
-./send_report.sh manual_portfolio_equity.csv
-```
-
-```bash
-./send_report.sh portfolio_equity_curve.csv
-```
-Ergebnisse Grafisch an Telegram zuschicken:
-```bash
-chmod +x show_chart.sh
-```
-
-```bash
-./show_chart.sh optimal_portfolio_equity.csv
-```
-
-```bash
-./show_chart.sh manual_portfolio_equity.csv
-```
-
-
-Alte Konfigurationen löschen:
-```bash
-rm -f src/jaegerbot/strategy/configs/config_*.json
-```
-Alte Modelle löschen:
-```bash
-rm -f artifacts/models/*
-```
-```bash
-rm artifacts/db/optuna_studies.db
-```
-
-Kontrolle ob alles gelöscht wurde:
-```bash
-ls -l src/jaegerbot/strategy/configs/
-
-```
-Die gefundenen `config_...json`-Dateien werden in `src/jaegerbot/strategy/configs/` gespeichert.
-
-#### 2\. Strategien für den Handel aktivieren
-
-Bearbeite die zentrale Steuerungsdatei `settings.json`, um die Strategien zu definieren, die der `master_runner` überwachen soll.
-
-```bash
-nano settings.json
-```
-
-**Beispiel `settings.json` (ohne `budget_usdt`):**
+Erstelle eine `secret.json` Datei im Root-Verzeichnis:
 
 ```json
 {
-    "live_trading_settings": {
-        "use_auto_optimizer_results": false,
-        "active_strategies": [
-            {
-                "symbol": "AAVE/USDT:USDT",
-                "timeframe": "1d"
-            },
-            {
-                "symbol": "BIO/USDT:USDT",
-                "timeframe": "4h"
-            }
-        ]
-    },
-    "optimization_settings": {
-        "enabled": false
+  "kbot": [
+    {
+      "name": "Bitget Trading Account",
+      "exchange": "bitget",
+      "apiKey": "DEIN_API_KEY",
+      "secret": "DEIN_SECRET_KEY",
+      "passphrase": "DEIN_PASSPHRASE",
+      "options": {
+        "defaultType": "future"
+      }
     }
+  ]
 }
 ```
 
-#### 3\. Automatisierung per Cronjob einrichten
+⚠️ **Wichtig**: 
+- Niemals `secret.json` committen oder teilen!
+- Verwende nur API-Keys mit eingeschränkten Rechten (Nur Trading, keine Withdrawals)
+- Aktiviere IP-Whitelist auf der Exchange
+
+### 4. Trading-Strategien konfigurieren
+
+Bearbeite `settings.json` für deine gewünschten Handelspaare:
+
+```json
+{
+  "live_trading_settings": {
+    "active_strategies": [
+      {
+        "symbol": "BTC/USDT:USDT",
+        "timeframe": "4h",
+        "active": true
+      },
+      {
+        "symbol": "ETH/USDT:USDT",
+        "timeframe": "1h",
+        "active": true
+      }
+    ]
+  }
+}
+```
+
+**Parameter-Erklärung**:
+- `symbol`: Handelspaar (Format: BASE/QUOTE:SETTLE)
+- `timeframe`: Zeitrahmen (15m, 30m, 1h, 4h, 1d)
+- `active`: Strategie aktiv (true/false)
+
+---
+
+## 🔴 Live Trading
+
+### Start des Live-Trading
+
+```bash
+# Master Runner starten (verwaltet alle aktiven Strategien)
+python master_runner.py
+```
+
+### Manuell starten / Cronjob testen
+Ausführung sofort anstoßen (ohne auf den 15-Minuten-Cron zu warten):
+
+```bash
+cd /home/ubuntu/kbot && /home/ubuntu/kbot/.venv/bin/python3 /home/ubuntu/kbot/master_runner.py
+```
+
+Der Master Runner:
+- ✅ Lädt Konfigurationen aus `settings.json`
+- ✅ Startet separate Prozesse für jede aktive Strategie
+- ✅ Überwacht Kontostand und verfügbares Kapital
+- ✅ Managed Positionen und Risk-Limits
+- ✅ Loggt alle Trading-Aktivitäten
+- ✅ Sendet Telegram-Benachrichtigungen für neue Kanäle
+
+### Automatischer Start (Produktions-Setup)
 
 Richte den automatischen Prozess für den Live-Handel ein.
 
@@ -173,27 +198,113 @@ Richte den automatischen Prozess für den Live-Handel ein.
 crontab -e
 ```
 
-Füge die folgende **eine Zeile** am Ende der Datei ein. Passe den Pfad an, falls dein Bot nicht unter `/home/ubuntu/jaegerbot` liegt.
+Füge die folgende **eine Zeile** am Ende der Datei ein. Passe den Pfad an, falls dein Bot nicht unter `/home/ubuntu/kbot` liegt.
 
 ```
-# Starte den JaegerBot Master-Runner alle 15 Minuten
-*/15 * * * * /usr/bin/flock -n /home/ubuntu/jaegerbot/jaegerbot.lock /bin/sh -c "cd /home/ubuntu/jaegerbot && /home/ubuntu/jaegerbot/.venv/bin/python3 /home/ubuntu/jaegerbot/master_runner.py >> /home/ubuntu/jaegerbot/logs/cron.log 2>&1"
+# Starte den KBot Master-Runner alle 15 Minuten
+*/15 * * * * /usr/bin/flock -n /home/ubuntu/kbot/kbot.lock /bin/sh -c "cd /home/ubuntu/kbot && /home/ubuntu/kbot/.venv/bin/python3 /home/ubuntu/kbot/master_runner.py >> /home/ubuntu/kbot/logs/cron.log 2>&1"
 ```
 
 *(Hinweis: `flock` ist eine gute Ergänzung, um Überlappungen zu verhindern, aber für den Start nicht zwingend notwendig.)*
 
 Logverzeichnis anlegen:
 
+```bash
+mkdir -p /home/ubuntu/kbot/logs
 ```
-mkdir -p /home/ubuntu/jaegerbot/logs
-```
------
 
-## Tägliche Verwaltung & Wichtige Befehle ⚙️
+### Als Systemd Service (Linux)
+
+Für 24/7 Betrieb:
+
+```bash
+# Service-Datei erstellen
+sudo nano /etc/systemd/system/kbot.service
+```
+
+```ini
+[Unit]
+Description=KBot Trading System
+After=network.target
+
+[Service]
+Type=simple
+User=your-user
+WorkingDirectory=/path/to/kbot
+ExecStart=/path/to/kbot/.venv/bin/python master_runner.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# Service aktivieren
+sudo systemctl enable kbot
+sudo systemctl start kbot
+
+# Status prüfen
+sudo systemctl status kbot
+```
+
+---
+
+## 📊 Monitoring & Status
+
+### Status-Dashboard
+
+```bash
+# Zeigt alle wichtigen Informationen
+./show_status.sh
+```
+
+**Angezeigt**:
+- 📊 Aktuelle Konfiguration (`settings.json`)
+- 🔐 API-Status (ohne Credentials)
+- 📈 Offene Positionen
+- 💰 Kontostand und verfügbares Kapital
+- 📝 Letzte Logs
+
+### Live-Status anzeigen
+
+```bash
+# Aktuelle Positionen und Performance
+./show_results.sh
+```
+
+### Log-Files
+
+```bash
+# Live-Trading Logs (Zentrale Log-Datei)
+tail -f logs/cron.log
+
+# Fehler-Logs
+tail -f logs/error.log
+
+# Logs einer individuellen Strategie
+tail -n 100 logs/kbot_BTCUSDTUSDT_4h.log
+```
+
+### Performance-Metriken
+
+```bash
+# Trade-Analyse
+python analyze_real_trades_detailed.py
+
+# Vergleich Backtest vs. Live
+python compare_real_vs_backtest.py
+```
+
+---
+
+## 🛠️ Wartung & Pflege
+
+### Tägliche Verwaltung
 
 #### Logs ansehen
 
-Die zentrale `cron.log`-Datei enthält **alle** wichtigen Informationen, sowohl vom Scheduler als auch von den Handels-Entscheidungen.
+Die zentrale `cron.log`-Datei enthält **alle** wichtigen Informationen vom Scheduler und den Handels-Entscheidungen.
 
   * **Logs live mitverfolgen (der wichtigste Befehl):**
 
@@ -215,85 +326,228 @@ Die zentrale `cron.log`-Datei enthält **alle** wichtigen Informationen, sowohl 
     grep -i "ERROR" logs/cron.log
     ```
 
-  * **Logs einer individuellen Strategie ansehen (für Detail-Analyse):**
-
-    ```bash
-    tail -n 100 logs/jaegerbot_BIOUSDTUSDT_4h.log
-    ```
-
 #### Cronjob manuell testen
 
 Um den `master_runner` sofort auszuführen, ohne auf den nächsten 15-Minuten-Takt zu warten:
 
 ```bash
-cd /home/ubuntu/jaegerbot && /home/ubuntu/jaegerbot/.venv/bin/python3 /home/ubuntu/jaegerbot/master_runner.py
+cd /home/ubuntu/kbot && /home/ubuntu/kbot/.venv/bin/python3 /home/ubuntu/kbot/master_runner.py
 ```
 
-#### Bot aktualisieren
+### Bot aktualisieren
 
 Um die neueste Version des Codes von deinem Git-Repository zu holen:
-Update aktivieren (einmalig)
-```bash
-chmod +x update.sh
-```
 
 ```bash
+# Update aktivieren (einmalig)
+chmod +x update.sh
+
+# Update ausführen
 bash ./update.sh
 ```
-Absolut. Das ist eine hervorragende Ergänzung für deine Dokumentation. Das Test-System ist ein zentraler Bestandteil der Qualitätssicherung, und jeder Nutzer sollte wissen, wie man es verwendet.
 
-Ich habe einen neuen Abschnitt "Qualitätssicherung & Tests" erstellt und ihn an der passenden Stelle in deine `README.md`-Datei eingefügt. Er erklärt, *warum* es die Tests gibt und wie man sie ausführt.
-
------
-Projekt hochladen:
+### Log-Rotation
 
 ```bash
-git add .
+# Alte Logs archivieren (älter als 30 Tage)
+find logs/ -name "*.log" -type f -mtime +30 -exec gzip {} \;
+
+# Archivierte Logs löschen (älter als 90 Tage)
+find logs/ -name "*.log.gz" -type f -mtime +90 -delete
 ```
+
+### Datenbank-Cleanup
 
 ```bash
-git commit -m "Rollback auf stabile Server-Version vom 12.10."
+# Alte Backtesting-Daten löschen
+rm -rf data/backtest_cache/*
+
+# Trade-History archivieren
+mv logs/trades_*.csv logs/archive/
 ```
+
+### Tests ausführen
 
 ```bash
-git push --force origin main
+# Alle Tests
+./run_tests.sh
+
+# Spezifische Tests
+pytest tests/test_strategy.py
+pytest tests/test_exchange.py -v
+
+# Mit Coverage
+pytest --cov=src tests/
 ```
 
-Komplette Projektstruktur anzeigen:
+---
+
+## 🔧 Nützliche Befehle
+
+### Konfiguration
 
 ```bash
-chmod +x show_status.sh
+# Settings validieren
+python -c "import json; print(json.load(open('settings.json')))"
+
+# Backup erstellen
+cp settings.json settings.json.backup.$(date +%Y%m%d)
+
+# Diff zwischen Versionen
+diff settings.json settings.json.backup
 ```
+
+### Prozess-Management
 
 ```bash
-bash ./show_status.sh
+# Alle Python-Prozesse anzeigen
+ps aux | grep python | grep kbot
+
+# Master Runner Process-ID finden
+pgrep -f master_runner.py
+
+# Prozess sauber beenden
+pkill -f master_runner.py
+
+# Erzwungenes Beenden (Notfall)
+pkill -9 -f master_runner.py
 ```
 
-## Qualitätssicherung & Tests 🛡️
-
-Um sicherzustellen, dass alle Kernfunktionen des Bots nach jeder Code-Änderung wie erwartet funktionieren und keine alten Fehler ("Regressionen") wieder auftreten, verfügt das Projekt über ein automatisiertes Test-System.
-
-Dieses "Sicherheitsnetz" prüft zwei Ebenen:
-
-1.  **Struktur-Tests:** Überprüfen, ob alle kritischen Funktionen und Code-Teile vorhanden sind.
-2.  **Workflow-Tests:** Führen einen kompletten Live-Zyklus auf der Bitget-API durch (Aufräumen, Order platzieren mit korrekten Einstellungen, SL/TP setzen, Position schließen), um die korrekte Interaktion mit der Börse zu verifizieren.
-
-#### Das Test-System ausführen
-
-Der einfachste Weg, alle Tests zu starten, ist das dafür vorgesehene Skript. Dieser Befehl sollte **nach jeder Code-Änderung** (z.B. nach einem `bash ./update.sh`) ausgeführt werden, um die Stabilität und korrekte Funktion des Bots zu garantieren.
+### Exchange-Verbindung
 
 ```bash
-bash ./run_tests.sh
+# API-Verbindung testen
+python -c "from src.kbot.utils.exchange import Exchange; \
+    e = Exchange('bitget'); print(e.fetch_balance())"
+
+# Marktdaten abrufen
+python -c "from src.kbot.utils.exchange import Exchange; \
+    e = Exchange('bitget'); print(e.fetch_ohlcv('BTC/USDT:USDT', '1h'))"
 ```
 
-  * **Erfolgreiches Ergebnis:** Alle Tests werden als `PASSED` (grün) markiert. Das bedeutet, alle geprüften Kernfunktionen arbeiten wie erwartet.
-  * **Fehlerhaftes Ergebnis:** Mindestens ein Test wird als `FAILED` (rot) markiert. Die Ausgabe gibt einen detaillierten Hinweis darauf, welche Funktion nicht mehr wie erwartet funktioniert. In diesem Fall sollte der Bot nicht im Live-Betrieb eingesetzt werden, bis der Fehler behoben ist.
+### Debugging
 
------
+```bash
+# Verbose-Modus aktivieren
+export KBOT_DEBUG=1
+python master_runner.py
 
-Ich habe den Text so formuliert, dass er sich nahtlos in den Stil deiner bestehenden Dokumentation einfügt.
------
+# Nur Strategie-Logs anzeigen
+tail -f logs/cron.log | grep -i "channel\|trade\|position"
 
-### ⚠️ Disclaimer
+# Fehler im Detail
+python -m pdb master_runner.py
+```
 
-Dieses Material dient ausschließlich zu Bildungs- und Unterhaltungszwecken. Es handelt sich nicht um eine Finanzberatung. Der Nutzer trägt die alleinige Verantwortung für alle Handlungen. Der Autor haftet nicht für etwaige Verluste.
+---
+
+## 📂 Projekt-Struktur
+
+```
+kbot/
+├── src/
+│   └── kbot/
+│       ├── strategy/          # Trading-Logik
+│       │   ├── run.py
+│       │   └── channel_detector.py
+│       ├── backtest/          # Backtesting
+│       │   └── backtester.py
+│       └── utils/             # Hilfsfunktionen
+│           ├── exchange.py
+│           └── telegram.py
+├── scripts/                   # Hilfsskripte
+├── tests/                     # Unit-Tests
+├── data/                      # Marktdaten
+├── logs/                      # Log-Files
+├── artifacts/                 # Ergebnisse
+│   ├── models/
+│   └── backtest/
+├── master_runner.py          # Haupt-Entry-Point
+├── settings.json             # Konfiguration
+├── secret.json               # API-Credentials
+└── requirements.txt          # Dependencies
+```
+
+---
+
+## ⚠️ Wichtige Hinweise
+
+### Risiko-Disclaimer
+
+⚠️ **Trading mit Kryptowährungen birgt erhebliche Risiken!**
+
+- Nur Kapital einsetzen, dessen Verlust Sie verkraften können
+- Keine Garantie für Gewinne
+- Vergangene Performance ist kein Indikator für zukünftige Ergebnisse
+- Testen Sie ausgiebig mit Demo-Accounts
+- Starten Sie mit kleinen Beträgen
+
+### Security Best Practices
+
+- 🔐 Niemals API-Keys mit Withdrawal-Rechten verwenden
+- 🔐 IP-Whitelist auf Exchange aktivieren
+- 🔐 2FA für Exchange-Account aktivieren
+- 🔐 `secret.json` niemals committen (in `.gitignore`)
+- 🔐 Regelmäßige Security-Updates durchführen
+
+### Performance-Tipps
+
+- 💡 Starten Sie mit 1-2 Strategien
+- 💡 Verwenden Sie längere Timeframes (4h+) für stabilere Signale
+- 💡 Monitoren Sie regelmäßig die Performance
+- 💡 Channel-Parameter regelmäßig überprüfen
+- 💡 Position-Sizing angemessen konfigurieren
+
+---
+
+## 🤝 Support & Community
+
+### Probleme melden
+
+Bei Problemen oder Fragen:
+
+1. Prüfen Sie die Logs in `logs/`
+2. Führen Sie Tests aus: `./run_tests.sh`
+3. Öffnen Sie ein Issue auf GitHub mit:
+   - Beschreibung des Problems
+   - Relevante Log-Auszüge
+   - System-Informationen
+   - Schritte zur Reproduktion
+
+### Updates erhalten
+
+```bash
+# Regelmäßig Updates prüfen
+git fetch origin
+git status
+
+# Updates installieren
+./update.sh
+```
+
+---
+
+## 📜 Lizenz
+
+Dieses Projekt ist lizenziert unter der MIT License - siehe [LICENSE](LICENSE) Datei für Details.
+
+---
+
+## 🙏 Credits
+
+Entwickelt mit:
+- [CCXT](https://github.com/ccxt/ccxt) - Cryptocurrency Exchange Trading Library
+- [Pandas](https://pandas.pydata.org/) - Data Analysis Library
+- [TA-Lib](https://github.com/mrjbq7/ta-lib) - Technical Analysis Library
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the KBot Team**
+
+⭐ Star uns auf GitHub wenn dir dieses Projekt gefällt!
+
+[🔝 Nach oben](#-kbot---channel-pattern-trading-bot)
+
+</div>

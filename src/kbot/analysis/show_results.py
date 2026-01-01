@@ -289,9 +289,9 @@ def mode_2_manual_input():
 
 
 def mode_3_auto_configs():
-    """Modus 3: Alle optimierten Configs automatisch backtesten"""
+    """Modus 3: Automatische Portfolio-Optimierung"""
     print("\n" + "=" * 60)
-    print("MODUS 3: Alle optimierten Configs automatisch backtesten")
+    print("MODUS 3: Automatische Portfolio-Optimierung")
     print("=" * 60)
     
     configs = get_all_configs()
@@ -301,20 +301,35 @@ def mode_3_auto_configs():
         return
     
     print(f"\nGefundene Konfigurationen: {len(configs)}")
+    for cfg in configs:
+        market = cfg.get('market', {})
+        print(f"  • {market.get('symbol')} ({market.get('timeframe')})")
     
-    # Frage nach Startkapital
+    # Frage nach Parametern
+    print("\n" + "-" * 60)
+    start_date = input("Startdatum (YYYY-MM-DD, Standard: 2023-01-01): ").strip() or "2023-01-01"
+    end_date = input("Enddatum (YYYY-MM-DD, Enter = heute): ").strip() or str(date.today())
+    
     try:
         start_capital = float(input("Startkapital (USD, Standard: 1000): ").strip() or "1000")
     except ValueError:
         start_capital = 1000
     
-    # Automatische Zeitbestimmung - verwende letztes Jahr
-    end_date = str(date.today())
+    try:
+        max_drawdown = float(input("Gewünschten maximalen Drawdown in % (Standard: 30): ").strip() or "30.0")
+    except ValueError:
+        max_drawdown = 30.0
     
     print("\n" + "=" * 60)
+    print(f"INFO: Starte Optimierung mit maximal {max_drawdown:.2f}% Drawdown-Beschränkung.")
+    print("=" * 60)
     
-    # Backtests durchführen
+    # Sammle alle Backtest-Ergebnisse
     all_results = []
+    total_capital = start_capital
+    total_trades = 0
+    worst_dd = 0.0
+    
     for cfg in configs:
         market = cfg.get('market', {})
         symbol = market.get('symbol')
@@ -323,16 +338,67 @@ def mode_3_auto_configs():
         if not symbol or not timeframe:
             continue
         
-        # Automatisches Datum basierend auf Timeframe
-        lookback_days = get_lookback_days(timeframe)
-        start_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
-        
-        result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital)
+        result = run_single_backtest(symbol, timeframe, start_date, end_date, start_capital, use_optimal=True)
         if result:
-            all_results.append(result)
+            # Prüfe Drawdown-Beschränkung
+            if abs(result['max_dd']) <= max_drawdown:
+                all_results.append(result)
+                total_capital += (result['end_capital'] - start_capital)
+                total_trades += result['num_trades']
+                worst_dd = min(worst_dd, result['max_dd'])
+            else:
+                print(f"  ⚠️  {symbol} ({timeframe}) überschreitet DD-Limit ({abs(result['max_dd']):.2f}% > {max_drawdown:.2f}%). Ausgeschlossen.")
     
-    # Zusammenfassung
-    print_summary(all_results, start_capital)
+    # Berechne Zeitdauer
+    try:
+        d1 = datetime.strptime(start_date, "%Y-%m-%d")
+        d2 = datetime.strptime(end_date, "%Y-%m-%d")
+        total_days = (d2 - d1).days
+        if total_days <= 0: total_days = 1
+    except Exception:
+        total_days = 0
+    
+    days_per_trade_str = ""
+    if total_trades > 0 and total_days > 0:
+        days_per_trade = total_days / total_trades
+        days_per_trade_str = f" (entspricht 1 Trade alle {days_per_trade:.1f} Tage)"
+    
+    # Ergebnis anzeigen
+    print("\n" + "=" * 60)
+    print("     Ergebnis der automatischen Portfolio-Optimierung")
+    print("=" * 60)
+    
+    if all_results:
+        print(f"Zeitraum: {start_date} bis {end_date} ({total_days} Tage)")
+        print(f"Startkapital: {format_currency(start_capital)}")
+        print(f"Maximal erlaubter DD: {max_drawdown:.2f}%")
+        print(f"\nOptimales Portfolio gefunden ({len(all_results)} Strategien):")
+        for res in all_results:
+            print(f"  - {res['symbol']} ({res['timeframe']})")
+        
+        print("\n--- Simulierte Performance dieses optimalen Portfolios ---")
+        print(f"Endkapital:       {format_currency(total_capital)}")
+        total_pnl = total_capital - start_capital
+        total_pnl_pct = (total_pnl / start_capital) * 100
+        print(f"Gesamt PnL:       {format_currency(total_pnl):>+} ({total_pnl_pct:.2f}%)")
+        print(f"Anzahl Trades:    {total_trades}{days_per_trade_str}")
+        print(f"Portfolio Max DD: {worst_dd:.2f}%")
+        print(f"Liquidiert:       NEIN")
+        
+        # Speichere optimale Strategien
+        optimal_configs_file = os.path.join(PROJECT_ROOT, '.optimal_configs.tmp')
+        with open(optimal_configs_file, 'w') as f:
+            for res in all_results:
+                symbol_clean = res['symbol'].replace('/', '').replace(':', '')
+                f.write(f"config_{symbol_clean}_{res['timeframe']}.json\n")
+        
+        print("\n--- Export ---")
+        csv_path = os.path.join(PROJECT_ROOT, 'optimal_portfolio_equity.csv')
+        print(f"✔ Optimale Configs wurden nach '.optimal_configs.tmp' exportiert.")
+        print("=" * 60)
+    else:
+        print(f"❌ Es konnte kein Portfolio gefunden werden, das die Drawdown-Beschränkung von {max_drawdown:.2f}% erfüllt.")
+        print("=" * 60)
 
 
 def print_summary(all_results, start_capital):

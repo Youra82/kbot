@@ -321,21 +321,25 @@ def run_portfolio_optimizer(start_capital, start_date, end_date, max_drawdown, c
         return None
     
     # WICHTIG: Gruppiere nach Symbol und wähle für jeden Coin die beste Timeframe
+    # Normalisiere Symbole: BTCUSDT -> BTC, ETHUSDT -> ETH, etc.
     symbol_groups = {}
     for res in all_results:
         symbol = res['symbol']
-        if symbol not in symbol_groups:
-            symbol_groups[symbol] = []
-        symbol_groups[symbol].append(res)
+        # Entferne USDT, USD, BUSD Suffixe für die Grouping
+        normalized_symbol = symbol.replace('USDT', '').replace('USD', '').replace('BUSD', '')
+        
+        if normalized_symbol not in symbol_groups:
+            symbol_groups[normalized_symbol] = []
+        symbol_groups[normalized_symbol].append(res)
     
     # Wähle für jeden Symbol nur die beste Timeframe
     single_results = []
-    for symbol, candidates in symbol_groups.items():
+    for normalized_symbol, candidates in symbol_groups.items():
         # Sortiere nach Score und nehme den besten
         candidates.sort(key=lambda x: x['score'], reverse=True)
         best_for_symbol = candidates[0]
         single_results.append(best_for_symbol)
-        print(f"  • {symbol}: {best_for_symbol['timeframe']} (Score: {best_for_symbol['score']:.2f})")
+        print(f"  • {best_for_symbol['symbol']}: {best_for_symbol['timeframe']} (Score: {best_for_symbol['score']:.2f})")
     
     # Sortiere alle besten nach Score
     single_results.sort(key=lambda x: x['score'], reverse=True)

@@ -4,6 +4,7 @@
 
 import os
 import sys
+import json
 import argparse
 from datetime import date
 
@@ -12,6 +13,21 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
 
 from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
+
+
+def load_optimal_config(symbol, timeframe):
+    """Lade optimale Konfiguration falls vorhanden"""
+    config_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'optimal_configs')
+    config_file = os.path.join(config_dir, f'optimal_{symbol}_{timeframe}.json')
+    
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            return config.get('parameters', None)
+        except Exception:
+            return None
+    return None
 
 
 def format_currency(value):
@@ -121,18 +137,38 @@ def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital):
             print(f"⚠️  Nicht genügend Kursdaten für {symbol} ({timeframe}). Min. 60 Kerzen erforderlich.")
             return None
         
-        # Kanäle erkennen mit optimierten Parametern
-        channels = detect_channels(
-            df, 
-            window=50,
-            min_channel_width=0.002,  # 0.2% Minimum Breite
-            slope_threshold=0.02       # Geringere Slope-Anforderung
-        )
+        # Versuche optimale Konfiguration zu laden
+        optimal_params = load_optimal_config(symbol, timeframe)
         
-        # Backtest durchführen
-        end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
-            df, channels, start_capital=start_capital
-        )
+        if optimal_params:
+            print(f"  ℹ Nutze optimierte Parameter aus artifacts/optimal_configs/")
+            channels = detect_channels(
+                df, 
+                window=optimal_params.get('window', 50),
+                min_channel_width=optimal_params.get('min_channel_width', 0.002),
+                slope_threshold=optimal_params.get('slope_threshold', 0.02)
+            )
+            
+            end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
+                df, 
+                channels, 
+                start_capital=start_capital,
+                entry_threshold=optimal_params.get('entry_threshold', 0.015),
+                exit_threshold=optimal_params.get('exit_threshold', 0.025)
+            )
+        else:
+            # Verwende Standard-Parameter
+            channels = detect_channels(
+                df, 
+                window=50,
+                min_channel_width=0.002,  # 0.2% Minimum Breite
+                slope_threshold=0.02       # Geringere Slope-Anforderung
+            )
+            
+            # Backtest durchführen
+            end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
+                df, channels, start_capital=start_capital
+            )
         
         # Ergebnisse anzeigen
         print(f"✓ {symbol} ({timeframe})")

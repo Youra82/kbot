@@ -310,7 +310,87 @@ def run_portfolio_optimizer(start_capital, start_date, end_date, max_drawdown, c
             # Risikoadjustierte Rendite (Calmar Ratio)
             dd_abs = abs(result['max_dd'])
             score = result['total_return'] / dd_abs if dd_abs > 0 else result['total_return']
-            all_results.append({\n                'symbol': symbol,\n                'timeframe': timeframe,\n                'score': score,\n                'result': result\n            })\n    \n    if not all_results:\n        return None\n    \n    # WICHTIG: Gruppiere nach Symbol und wähle für jeden Coin die beste Timeframe\n    symbol_groups = {}\n    for res in all_results:\n        symbol = res['symbol']\n        if symbol not in symbol_groups:\n            symbol_groups[symbol] = []\n        symbol_groups[symbol].append(res)\n    \n    # Wähle für jeden Symbol nur die beste Timeframe\n    single_results = []\n    for symbol, candidates in symbol_groups.items():\n        # Sortiere nach Score und nehme den besten\n        candidates.sort(key=lambda x: x['score'], reverse=True)\n        best_for_symbol = candidates[0]\n        single_results.append(best_for_symbol)\n        print(f\"  • {symbol}: {best_for_symbol['timeframe']} (Score: {best_for_symbol['score']:.2f})\")\n    \n    # Sortiere alle besten nach Score\n    single_results.sort(key=lambda x: x['score'], reverse=True)\n    \n    # Star-Spieler (beste Einzelstrategie)\n    best_portfolio = [single_results[0]]\n    best_score = single_results[0]['score']\n    \n    print(f\"\\n2/3: Star-Spieler gefunden: {single_results[0]['symbol']} ({single_results[0]['timeframe']}) (Score: {best_score:.2f})\")\n    print(\"3/3: Suche die besten Team-Kollegen...\")\n    \n    # Kandidaten-Pool (ohne Star-Spieler)\n    candidates = single_results[1:]\n    \n    # Greedy: Füge schrittweise Strategien hinzu\n    while candidates:\n        best_addition = None\n        best_new_score = best_score\n        \n        for candidate in candidates:\n            # Teste Portfolio mit dieser zusätzlichen Strategie\n            test_portfolio = best_portfolio + [candidate]\n            \n            # Simuliere kombiniertes Portfolio\n            combined_capital = start_capital\n            combined_trades = 0\n            combined_dd = 0.0\n            \n            for strat in test_portfolio:\n                res = strat['result']\n                combined_capital += (res['end_capital'] - start_capital)\n                combined_trades += res['num_trades']\n                combined_dd = min(combined_dd, res['max_dd'])\n            \n            # Prüfe DD-Limit\n            if abs(combined_dd) > max_drawdown:\n                continue\n            \n            # Berechne Score\n            combined_return = ((combined_capital - start_capital) / start_capital) * 100\n            dd_abs = abs(combined_dd)\n            score = combined_return / dd_abs if dd_abs > 0 else combined_return\n            \n            if score > best_new_score:\n                best_new_score = score\n                best_addition = candidate\n        \n        if best_addition:\n            print(f\"-> Füge hinzu: {best_addition['symbol']} ({best_addition['timeframe']}) (Neuer Score: {best_new_score:.2f})\")\n            best_portfolio.append(best_addition)\n            best_score = best_new_score\n            candidates.remove(best_addition)\n        else:\n            print(\"Keine weitere Verbesserung möglich. Optimierung beendet.\")\n            break\n    \n    # Berechne finale Performance\n    final_capital = start_capital\n    final_trades = 0\n    final_dd = 0.0\n    \n    for strat in best_portfolio:\n        res = strat['result']\n        final_capital += (res['end_capital'] - start_capital)\n        final_trades += res['num_trades']\n        final_dd = min(final_dd, res['max_dd'])\n    \n    final_pnl = final_capital - start_capital\n    final_pnl_pct = (final_pnl / start_capital) * 100\n    \n    return {\n        'portfolio': best_portfolio,\n        'end_capital': final_capital,\n        'total_pnl': final_pnl,\n        'total_pnl_pct': final_pnl_pct,\n        'trade_count': final_trades,\n        'max_dd': final_dd\n    }
+            all_results.append({
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'score': score,
+                'result': result
+            })
+    
+    if not all_results:
+        return None
+    
+    # WICHTIG: Gruppiere nach Symbol und wähle für jeden Coin die beste Timeframe
+    symbol_groups = {}
+    for res in all_results:
+        symbol = res['symbol']
+        if symbol not in symbol_groups:
+            symbol_groups[symbol] = []
+        symbol_groups[symbol].append(res)
+    
+    # Wähle für jeden Symbol nur die beste Timeframe
+    single_results = []
+    for symbol, candidates in symbol_groups.items():
+        # Sortiere nach Score und nehme den besten
+        candidates.sort(key=lambda x: x['score'], reverse=True)
+        best_for_symbol = candidates[0]
+        single_results.append(best_for_symbol)
+        print(f"  • {symbol}: {best_for_symbol['timeframe']} (Score: {best_for_symbol['score']:.2f})")
+    
+    # Sortiere alle besten nach Score
+    single_results.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Star-Spieler (beste Einzelstrategie)
+    best_portfolio = [single_results[0]]
+    best_score = single_results[0]['score']
+    
+    print(f"\n2/3: Star-Spieler gefunden: {single_results[0]['symbol']} ({single_results[0]['timeframe']}) (Score: {best_score:.2f})")
+    print("3/3: Suche die besten Team-Kollegen...")
+    
+    # Kandidaten-Pool (ohne Star-Spieler)
+    candidates = single_results[1:]
+    
+    # Greedy: Füge schrittweise Strategien hinzu
+    while candidates:
+        best_addition = None
+        best_new_score = best_score
+        
+        for candidate in candidates:
+            # Teste Portfolio mit dieser zusätzlichen Strategie
+            test_portfolio = best_portfolio + [candidate]
+            
+            # Simuliere kombiniertes Portfolio
+            combined_capital = start_capital
+            combined_trades = 0
+            combined_dd = 0.0
+            
+            for strat in test_portfolio:
+                res = strat['result']
+                combined_capital += (res['end_capital'] - start_capital)
+                combined_trades += res['num_trades']
+                combined_dd = min(combined_dd, res['max_dd'])
+            
+            # Prüfe DD-Limit
+            if abs(combined_dd) > max_drawdown:
+                continue
+            
+            # Berechne Score
+            combined_return = ((combined_capital - start_capital) / start_capital) * 100
+            dd_abs = abs(combined_dd)
+            score = combined_return / dd_abs if dd_abs > 0 else combined_return
+            
+            if score > best_new_score:
+                best_new_score = score
+                best_addition = candidate
+        
+        if best_addition:
+            print(f"-> Füge hinzu: {best_addition['symbol']} ({best_addition['timeframe']}) (Neuer Score: {best_new_score:.2f})")
+            best_portfolio.append(best_addition)
+            best_score = best_new_score
+            candidates.remove(best_addition)
+        else:
+            print("Keine weitere Verbesserung möglich. Optimierung beendet.")
+            break\n    \n    # Berechne finale Performance\n    final_capital = start_capital\n    final_trades = 0\n    final_dd = 0.0\n    \n    for strat in best_portfolio:\n        res = strat['result']\n        final_capital += (res['end_capital'] - start_capital)\n        final_trades += res['num_trades']\n        final_dd = min(final_dd, res['max_dd'])\n    \n    final_pnl = final_capital - start_capital\n    final_pnl_pct = (final_pnl / start_capital) * 100\n    \n    return {\n        'portfolio': best_portfolio,\n        'end_capital': final_capital,\n        'total_pnl': final_pnl,\n        'total_pnl_pct': final_pnl_pct,\n        'trade_count': final_trades,\n        'max_dd': final_dd\n    }
 
 
 def mode_3_auto_configs():

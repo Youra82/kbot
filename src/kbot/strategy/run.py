@@ -48,74 +48,194 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Erweiterte Kanal-Erkennung: parallel, wedge, triangle ---
-def detect_channels(df, window=50):
+# --- Erweiterte Kanal-Erkennung: parallel, wedge, triangle (OPTIMIERT) ---
+def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05):
+    """
+    Erkennt Handelskanäle mit verbesserten Validierungen.
+    
+    Args:
+        df: OHLC DataFrame
+        window: Fenster-Größe für Kanal-Analyse (Standard: 50 Kerzen)
+        min_channel_width: Minimale Kanal-Breite als % vom Preis (Standard: 0.5%)
+        slope_threshold: Minimale Steigung für bedeutungsvolle Trends (Standard: 0.05)
+    """
     idx = np.arange(len(df))
-    channel_types = []
     highs = df['high'].values
     lows = df['low'].values
+    closes = df['close'].values
     channels = []
+    
     for i in range(window, len(df)):
         x = idx[i-window:i]
         y_high = highs[i-window:i]
         y_low = lows[i-window:i]
+        y_close = closes[i-window:i]
+        
         coef_high = np.polyfit(x, y_high, 1)
         coef_low = np.polyfit(x, y_low, 1)
-        # Parallelkanal: ähnliche Steigung
-        if abs(coef_high[0] - coef_low[0]) < 0.1 * max(abs(coef_high[0]), 1e-8):
-            ctype = 'parallel'
-        # Keil: beide Linien gleiche Richtung, Abstand wird kleiner
-        elif np.sign(coef_high[0]) == np.sign(coef_low[0]) and abs(coef_high[0]) > 0.05 and abs(coef_low[0]) > 0.05:
-            ctype = 'wedge'
-        # Dreieck: Linien laufen aufeinander zu (entgegengesetzte Steigung)
-        elif coef_high[0] < 0 and coef_low[0] > 0:
-            ctype = 'triangle'
-        else:
-            ctype = 'none'
+        
+        # Berechne Kanal-Breite und Stabilität
         high_val = np.polyval(coef_high, x[-1])
         low_val = np.polyval(coef_low, x[-1])
-        channels.append({'high': high_val, 'low': low_val, 'type': ctype, 'index': df.index[i]})
+        mid_val = (high_val + low_val) / 2
+        channel_width = (high_val - low_val) / mid_val if mid_val > 0 else 0
+        
+        # Berechne R² für Fit-Qualität
+        y_high_pred = np.polyval(coef_high, x)
+        y_low_pred = np.polyval(coef_low, x)
+        ss_res_high = np.sum((y_high - y_high_pred) ** 2)
+        ss_tot_high = np.sum((y_high - np.mean(y_high)) ** 2)
+        r2_high = 1 - (ss_res_high / ss_tot_high) if ss_tot_high > 0 else 0
+        
+        ss_res_low = np.sum((y_low - y_low_pred) ** 2)
+        ss_tot_low = np.sum((y_low - np.mean(y_low)) ** 2)
+        r2_low = 1 - (ss_res_low / ss_tot_low) if ss_tot_low > 0 else 0
+        
+        fit_quality = min(r2_high, r2_low)
+        
+        # Klassifizierung mit strengeren Bedingungen
+        ctype = 'none'
+        
+        # Nur Kanäle mit ausreichender Breite und Fit-Qualität
+        if channel_width >= min_channel_width and fit_quality >= 0.5:
+            slope_diff = abs(coef_high[0] - coef_low[0])
+            slope_high = abs(coef_high[0])
+            slope_low = abs(coef_low[0])
+            
+            # Parallele Kanäle: Ähnliche Steigung UND stabil
+            if slope_diff < 0.08 * max(slope_high, slope_low, 1e-8):
+                ctype = 'parallel'
+            # Keile: Gleiche Richtung UND deutliche Steigung
+            elif (np.sign(coef_high[0]) == np.sign(coef_low[0]) and 
+                  slope_high > slope_threshold and slope_low > slope_threshold):
+                ctype = 'wedge'
+            # Dreiecke: Konvergierende Linien
+            elif coef_high[0] < -slope_threshold and coef_low[0] > slope_threshold:
+                ctype = 'triangle'
+        
+        channels.append({
+            'high': high_val, 
+            'low': low_val, 
+            'type': ctype, 
+            'index': df.index[i],
+            'width': channel_width,
+            'fit_quality': fit_quality
+        })
+    
     # DataFrame mit Kanaltypen
     ch_df = pd.DataFrame(channels)
     ch_df.index = ch_df['index']
-    return ch_df[['high','low','type']]
+    return ch_df[['high','low','type','width','fit_quality']]
 
-# --- Kanal-Trading-Backtest ---
+# --- Kanal-Trading-Backtest (OPTIMIERT) ---
 
-def channel_backtest(df, channels, start_capital=1000):
+def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, exit_threshold=0.025):
+    """
+    Optimierter Kanal-basierter Backtest mit verbessertem Risikomanagement.
+    
+    Args:
+        df: OHLC DataFrame
+        channels: Kanal-Daten von detect_channels()
+        start_capital: Startkapital
+        entry_threshold: Einstiegs-Schwellenwert (% vom Kanal-Tiefpunkt)
+        exit_threshold: Ausstiegs-Schwellenwert (% vom Kanal-Hochpunkt)
+    """
     capital = start_capital
     position = 0
     entry_price = 0
+    entry_idx = 0
     trades = []
-    channel_types = []
     ch_idx = channels.index
     equity_curve = [capital]
+    
     for i in range(1, len(channels)):
         price = df.loc[ch_idx[i], 'close']
         high = channels['high'].iloc[i]
         low = channels['low'].iloc[i]
         ctype = channels['type'].iloc[i]
+        fit_quality = channels['fit_quality'].iloc[i]
         date = ch_idx[i]
-        channel_types.append(ctype)
-        # Einstieg Long am unteren Kanalrand (nur bei erkanntem Kanaltyp)
-        if position == 0 and ctype != 'none' and (abs(price - low) < 1e-8 or price <= low * 1.001):
+        
+        # Nur bei Kanälen mit guter Fit-Qualität handeln
+        if ctype == 'none' or fit_quality < 0.4:
+            continue
+        
+        # EINSTIEG: Preis nähert sich dem unteren Kanalrand
+        if position == 0 and price <= low * (1 + entry_threshold):
             position = 1
             entry_price = price
-            trades.append({'type':'BUY','date':date,'price':price,'kanaltyp':ctype})
-        # Ausstieg Long am oberen Kanalrand
-        elif position == 1 and (price >= high * 0.999):
+            entry_idx = i
+            trades.append({
+                'type': 'BUY',
+                'date': date,
+                'price': price,
+                'kanaltyp': ctype
+            })
+        
+        # AUSSTIEG 1: Preis erreicht oberen Kanalrand
+        elif position == 1 and price >= high * (1 - exit_threshold):
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
-            trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital,'kanaltyp':ctype})
+            trades.append({
+                'type': 'SELL',
+                'date': date,
+                'price': price,
+                'pnl': pnl,
+                'capital': capital,
+                'kanaltyp': ctype
+            })
             equity_curve.append(capital)
             position = 0
+            entry_idx = 0
+        
+        # AUSSTIEG 2: Zu lange in Position (> 10 Kerzen) ohne Gewinn
+        elif position == 1 and (i - entry_idx) > 10 and price < entry_price * 1.002:
+            pnl = (price - entry_price) / entry_price * capital
+            capital += pnl
+            trades.append({
+                'type': 'SELL (T/O)',
+                'date': date,
+                'price': price,
+                'pnl': pnl,
+                'capital': capital,
+                'kanaltyp': ctype
+            })
+            equity_curve.append(capital)
+            position = 0
+            entry_idx = 0
+        
+        # STOP LOSS: Wenn Preis zu stark fällt (-3%)
+        elif position == 1 and price < entry_price * 0.97:
+            pnl = (price - entry_price) / entry_price * capital
+            capital += pnl
+            trades.append({
+                'type': 'SELL (SL)',
+                'date': date,
+                'price': price,
+                'pnl': pnl,
+                'capital': capital,
+                'kanaltyp': ctype
+            })
+            equity_curve.append(capital)
+            position = 0
+            entry_idx = 0
+    
     # Offene Position am Ende schließen
-    if position == 1:
+    if position == 1 and len(ch_idx) > 0:
         price = df.loc[ch_idx[-1], 'close']
         date = ch_idx[-1]
         ctype = channels['type'].iloc[-1]
         pnl = (price - entry_price) / entry_price * capital
         capital += pnl
+        trades.append({
+            'type': 'SELL (End)',
+            'date': date,
+            'price': price,
+            'pnl': pnl,
+            'capital': capital,
+            'kanaltyp': ctype
+        })
+        equity_curve.append(capital)
         trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital,'kanaltyp':ctype})
         equity_curve.append(capital)
     total_return = (capital - start_capital) / start_capital * 100

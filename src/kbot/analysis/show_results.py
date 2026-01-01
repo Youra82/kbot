@@ -121,8 +121,13 @@ def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital):
             print(f"⚠️  Nicht genügend Kursdaten für {symbol} ({timeframe}). Min. 60 Kerzen erforderlich.")
             return None
         
-        # Kanäle erkennen
-        channels = detect_channels(df, window=50)
+        # Kanäle erkennen mit optimierten Parametern
+        channels = detect_channels(
+            df, 
+            window=50,
+            min_channel_width=0.002,  # 0.2% Minimum Breite
+            slope_threshold=0.02       # Geringere Slope-Anforderung
+        )
         
         # Backtest durchführen
         end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(

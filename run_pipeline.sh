@@ -65,6 +65,32 @@ fi
 read -p "Startkapital (USD, Standard: 1000): " START_CAPITAL
 START_CAPITAL=${START_CAPITAL:-1000}
 
+# Zusätzliche Optionen wie im JaegerBot
+read -p "CPU-Kerne [Standard: -1 für alle]: " N_CORES
+N_CORES=${N_CORES:--1}
+
+echo -e "\n${YELLOW}Wähle einen Optimierungs-Modus:${NC}"
+echo "  1) Strenger Modus"
+echo "  2) 'Finde das Beste'-Modus"
+read -p "Auswahl (1-2) [Standard: 1]: " OPTIM_MODE
+OPTIM_MODE=${OPTIM_MODE:-1}
+
+if [ "$OPTIM_MODE" == "1" ]; then
+    MODE_ARG="strict"
+    read -p "Max Drawdown % [Standard: 30]: " MAX_DD
+    MAX_DD=${MAX_DD:-30}
+    read -p "Min Win-Rate % [Standard: 55]: " MIN_WR
+    MIN_WR=${MIN_WR:-55}
+    read -p "Min PnL % [Standard: 0]: " MIN_PNL
+    MIN_PNL=${MIN_PNL:-0}
+else
+    MODE_ARG="best_profit"
+    read -p "Max Drawdown % [Standard: 30]: " MAX_DD
+    MAX_DD=${MAX_DD:-30}
+    MIN_WR=0
+    MIN_PNL=-99999
+fi
+
 echo -e "\n${YELLOW}--- Optimierung wird gestartet ---${NC}\n"
 
 # Speichere optimale Konfigurationen
@@ -127,6 +153,11 @@ for symbol in $SYMBOLS; do
             --start-date "$CURRENT_START_DATE" \
             --end-date "$CURRENT_END_DATE" \
             --start-capital "$START_CAPITAL" \
+            --mode "$MODE_ARG" \
+            --max-dd "$MAX_DD" \
+            --min-win-rate "$MIN_WR" \
+            --min-return "$MIN_PNL" \
+            --jobs "$N_CORES" \
             --save-config; then
             OPTIMAL_CONFIGS+=("$symbol ($timeframe)")
             echo -e "${GREEN}✓ Optimierung für $symbol ($timeframe) abgeschlossen${NC}"
@@ -146,7 +177,7 @@ if [ ${#OPTIMAL_CONFIGS[@]} -gt 0 ]; then
     for config in "${OPTIMAL_CONFIGS[@]}"; do
         echo -e "  • $config"
     done
-    echo -e "\n${YELLOW}Die optimalen Konfigurationen wurden in 'artifacts/optimal_configs/' gespeichert.${NC}"
+    echo -e "\n${YELLOW}Die optimalen Konfigurationen wurden in 'src/kbot/strategy/configs/' gespeichert.${NC}"
     echo -e "${YELLOW}Du kannst sie jetzt mit './show_results.sh' verwenden.${NC}"
 else
     echo -e "${RED}❌ Keine erfolgreiche Optimierungen!${NC}"

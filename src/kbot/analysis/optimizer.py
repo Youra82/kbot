@@ -27,7 +27,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def optimize_parameters(symbol, timeframe, start_date, end_date, start_capital=1000):
+def optimize_parameters(
+    symbol,
+    timeframe,
+    start_date,
+    end_date,
+    start_capital=1000,
+    mode="strict",
+    max_dd=30.0,
+    min_win_rate=55.0,
+    min_return=0.0,
+):
     """
     Optimiert die Kanal-Erkennungs-Parameter mittels Grid-Search.
     
@@ -77,6 +87,8 @@ def optimize_parameters(symbol, timeframe, start_date, end_date, start_capital=1
             'win_rate': 0,
             'num_trades': 0,
             'max_dd': 0,
+            'end_capital': 0,
+            'score': -999,
             'params': {}
         }
         
@@ -117,21 +129,31 @@ def optimize_parameters(symbol, timeframe, start_date, end_date, start_capital=1
                     exit_threshold=exit_thresh
                 )
                 
-                # Bewertungs-Score berechnen
-                # Priorität: Return > Win Rate > Drawdown
+                # Bewertungs-Score berechnen (risikoadjustiert)
                 if num_trades > 0:
-                    # Risk-adjusted Return
                     if max_dd < 0:
                         risk_adjusted_return = total_return / abs(max_dd)
                     else:
                         risk_adjusted_return = total_return * 1.5
-                    
                     score = risk_adjusted_return + (win_rate * 0.5)
                 else:
                     score = -999
-                
+
+                # Modus-abhängige Filter
+                dd_abs = abs(max_dd)
+                if mode == "strict":
+                    if win_rate < min_win_rate:
+                        continue
+                    if total_return < min_return:
+                        continue
+                    if dd_abs > max_dd:
+                        continue
+                else:  # best_profit
+                    if dd_abs > max_dd:
+                        continue
+
                 # Update Best
-                if score > best_result['total_return']:
+                if score > best_result['score']:
                     best_result = {
                         'symbol': symbol,
                         'timeframe': timeframe,
@@ -238,6 +260,11 @@ def main():
     parser.add_argument('--start-date', type=str, required=True, help='Startdatum (YYYY-MM-DD)')
     parser.add_argument('--end-date', type=str, required=True, help='Enddatum (YYYY-MM-DD)')
     parser.add_argument('--start-capital', type=float, default=1000, help='Startkapital (Standard: 1000)')
+    parser.add_argument('--mode', type=str, choices=['strict', 'best_profit'], default='strict', help='Optimierungs-Modus (strict|best_profit)')
+    parser.add_argument('--max-dd', type=float, default=30.0, help='Maximaler Drawdown in % (Filter)')
+    parser.add_argument('--min-win-rate', type=float, default=55.0, help='Minimale Win-Rate in % (nur strict)')
+    parser.add_argument('--min-return', type=float, default=0.0, help='Minimale Gesamtrendite in % (nur strict)')
+    parser.add_argument('--jobs', type=int, default=-1, help='Anzahl CPU-Kerne (-1 = alle, aktuell nur zur Info)')
     parser.add_argument('--save-config', action='store_true', help='Speichere optimale Konfiguration')
     
     args = parser.parse_args()
@@ -248,7 +275,11 @@ def main():
         timeframe=args.timeframe,
         start_date=args.start_date,
         end_date=args.end_date,
-        start_capital=args.start_capital
+        start_capital=args.start_capital,
+        mode=args.mode,
+        max_dd=args.max_dd,
+        min_win_rate=args.min_win_rate,
+        min_return=args.min_return
     )
     
     # Speichere Konfiguration wenn gewünscht

@@ -8,7 +8,7 @@ import sys
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.analysis.portfolio_simulator import run_portfolio_simulation
+from kbot.analysis.portfolio_simulator import run_portfolio_simulation
 from datetime import date
 
 print("=" * 60)

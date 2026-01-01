@@ -14,16 +14,16 @@ logging.getLogger('absl').setLevel(logging.ERROR)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.analysis.backtester import load_data
-from jaegerbot.utils.ann_model import load_model_and_scaler
-from jaegerbot.analysis.portfolio_simulator import run_portfolio_simulation
-from jaegerbot.analysis.portfolio_optimizer import run_portfolio_optimizer
-from jaegerbot.utils.telegram import send_document
+from kbot.analysis.backtester import load_data
+from kbot.utils.ann_model import load_model_and_scaler
+from kbot.analysis.portfolio_simulator import run_portfolio_simulation
+from kbot.analysis.portfolio_optimizer import run_portfolio_optimizer
+from kbot.utils.telegram import send_document
 
 # --- Helper-Funktion für die Einzelanalyse (Modus 1) ---
 def run_single_analysis_via_simulator(start_date, end_date, start_capital):
-    print("--- JaegerBot Ergebnis-Analyse (Einzel-Modus via Simulator) ---")
-    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'jaegerbot', 'strategy', 'configs')
+    print("--- KBot Ergebnis-Analyse (Einzel-Modus via Simulator) ---")
+    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
     models_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'models')
     all_results = []
     
@@ -106,8 +106,8 @@ def run_single_analysis_via_simulator(start_date, end_date, start_capital):
 
 def run_shared_mode(is_auto: bool, start_date, end_date, start_capital, max_drawdown=100.0):
     mode_name = "Automatische Portfolio-Optimierung" if is_auto else "Manuelle Portfolio-Simulation"
-    print(f"--- JaegerBot {mode_name} ---")
-    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'jaegerbot', 'strategy', 'configs')
+    print(f"--- KBot {mode_name} ---")
+    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
     models_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'models')
     available_strategies = []
     

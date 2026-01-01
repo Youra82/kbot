@@ -20,12 +20,12 @@ def test_core_script_imports():
     """
     try:
         # Importiere nur die Funktionen, die in der aktuellen Version existieren
-        from jaegerbot.utils.trade_manager import housekeeper_routine, check_and_open_new_position, full_trade_cycle
-        from jaegerbot.utils.exchange import Exchange
-        from jaegerbot.utils.ann_model import load_model_and_scaler, create_ann_features
-        from jaegerbot.analysis.backtester import run_ann_backtest
+        from kbot.utils.trade_manager import housekeeper_routine, check_and_open_new_position, full_trade_cycle
+        from kbot.utils.exchange import Exchange
+        from kbot.utils.ann_model import load_model_and_scaler, create_ann_features
+        from kbot.analysis.backtester import run_ann_backtest
         # KORREKTUR: Wir importieren jetzt 'main' aus dem optimizer und geben ihr einen Alias
-        from jaegerbot.analysis.optimizer import main as optimizer_main
-        from jaegerbot.analysis.portfolio_optimizer import run_portfolio_optimizer
+        from kbot.analysis.optimizer import main as optimizer_main
+        from kbot.analysis.portfolio_optimizer import run_portfolio_optimizer
     except ImportError as e:
         pytest.fail(f"Kritischer Import-Fehler. Die Code-Struktur scheint defekt zu sein. Fehler: {e}")

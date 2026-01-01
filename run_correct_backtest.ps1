@@ -1,7 +1,7 @@
 # PowerShell Script: Korrekter Backtest mit Live-Strategien
 
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  JaegerBot: Korrekter Backtest mit Live-Strategien" -ForegroundColor Cyan
+Write-Host "  KBot: Korrekter Backtest mit Live-Strategien" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Starte Backtest mit den aktiven Strategien aus settings.json:"
@@ -35,4 +35,4 @@ Write-Host "  Backtest abgeschlossen!" -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Starte nun Vergleich mit Real-Trades..."
-& "C:/Users/matol/Desktop/bots/jaegerbot/.venv/Scripts/python.exe" compare_real_vs_backtest.py
+& "C:/Users/matol/Desktop/bots/kbot/.venv/Scripts/python.exe" compare_real_vs_backtest.py

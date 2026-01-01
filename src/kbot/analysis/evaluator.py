@@ -8,7 +8,7 @@ import os
 # Pfad anpassen, um die ann_model-Funktion importieren zu können
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
-from jaegerbot.utils.ann_model import prepare_data_for_ann
+from kbot.utils.ann_model import prepare_data_for_ann
 
 def evaluate_dataset(data: pd.DataFrame, timeframe: str):
     """

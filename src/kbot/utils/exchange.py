@@ -1,4 +1,4 @@
-# src/jaegerbot/utils/exchange.py
+# src/kbot/utils/exchange.py
 import ccxt
 import pandas as pd
 from datetime import datetime, timezone

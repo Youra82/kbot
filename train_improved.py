@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VERBESSERTES TRAINING-SCRIPT für JaegerBot
+# VERBESSERTES TRAINING-SCRIPT für KBot
 ================================================
 Trainiert Modelle mit den neuen erweiterten Features.
 
@@ -25,11 +25,11 @@ import joblib
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.utils.ann_model import prepare_data_for_ann, build_and_train_model, save_model_and_scaler
-from jaegerbot.analysis.backtester import load_data
+from kbot.utils.ann_model import prepare_data_for_ann, build_and_train_model, save_model_and_scaler
+from kbot.analysis.backtester import load_data
 
 print("=" * 80)
-print("  JAEGERBOT - VERBESSERTES TRAINING")
+print("  KBOT - VERBESSERTES TRAINING")
 print("=" * 80)
 print()
 print("📚 NEUE FEATURES:")

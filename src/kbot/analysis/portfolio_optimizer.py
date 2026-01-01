@@ -3,7 +3,7 @@ import pandas as pd
 import itertools
 from tqdm import tqdm
 
-from jaegerbot.analysis.portfolio_simulator import run_portfolio_simulation
+from kbot.analysis.portfolio_simulator import run_portfolio_simulation
 
 # --- NEU: max_drawdown Parameter hinzugefügt (Standard 100.0 = keine Beschränkung) ---
 def run_portfolio_optimizer(start_capital, strategies_data, start_date, end_date, max_drawdown=100.0):

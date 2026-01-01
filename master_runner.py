@@ -10,18 +10,18 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = SCRIPT_DIR
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.utils.exchange import Exchange
+from kbot.utils.exchange import Exchange
 
 def main():
     """
-    Der Master Runner für den JaegerBot (Voll-Dynamisches Kapital).
+    Der Master Runner für den KBot (Voll-Dynamisches Kapital).
     - Liest die settings.json, um den Modus (Autopilot/Manuell) zu bestimmen.
     - Startet für jede als "active" markierte Strategie einen separaten run.py Prozess
       innerhalb der korrekten virtuellen Umgebung.
     """
     settings_file = os.path.join(SCRIPT_DIR, 'settings.json')
     optimization_results_file = os.path.join(SCRIPT_DIR, 'artifacts', 'results', 'optimization_results.json')
-    bot_runner_script = os.path.join(SCRIPT_DIR, 'src', 'jaegerbot', 'strategy', 'run.py')
+    bot_runner_script = os.path.join(SCRIPT_DIR, 'src', 'kbot', 'strategy', 'run.py')
     secret_file = os.path.join(SCRIPT_DIR, 'secret.json')
 
     # Finde den exakten Pfad zum Python-Interpreter in der virtuellen Umgebung
@@ -31,7 +31,7 @@ def main():
         return
 
     print("=======================================================")
-    print("JaegerBot Master Runner v3.3 (final)")
+    print("KBot Master Runner v3.3 (final)")
     print("=======================================================")
 
     try:
@@ -41,10 +41,10 @@ def main():
         with open(secret_file, 'r') as f:
             secrets = json.load(f)
         
-        if not secrets.get('jaegerbot'):
-            print("Fehler: Kein 'jaegerbot'-Account in secret.json gefunden.")
+        if not secrets.get('kbot'):
+            print("Fehler: Kein 'kbot'-Account in secret.json gefunden.")
             return
-        main_account_config = secrets['jaegerbot'][0]
+        main_account_config = secrets['kbot'][0]
 
         print(f"Frage Kontostand für Account '{main_account_config.get('name', 'Standard')}' ab...")
         # (Kapitalabfrage wird hier nicht mehr benötigt, da sie in run.py stattfindet)

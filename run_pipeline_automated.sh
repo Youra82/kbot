@@ -4,8 +4,8 @@
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 VENV_PATH="$SCRIPT_DIR/.venv/bin/activate"
 SETTINGS_FILE="$SCRIPT_DIR/settings.json"
-TRAINER="src/jaegerbot/analysis/trainer.py"
-OPTIMIZER="src/jaegerbot/analysis/optimizer.py"
+TRAINER="src/kbot/analysis/trainer.py"
+OPTIMIZER="src/kbot/analysis/optimizer.py"
 CACHE_DIR="$SCRIPT_DIR/data/cache"
 TIMESTAMP_FILE="$CACHE_DIR/.last_cleaned"
 

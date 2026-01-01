@@ -9,14 +9,14 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}======================================================="
-echo "   JaegerBot Vollautomatische 3-Stufen-Pipeline"
+echo "   KBot Vollautomatische 3-Stufen-Pipeline"
 echo -e "=======================================================${NC}"
 
 # --- Pfade definieren ---
 VENV_PATH=".venv/bin/activate"
-TRAINER="src/jaegerbot/analysis/trainer.py"
-THRESHOLD_FINDER="src/jaegerbot/analysis/find_best_threshold.py"
-OPTIMIZER="src/jaegerbot/analysis/optimizer.py"
+TRAINER="src/kbot/analysis/trainer.py"
+THRESHOLD_FINDER="src/kbot/analysis/find_best_threshold.py"
+OPTIMIZER="src/kbot/analysis/optimizer.py"
 
 # --- Umgebung aktivieren ---
 source "$VENV_PATH"
@@ -31,8 +31,8 @@ CLEANUP_CHOICE=$(echo ${CLEANUP_CHOICE} | tr -d '[:space:]')
 
 if [[ "${CLEANUP_CHOICE,,}" == "j" ]]; then
     echo -e "${YELLOW}Lösche alte Konfigurationen und Modelle...${NC}"
-    # JaegerBot-spezifische rm Befehle (mit Semikolon am Ende)
-    rm -f src/jaegerbot/strategy/configs/config_*.json;
+    # KBot-spezifische rm Befehle (mit Semikolon am Ende)
+    rm -f src/kbot/strategy/configs/config_*.json;
     rm -f artifacts/models/*;
     echo -e "${GREEN}✔ Aufräumen abgeschlossen.${NC}"
 else

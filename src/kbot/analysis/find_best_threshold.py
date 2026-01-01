@@ -9,8 +9,8 @@ import pandas as pd
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.analysis.backtester import load_data
-from jaegerbot.utils.ann_model import load_model_and_scaler, prepare_data_for_ann
+from kbot.analysis.backtester import load_data
+from kbot.utils.ann_model import load_model_and_scaler, prepare_data_for_ann
 
 def find_best_threshold(symbol: str, timeframe: str, start_date: str, end_date: str):
     """

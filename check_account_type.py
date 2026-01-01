@@ -19,7 +19,7 @@ if not os.path.exists(SECRET_FILE):
 try:
     with open(SECRET_FILE, 'r') as f:
         secrets = json.load(f)
-    account_config = secrets.get('jaegerbot')[0]
+    account_config = secrets.get('kbot')[0]
 
     print("Verbinde mit Bitget API...")
     exchange = ccxt.bitget({
@@ -50,7 +50,7 @@ try:
     print("="*30)
     if is_unified:
         print("\n>>> KONTOTYP: Einheitliches Handelskonto (Unified Trading Account) <<<")
-        print("\nBEFUND: Dies ist sehr wahrscheinlich die Ursache der Probleme. Der JaegerBot ist für das 'Klassische Konto' ausgelegt. Die API-Logik für das einheitliche Konto ist anders, was zu Fehlern bei der Order-Platzierung führt.")
+        print("\nBEFUND: Dies ist sehr wahrscheinlich die Ursache der Probleme. Der KBot ist für das 'Klassische Konto' ausgelegt. Die API-Logik für das einheitliche Konto ist anders, was zu Fehlern bei der Order-Platzierung führt.")
     else:
         print("\n>>> KONTOTYP: Klassisches Konto (Classic Account) <<<")
         print("\nBEFUND: Das ist der korrekte Kontotyp. Wenn der Fehler weiterhin besteht, müssen wir die Ursache woanders suchen.")

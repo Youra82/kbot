@@ -1,4 +1,4 @@
-# src/jaegerbot/utils/circuit_breaker.py
+# src/kbot/utils/circuit_breaker.py
 """
 Circuit Breaker für Drawdown-Management.
 Stoppt Trading automatisch bei zu hohen Verlusten.

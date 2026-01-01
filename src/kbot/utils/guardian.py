@@ -1,7 +1,7 @@
-# src/jaegerbot/utils/guardian.py
+# src/kbot/utils/guardian.py
 import logging
 from functools import wraps
-from jaegerbot.utils.telegram import send_message
+from kbot.utils.telegram import send_message
 
 def guardian_decorator(func):
     """

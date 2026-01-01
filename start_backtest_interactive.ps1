@@ -11,4 +11,4 @@ Write-Host "Drücke Enter um zu starten..." -ForegroundColor Green
 Read-Host
 
 # Wechsle ins Bash-Umfeld und führe den Backtest aus
-bash -c "cd /mnt/c/Users/matol/Desktop/bots/jaegerbot && bash show_results.sh"
+bash -c "cd /mnt/c/Users/matol/Desktop/bots/kbot && bash show_results.sh"

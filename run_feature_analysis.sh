@@ -15,7 +15,7 @@ if [ ! -f "$ANALYSIS_SCRIPT" ]; then
 fi
 
 source "$VENV_PATH"
-echo -e "\n${BLUE}--- JaegerBot Feature-Wichtigkeits-Analyse ---${NC}"
+echo -e "\n${BLUE}--- KBot Feature-Wichtigkeits-Analyse ---${NC}"
 
 # Interaktive Abfrage
 read -p "Handelspaar(e) eingeben (ohne /USDT, z.B. BTC ETH): " SYMBOLS

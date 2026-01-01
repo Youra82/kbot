@@ -1,4 +1,4 @@
-# /root/jaegerbot/analyze_features.py
+# /root/kbot/analyze_features.py
 import os
 import sys
 import argparse
@@ -22,7 +22,7 @@ logging.getLogger('absl').setLevel(logging.ERROR)
 warnings.filterwarnings('ignore', category=UserWarning, module='keras')
 
 try:
-    from jaegerbot.analysis.backtester import load_data
+    from kbot.analysis.backtester import load_data
     # entfernt: ann_model Import
 except ImportError as e:
     print(f"Fehler: Konnte Bot-Module nicht importieren. Stelle sicher, dass du im .venv bist. Fehler: {e}")

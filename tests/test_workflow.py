@@ -13,10 +13,10 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 # Korrekte Imports
-from jaegerbot.utils.exchange import Exchange
-from jaegerbot.utils.trade_manager import check_and_open_new_position, housekeeper_routine
-from jaegerbot.utils.supertrend_indicator import SuperTrendLocal 
-from jaegerbot.utils.ann_model import create_ann_features 
+from kbot.utils.exchange import Exchange
+from kbot.utils.trade_manager import check_and_open_new_position, housekeeper_routine
+from kbot.utils.supertrend_indicator import SuperTrendLocal 
+from kbot.utils.ann_model import create_ann_features 
 
 # Definition der Pfade und Mocks
 
@@ -50,7 +50,7 @@ def test_setup():
     """
     Bereitet die Testumgebung vor und räumt danach auf.
     """
-    print("\n--- Starte umfassenden LIVE JaegerBot-Workflow-Test ---")
+    print("\n--- Starte umfassenden LIVE KBot-Workflow-Test ---")
     print("\n[Setup] Bereite Testumgebung vor...")
 
     secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
@@ -60,10 +60,10 @@ def test_setup():
     with open(secret_path, 'r') as f:
         secrets = json.load(f)
 
-    if not secrets.get('jaegerbot'):
+    if not secrets.get('kbot'):
         pytest.skip("Es wird mindestens ein Account in secret.json für den Workflow-Test benötigt.")
 
-    test_account = secrets['jaegerbot'][0]
+    test_account = secrets['kbot'][0]
     telegram_config = secrets.get('telegram', {})
 
     exchange = Exchange(test_account)
@@ -126,7 +126,7 @@ class FakeSuperTrendLocal:
         return pd.Series([1.0] * self.size)
 
 
-def test_full_jaegerbot_workflow_on_bitget(test_setup):
+def test_full_kbot_workflow_on_bitget(test_setup):
     """
     Testet den gesamten Handelsablauf über den trade_manager auf dem konfigurierten Live-Konto.
     """
@@ -175,10 +175,10 @@ def test_full_jaegerbot_workflow_on_bitget(test_setup):
     # --- WICHTIG: Mocken des REALEN Kontostandes ---
     # Setze den Mock auf den tatsächlichen Wert von 25 USDT
     USER_BALANCE = 25.0 
-    with patch('jaegerbot.utils.exchange.Exchange.fetch_balance_usdt', return_value=USER_BALANCE):
-        with patch('jaegerbot.utils.trade_manager.create_ann_features', return_value=fake_features_df):
-            with patch('jaegerbot.utils.exchange.Exchange.fetch_recent_ohlcv', return_value=mock_ohlcv_df):
-                with patch('jaegerbot.utils.trade_manager.SuperTrendLocal', new=FakeSuperTrendLocal):
+    with patch('kbot.utils.exchange.Exchange.fetch_balance_usdt', return_value=USER_BALANCE):
+        with patch('kbot.utils.trade_manager.create_ann_features', return_value=fake_features_df):
+            with patch('kbot.utils.exchange.Exchange.fetch_recent_ohlcv', return_value=mock_ohlcv_df):
+                with patch('kbot.utils.trade_manager.SuperTrendLocal', new=FakeSuperTrendLocal):
                     
                     print(f"\n[Schritt 1/3] Prüfe Trade-Eröffnung ({symbol}) mit {USER_BALANCE} USDT Kapital...")
                     check_and_open_new_position(exchange, model, scaler, params, telegram_config, logger)

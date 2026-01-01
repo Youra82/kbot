@@ -1,6 +1,6 @@
 #!/bin/bash
 # Dieses Skript führt das komplette Test-Sicherheitsnetz aus.
-echo "--- Starte JaegerBot-Sicherheitsnetz ---"
+echo "--- Starte KBot-Sicherheitsnetz ---"
 
 # Aktiviere die virtuelle Umgebung
 source .venv/bin/activate

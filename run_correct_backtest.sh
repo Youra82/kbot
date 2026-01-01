@@ -3,7 +3,7 @@
 # Vergleicht die Performance mit den Real-Trades
 
 echo "============================================================"
-echo "  JaegerBot: Korrekter Backtest mit Live-Strategien"
+echo "  KBot: Korrekter Backtest mit Live-Strategien"
 echo "============================================================"
 echo ""
 echo "Starte Backtest mit den aktiven Strategien aus settings.json:"
@@ -34,4 +34,4 @@ echo "  Backtest abgeschlossen!"
 echo "============================================================"
 echo ""
 echo "Starte nun Vergleich mit Real-Trades..."
-C:/Users/matol/Desktop/bots/jaegerbot/.venv/Scripts/python.exe compare_real_vs_backtest.py
+C:/Users/matol/Desktop/bots/kbot/.venv/Scripts/python.exe compare_real_vs_backtest.py

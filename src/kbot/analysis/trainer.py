@@ -8,14 +8,14 @@ from sklearn.preprocessing import StandardScaler
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.utils import ann_model
-from jaegerbot.analysis.backtester import load_data
+from kbot.utils import ann_model
+from kbot.analysis.backtester import load_data
 
 def create_safe_filename(symbol, timeframe):
     return f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
 
 def main():
-    parser = argparse.ArgumentParser(description="Modell-Training für JaegerBot")
+    parser = argparse.ArgumentParser(description="Modell-Training für KBot")
     parser.add_argument('--symbols', required=True, type=str)
     parser.add_argument('--timeframes', required=True, type=str)
     parser.add_argument('--start_date', required=True, type=str)

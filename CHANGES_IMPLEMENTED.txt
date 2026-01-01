@@ -1,5 +1,5 @@
 ================================================================================
-                    JAEGERBOT - ÄNDERUNGEN IMPLEMENTIERT
+                    KBOT - ÄNDERUNGEN IMPLEMENTIERT
 ================================================================================
 Datum: 17. Dezember 2025
 Status: ✅ ALLE VERBESSERUNGEN IMPLEMENTIERT
@@ -258,10 +258,10 @@ NACHHER (Erwartung):
 ================================================================================
 
 settings.json                                       [MODIFIZIERT]
-src/jaegerbot/strategy/configs/
+src/kbot/strategy/configs/
   └─ config_SOLUSDTUSDT_15m.json                   [MODIFIZIERT]
 
-src/jaegerbot/utils/
+src/kbot/utils/
   ├─ ann_model.py                                   [MODIFIZIERT]
   │  ├─ create_ann_features() → 35+ Features
   │  ├─ prepare_data_for_ann() → Neue Feature-Liste
@@ -280,7 +280,7 @@ src/jaegerbot/utils/
       ├─ reset_circuit_breaker()
       └─ is_trading_allowed()
 
-src/jaegerbot/analysis/
+src/kbot/analysis/
   └─ backtester.py                                  [MODIFIZIERT]
       ├─ Feature-Liste aktualisiert
       ├─ ADX-Filter hinzugefügt
@@ -329,7 +329,7 @@ CHANGES_IMPLEMENTED.txt                             [NEU ERSTELLT]
 
 6. 🟡 LOG-FILES ÜBERPRÜFEN
    
-   logs/jaegerbot_*.log
+   logs/kbot_*.log
    
    Prüfe auf Warnungen und Filter-Rejections.
 

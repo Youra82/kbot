@@ -11,9 +11,9 @@ import math # Import für math.ceil
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.utils.exchange import Exchange
-from jaegerbot.utils.ann_model import prepare_data_for_ann, load_model_and_scaler, create_ann_features
-from jaegerbot.utils.supertrend_indicator import SuperTrendLocal
+from kbot.utils.exchange import Exchange
+from kbot.utils.ann_model import prepare_data_for_ann, load_model_and_scaler, create_ann_features
+from kbot.utils.supertrend_indicator import SuperTrendLocal
 
 # --- load_data und get_higher_timeframe sind unverändert ---
 def load_data(symbol, timeframe, start_date_str, end_date_str):
@@ -31,7 +31,7 @@ def load_data(symbol, timeframe, start_date_str, end_date_str):
     print(f"Starte Download für {symbol} ({timeframe}) von der Börse...")
     try:
         with open(os.path.join(PROJECT_ROOT, 'secret.json'), "r") as f: secrets = json.load(f)
-        api_setup = secrets.get('jaegerbot')[0]
+        api_setup = secrets.get('kbot')[0]
         exchange = Exchange(api_setup)
         full_data = exchange.fetch_historical_ohlcv(symbol, timeframe, start_date_str, end_date_str)
         if not full_data.empty:

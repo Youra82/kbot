@@ -1,5 +1,5 @@
 ================================================================================
-                    JAEGERBOT - VOLLSTÄNDIGE SYSTEM-ANALYSE
+                    KBOT - VOLLSTÄNDIGE SYSTEM-ANALYSE
                      Verbesserungspotenziale & Empfehlungen
 ================================================================================
 
@@ -434,9 +434,9 @@ VERBESSERUNGEN:
    # Implementiere Prometheus-Metriken
    from prometheus_client import Counter, Gauge, Histogram
    
-   trades_total = Counter('jaegerbot_trades_total', 'Total number of trades')
-   pnl_gauge = Gauge('jaegerbot_pnl_usdt', 'Current PnL in USDT')
-   trade_duration = Histogram('jaegerbot_trade_duration_seconds', 'Trade duration')
+   trades_total = Counter('kbot_trades_total', 'Total number of trades')
+   pnl_gauge = Gauge('kbot_pnl_usdt', 'Current PnL in USDT')
+   trade_duration = Histogram('kbot_trade_duration_seconds', 'Trade duration')
    
    # Grafana Dashboard für Echtzeitüberwachung
    ```
@@ -448,7 +448,7 @@ VERBESSERUNGEN:
    import sqlite3
    
    def log_trade_to_db(trade_info):
-       conn = sqlite3.connect('jaegerbot_trades.db')
+       conn = sqlite3.connect('kbot_trades.db')
        c = conn.cursor()
        c.execute('''
            INSERT INTO trades (timestamp, symbol, side, entry_price, 
@@ -665,7 +665,7 @@ NÄCHSTE SCHRITTE:
 ✅ ZUSAMMENFASSUNG
 ================================================================================
 
-Der JaegerBot hat eine solide technische Grundlage, aber das Machine Learning
+Der KBot hat eine solide technische Grundlage, aber das Machine Learning
 Modell ist derzeit nicht profitabel genug für Live-Trading. Die Hauptprobleme
 sind:
 

@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import json
 
 print("=" * 80)
-print("  JAEGERBOT: DETAILLIERTE REAL-TRADE ANALYSE")
+print("  KBOT: DETAILLIERTE REAL-TRADE ANALYSE")
 print("=" * 80)
 print()
 

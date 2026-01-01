@@ -11,8 +11,8 @@ import math # Import für math.ceil
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.utils.ann_model import prepare_data_for_ann, create_ann_features
-from jaegerbot.analysis.backtester import load_data, calculate_supertrend_direction # NEU: Importiere ST-Funktion
+from kbot.utils.ann_model import prepare_data_for_ann, create_ann_features
+from kbot.analysis.backtester import load_data, calculate_supertrend_direction # NEU: Importiere ST-Funktion
 # --- ENDE PFAD-DEFINITION ---
 
 
@@ -271,7 +271,7 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
             entry_price = signal['entry_price']
             risk_amount_usd = equity * risk_per_trade_pct
 
-            # SL-Distanz basierend auf initial_sl_pct (wie JaegerBot-Logik)
+            # SL-Distanz basierend auf initial_sl_pct (wie KBot-Logik)
             sl_distance = entry_price * initial_sl_pct
             if sl_distance <= 0:
                 signal_idx += 1

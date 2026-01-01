@@ -12,7 +12,7 @@ def main():
     Hebel- und Risikoeinstellungen aus den config_*.json Dateien an.
     """
     settings_path = os.path.join(PROJECT_ROOT, 'settings.json')
-    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'jaegerbot', 'strategy', 'configs')
+    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
     results_path = os.path.join(PROJECT_ROOT, 'artifacts', 'results', 'optimization_results.json')
     
     # --- Ausgabe-Header ---

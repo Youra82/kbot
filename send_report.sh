@@ -12,7 +12,7 @@ if [ -z "$1" ]; then
 fi
 
 FILENAME=$1
-FILE_PATH="/root/jaegerbot/$FILENAME"
+FILE_PATH="/root/kbot/$FILENAME"
 
 # Überprüfen, ob die Datei existiert
 if [ ! -f "$FILE_PATH" ]; then

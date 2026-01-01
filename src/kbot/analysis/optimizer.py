@@ -16,9 +16,9 @@ warnings.filterwarnings('ignore', category=UserWarning, module='keras')
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from jaegerbot.analysis.backtester import load_data, run_ann_backtest
-from jaegerbot.utils.telegram import send_message
-from jaegerbot.analysis.evaluator import evaluate_dataset
+from kbot.analysis.backtester import load_data, run_ann_backtest
+from kbot.utils.telegram import send_message
+from kbot.analysis.evaluator import evaluate_dataset
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 HISTORICAL_DATA = None
@@ -73,7 +73,7 @@ def create_safe_filename(symbol, timeframe):
 def main():
     global HISTORICAL_DATA, CURRENT_MODEL_PATHS, CURRENT_TIMEFRAME, FIXED_THRESHOLD, MAX_DRAWDOWN_CONSTRAINT, MIN_WIN_RATE_CONSTRAINT, MIN_PNL_CONSTRAINT, START_CAPITAL, OPTIM_MODE
 
-    parser = argparse.ArgumentParser(description="Parameter-Optimierung für JaegerBot")
+    parser = argparse.ArgumentParser(description="Parameter-Optimierung für KBot")
     parser.add_argument('--symbols', required=True, type=str)
     parser.add_argument('--timeframes', required=True, type=str)
     parser.add_argument('--start_date', required=True, type=str)
@@ -130,7 +130,7 @@ def main():
         best_params = best_trial.params
         best_params['prediction_threshold'] = FIXED_THRESHOLD
 
-        config_dir = os.path.join(PROJECT_ROOT, 'src', 'jaegerbot', 'strategy', 'configs')
+        config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
         os.makedirs(config_dir, exist_ok=True)
         config_output_path = os.path.join(config_dir, f'config_{safe_filename}.json')
 

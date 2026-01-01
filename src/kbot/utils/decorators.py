@@ -1,4 +1,4 @@
-# src/jaegerbot/utils/decorators.py
+# src/kbot/utils/decorators.py
 from functools import wraps
 from .guardian import Guardian, PreFlightCheckError
 from .telegram import send_message
@@ -39,7 +39,7 @@ def run_with_guardian_checks(func):
             # 3. Wenn der Guardian Alarm schlägt, wird eine Nachricht gesendet
             #    und die Funktion sicher abgebrochen.
             logger.critical(f"Guardian hat den Start für {account_name} ({symbol}) verhindert.")
-            message = f"🚨 *JaegerBot Gestoppt* ({symbol})\n\nGrund: Pre-Flight-Check fehlgeschlagen!\n\n_{e}_"
+            message = f"🚨 *KBot Gestoppt* ({symbol})\n\nGrund: Pre-Flight-Check fehlgeschlagen!\n\n_{e}_"
             send_message(telegram_config.get('bot_token'), telegram_config.get('chat_id'), message)
         
         except Exception as e:

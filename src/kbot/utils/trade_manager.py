@@ -1,4 +1,4 @@
-# src/jaegerbot/utils/trade_manager.py (KORRIGIERTE VERSION - Bereinigt)
+# src/kbot/utils/trade_manager.py (KORRIGIERTE VERSION - Bereinigt)
 import logging
 import time
 import ccxt
@@ -8,11 +8,11 @@ import pandas as pd
 import ta
 import math
 
-from jaegerbot.utils.telegram import send_message
-from jaegerbot.utils.ann_model import create_ann_features
-from jaegerbot.utils.exchange import Exchange
-from jaegerbot.utils.supertrend_indicator import SuperTrendLocal
-from jaegerbot.utils.circuit_breaker import is_trading_allowed, update_circuit_breaker
+from kbot.utils.telegram import send_message
+from kbot.utils.ann_model import create_ann_features
+from kbot.utils.exchange import Exchange
+from kbot.utils.supertrend_indicator import SuperTrendLocal
+from kbot.utils.circuit_breaker import is_trading_allowed, update_circuit_breaker
 
 # Pfade für die Lock-Datei definieren
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))

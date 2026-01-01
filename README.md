@@ -9,7 +9,7 @@
 
 **Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Chart-Kanal-Erkennung und automatischem Risikomanagement**
 
-[Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Monitoring](#-monitoring) • [Wartung](#-wartung)
+[Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
 
 </div>
 
@@ -250,7 +250,233 @@ sudo systemctl status kbot
 
 ---
 
-## 📊 Monitoring & Status
+## � Interaktives Pipeline-Script
+
+Das **`run_pipeline.sh`** Script automatisiert die Parameter-Optimierung für deine Handelsstrategien. Es führt einen Grid-Search über alle Kanal-Erkennungs-Parameter durch und findet die optimalen Einstellungen für dein ausgewähltes Symbol und Timeframe.
+
+### Features des Pipeline-Scripts
+
+✅ **Interaktive Eingabe** - Einfache Menü-Navigation  
+✅ **Automatische Datumswahl** - Zeitrahmen-basierte Lookback-Berechnung  
+✅ **Ladebalken** - Visueller Fortschritt mit tqdm  
+✅ **Batch-Optimierung** - Mehrere Symbol/Timeframe-Kombinationen  
+✅ **Automatisches Speichern** - Optimale Konfigurationen als JSON  
+✅ **Integrierte Backtests** - Sofort nach Optimierung testen  
+
+### Verwendung
+
+```bash
+# Pipeline starten
+chmod +x run_pipeline.sh
+./run_pipeline.sh
+```
+
+### Interaktive Eingaben
+
+Das Script fragt dich nach folgende Informationen:
+
+#### 1. Symbol eingeben
+```
+Welche(s) Symbol(e) möchtest du optimieren?
+(z.B. BTC oder: BTC ETH SOL)
+> BTC
+```
+
+#### 2. Timeframe eingeben
+```
+Welche(s) Timeframe(s)?
+(z.B. 1d oder: 1d 4h 1h)
+> 1d
+```
+
+#### 3. Startdatum eingeben
+```
+Startdatum (YYYY-MM-DD oder 'a' für automatisch)?
+Automatische Optionen pro Timeframe:
+  5m/15m    → 60 Tage Lookback
+  30m/1h    → 180 Tage Lookback
+  4h/2h     → 365 Tage Lookback
+  6h/1d     → 730 Tage Lookback
+> a
+```
+
+**Automatisches Datum**: Das Script berechnet das Startdatum basierend auf dem Timeframe:
+- **5m/15m**: Letzte 60 Tage
+- **30m/1h**: Letzte 180 Tage (6 Monate)
+- **4h/2h**: Letzte 365 Tage (1 Jahr)
+- **6h/1d**: Letzte 730 Tage (2 Jahre)
+
+Oder gib manuell ein Datum ein:
+```
+Startdatum (YYYY-MM-DD oder 'a' für automatisch)?
+> 2024-01-01
+```
+
+#### 4. Startkapital eingeben
+```
+Mit wieviel USD starten? (Standard: 100)
+> 100
+```
+
+### Beispiel-Session
+
+```bash
+$ ./run_pipeline.sh
+
+═══════════════════════════════════════════════════════════
+     🤖 KBot - Interaktives Optimierungs-Pipeline
+═══════════════════════════════════════════════════════════
+
+Welche(s) Symbol(e) möchtest du optimieren?
+(z.B. BTC oder: BTC ETH SOL)
+> BTC ETH
+
+Welche(s) Timeframe(s)?
+(z.B. 1d oder: 1d 4h 1h)
+> 1d 4h
+
+Startdatum (YYYY-MM-DD oder 'a' für automatisch)?
+[Info] Automatisches Datum:
+  • BTC (1d): 2023-01-02
+  • ETH (1d): 2023-01-02
+  • BTC (4h): 2023-01-02
+  • ETH (4h): 2023-01-02
+> a
+
+Mit wieviel USD starten? (Standard: 100)
+> 500
+
+═══════════════════════════════════════════════════════════
+Starte Optimierung für folgende Strategien:
+  • BTC (1d)
+  • ETH (1d)
+  • BTC (4h)
+  • ETH (4h)
+═══════════════════════════════════════════════════════════
+
+[1/4] Optimiere BTC (1d) vom 2023-01-02 bis 2025-12-31...
+Optimiere BTC (1d): 100%|█████████████| 243/243 [00:02<00:00, 110.65combo/s]
+
+✅ OPTIMALE PARAMETER GEFUNDEN für BTC (1d)
+  • Endkapital: $512.25
+  • Gesamtrendite: 2.45%
+  • Anzahl Trades: 3
+  • Gewinnquote: 66.7%
+  • Max Drawdown: -8.38%
+
+[2/4] Optimiere ETH (1d) vom 2023-01-02 bis 2025-12-31...
+Optimiere ETH (1d): 100%|█████████████| 243/243 [00:02<00:00, 115.32combo/s]
+
+✅ OPTIMALE PARAMETER GEFUNDEN für ETH (1d)
+  • Endkapital: $545.80
+  • Gesamtrendite: 9.16%
+  • Anzahl Trades: 5
+  • Gewinnquote: 80.0%
+  • Max Drawdown: -5.12%
+
+[3/4] Optimiere BTC (4h) vom 2023-01-02 bis 2025-12-31...
+[4/4] Optimiere ETH (4h) vom 2023-01-02 bis 2025-12-31...
+
+═══════════════════════════════════════════════════════════
+✅ Optimierung abgeschlossen!
+Konfigurationen gespeichert unter: artifacts/optimal_configs/
+═══════════════════════════════════════════════════════════
+
+Möchtest du die Ergebnisse jetzt anschauen?
+> y
+
+[Startet show_results.sh...]
+```
+
+### Optimierte Konfigurationen
+
+Nach erfolgreicher Optimierung werden die besten Parameter als JSON-Dateien gespeichert:
+
+```
+artifacts/optimal_configs/
+├── optimal_BTCUSDT_1d.json
+├── optimal_BTCUSDT_4h.json
+├── optimal_ETHUSDT_1d.json
+└── optimal_ETHUSDT_4h.json
+```
+
+**Beispiel-Konfiguration** (`optimal_BTCUSDT_1d.json`):
+
+```json
+{
+  "symbol": "BTCUSDT",
+  "timeframe": "1d",
+  "parameters": {
+    "window": 60,
+    "min_channel_width": 0.003,
+    "slope_threshold": 0.03,
+    "entry_threshold": 0.02,
+    "exit_threshold": 0.03
+  },
+  "performance": {
+    "total_return": 2.45,
+    "win_rate": 66.7,
+    "num_trades": 3,
+    "max_drawdown": -8.38,
+    "end_capital": 512.25
+  },
+  "timestamp": "2025-01-01T20:17:35.833000"
+}
+```
+
+### Integration mit Live-Trading
+
+Die optimierten Konfigurationen werden **automatisch geladen**, wenn du `show_results.sh` ausführst:
+
+```bash
+./show_results.sh
+```
+
+Das Script lädt die optimalen Parameter und nutzt sie für die Backtests:
+- ✅ Bessere Ergebnisse durch optimierte Parameter
+- ✅ Konsistente Strategie-Ausführung
+- ✅ Einfaches A/B-Testing von Parametern
+
+### Parameter-Grid
+
+Das Pipeline-Script testet folgende Parameter-Kombinationen (insgesamt **243 Kombinationen**):
+
+```
+Window (Kanal-Fenster):              [40, 50, 60]           (3 Werte)
+Min Channel Width (min. Breite):     [0.001, 0.002, 0.003]  (3 Werte)
+Slope Threshold (Steigung):          [0.01, 0.02, 0.03]     (3 Werte)
+Entry Threshold (Entry-Punkt):       [0.01, 0.015, 0.02]    (3 Werte)
+Exit Threshold (Exit-Punkt):         [0.02, 0.025, 0.03]    (3 Werte)
+
+Total = 3 × 3 × 3 × 3 × 3 = 243 Kombinationen
+```
+
+**Scoring**: Jede Kombination wird bewertet mit:
+- **Risk-Adjusted Return** = Total Return / |Max Drawdown|
+- **Final Score** = Risk-Adjusted Return + (Win Rate × 0.5)
+
+Die beste Kombination wird automatisch gespeichert.
+
+### Troubleshooting
+
+**Problem**: Script funktioniert nicht  
+**Lösung**: Mache das Script ausführbar
+```bash
+chmod +x run_pipeline.sh
+```
+
+**Problem**: `command not found: date`  
+**Lösung**: Unter Windows verwende WSL oder bash-kompatible Shell
+
+**Problem**: Optimierung dauert sehr lange  
+**Lösung**: Verwende weniger Symbol/Timeframe-Kombinationen oder weniger Daten
+
+**Problem**: Keine Konfigurationen gefunden  
+**Lösung**: Überprüfe Logs mit `tail -f logs/cron.log`
+
+---
+
+## �📊 Monitoring & Status
 
 ### Status-Dashboard
 

@@ -79,7 +79,18 @@ def optimize_parameters(
         }
         
         expected = expected_candles.get(timeframe, len(df))
-        logger.info(f"Geladen: {len(df)} Kerzen (erwartet: ~{expected} für {timeframe} im Zeitraum von {(pd.Timestamp(end_date) - pd.Timestamp(start_date)).days} Tagen)")
+        actual_days = (df.index[-1] - df.index[0]).days if len(df) > 0 else 0
+        data_coverage = (len(df) / expected * 100) if expected > 0 else 100
+        
+        logger.info(f"Geladen: {len(df)} Kerzen (erwartet: ~{expected} für {timeframe})")
+        logger.info(f"Zeitraum angefragt: {start_date} bis {end_date} ({(pd.Timestamp(end_date) - pd.Timestamp(start_date)).days} Tage)")
+        logger.info(f"Tatsächliche Daten: {df.index[0].date() if len(df) > 0 else 'N/A'} bis {df.index[-1].date() if len(df) > 0 else 'N/A'} ({actual_days} Tage, {data_coverage:.1f}% Abdeckung)")
+        
+        # Warnung bei geringer Datenabdeckung
+        if data_coverage < 50:
+            logger.warning(f"⚠️  WARNUNG: Nur {data_coverage:.1f}% der erwarteten Daten verfügbar!")
+            logger.warning(f"⚠️  Börse hat wahrscheinlich nicht genug historische Daten für {symbol} {timeframe}")
+            logger.warning(f"⚠️  Training/Optimierung könnte unzuverlässig sein!")
         
         # Parameter-Grid für Grid-Search
         # window: Fenster-Größe für Kanal-Analyse

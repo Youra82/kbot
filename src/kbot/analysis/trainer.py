@@ -40,6 +40,7 @@ import os
 import sys
 import argparse
 import logging
+import pandas as pd
 from datetime import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -167,7 +168,30 @@ def main():
                 failed_trainings += 1
                 continue
             
-            print(f"   ✅ {len(data):,} Kerzen geladen")
+            # Berechne erwartete Kerzen-Anzahl basierend auf Timeframe
+            expected_candles = {
+                '5m': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days * 288),
+                '15m': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days * 96),
+                '30m': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days * 48),
+                '1h': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days * 24),
+                '2h': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days * 12),
+                '4h': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days * 6),
+                '6h': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days * 4),
+                '1d': int((pd.Timestamp(args.end_date) - pd.Timestamp(args.start_date)).days),
+            }
+            
+            expected = expected_candles.get(timeframe, len(data))
+            actual_days = (data.index[-1] - data.index[0]).days if len(data) > 0 else 0
+            data_coverage = (len(data) / expected * 100) if expected > 0 else 100
+            
+            print(f"   ✅ {len(data):,} Kerzen geladen (erwartet: ~{expected:,}, Abdeckung: {data_coverage:.1f}%)")
+            print(f"   📅 Tatsächliche Daten: {data.index[0].date()} bis {data.index[-1].date()} ({actual_days} Tage)")
+            
+            # Warnung bei geringer Datenabdeckung
+            if data_coverage < 50:
+                logger.warning(f"   ⚠️  WARNUNG: Nur {data_coverage:.1f}% der erwarteten Daten verfügbar!")
+                logger.warning(f"   ⚠️  Börse hat wahrscheinlich nicht genug historische Daten für {symbol} {timeframe}")
+                logger.warning(f"   ⚠️  Training könnte unzuverlässig sein!")
             
             # 2. Feature-Generierung
             print(f"\n2️⃣  Generiere 38+ Features und Labels...")

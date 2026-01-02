@@ -1,0 +1,21 @@
+{
+  "market": {
+    "symbol": "ADA",
+    "timeframe": "4h"
+  },
+  "strategy": {
+    "window": 35,
+    "min_channel_width": 0.0005,
+    "slope_threshold": 0.015,
+    "entry_threshold": 0.005,
+    "exit_threshold": 0.015
+  },
+  "performance": {
+    "total_return": 10.20040498489655,
+    "win_rate": 100.0,
+    "num_trades": 2,
+    "max_drawdown": 0.0,
+    "end_capital": 55.100202492448275
+  },
+  "timestamp": "2026-01-02T11:10:24.642709"
+}

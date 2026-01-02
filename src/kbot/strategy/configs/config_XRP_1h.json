@@ -1,0 +1,21 @@
+{
+  "market": {
+    "symbol": "XRP",
+    "timeframe": "1h"
+  },
+  "strategy": {
+    "window": 40,
+    "min_channel_width": 0.0005,
+    "slope_threshold": 0.015,
+    "entry_threshold": 0.005,
+    "exit_threshold": 0.015
+  },
+  "performance": {
+    "total_return": 3.332278375331171,
+    "win_rate": 100.0,
+    "num_trades": 2,
+    "max_drawdown": 0.0,
+    "end_capital": 51.666139187665586
+  },
+  "timestamp": "2026-01-02T10:50:00.264789"
+}

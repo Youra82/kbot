@@ -1,0 +1,21 @@
+{
+  "market": {
+    "symbol": "SOL",
+    "timeframe": "2h"
+  },
+  "strategy": {
+    "window": 60,
+    "min_channel_width": 0.0005,
+    "slope_threshold": 0.005,
+    "entry_threshold": 0.005,
+    "exit_threshold": 0.015
+  },
+  "performance": {
+    "total_return": 12.908300488861087,
+    "win_rate": 100.0,
+    "num_trades": 1,
+    "max_drawdown": 0.0,
+    "end_capital": 56.454150244430544
+  },
+  "timestamp": "2026-01-02T11:00:33.577963"
+}

@@ -1,0 +1,21 @@
+{
+  "market": {
+    "symbol": "AAVE",
+    "timeframe": "1d"
+  },
+  "strategy": {
+    "window": 55,
+    "min_channel_width": 0.0005,
+    "slope_threshold": 0.005,
+    "entry_threshold": 0.005,
+    "exit_threshold": 0.015
+  },
+  "performance": {
+    "total_return": 18.33552800029264,
+    "win_rate": 200.0,
+    "num_trades": 1,
+    "max_drawdown": 0.0,
+    "end_capital": 59.16776400014632
+  },
+  "timestamp": "2026-01-02T11:13:06.176712"
+}

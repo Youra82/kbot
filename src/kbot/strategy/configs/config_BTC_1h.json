@@ -1,0 +1,21 @@
+{
+  "market": {
+    "symbol": "BTC",
+    "timeframe": "1h"
+  },
+  "strategy": {
+    "window": 50,
+    "min_channel_width": 0.0005,
+    "slope_threshold": 0.005,
+    "entry_threshold": 0.015,
+    "exit_threshold": 0.015
+  },
+  "performance": {
+    "total_return": 0.3633241347819336,
+    "win_rate": 100.0,
+    "num_trades": 2,
+    "max_drawdown": 0.0,
+    "end_capital": 50.18166206739097
+  },
+  "timestamp": "2026-01-02T10:00:38.140758"
+}

@@ -1,0 +1,21 @@
+{
+  "market": {
+    "symbol": "ETH",
+    "timeframe": "4h"
+  },
+  "strategy": {
+    "window": 35,
+    "min_channel_width": 0.0005,
+    "slope_threshold": 0.005,
+    "entry_threshold": 0.005,
+    "exit_threshold": 0.03
+  },
+  "performance": {
+    "total_return": 13.786170799675915,
+    "win_rate": 100.0,
+    "num_trades": 6,
+    "max_drawdown": 0.0,
+    "end_capital": 56.89308539983796
+  },
+  "timestamp": "2026-01-02T10:37:02.500672"
+}

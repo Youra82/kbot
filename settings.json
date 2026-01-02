@@ -3,22 +3,25 @@
     "use_auto_optimizer_results": false,
     "active_strategies": [
       {
+        "symbol": "ADA/USDT:USDT",
+        "timeframe": "4h",
+        "use_macd_filter": false,
+        "active": true,
+        "comment": "Bestes Modell: 64% Genauigkeit"
+      },
+      {
         "symbol": "DOGE/USDT:USDT",
-        "timeframe": "6h",
+        "timeframe": "4h",
         "use_macd_filter": false,
-        "active": true
+        "active": true,
+        "comment": "Solides Modell: 59% Genauigkeit"
       },
       {
-        "symbol": "ETH/USDT:USDT",
-        "timeframe": "6h",
+        "symbol": "BTC/USDT:USDT",
+        "timeframe": "4h",
         "use_macd_filter": false,
-        "active": true
-      },
-      {
-        "symbol": "SOL/USDT:USDT",
-        "timeframe": "5m",
-        "use_macd_filter": false,
-        "active": true
+        "active": true,
+        "comment": "Stabil & liquid: 54% Genauigkeit"
       }
     ]
   }

@@ -1,0 +1,36 @@
+{
+  "market": {
+    "symbol": "ADA/USDT:USDT",
+    "timeframe": "4h",
+    "description": "Cardano - Beste Modell-Genauigkeit (64%)"
+  },
+  "strategy": {
+    "window": 35,
+    "min_channel_width": 0.0005,
+    "slope_threshold": 0.015,
+    "entry_threshold": 0.005,
+    "exit_threshold": 0.015,
+    "description": "Adaptive channel breakout mit ATF-Bestätigung"
+  },
+  "model": {
+    "type": "ANN",
+    "model_path": "artifacts/models/ann_predictor_ADAUSDTUSDT_4h.h5",
+    "scaler_path": "artifacts/models/ann_scaler_ADAUSDTUSDT_4h.joblib",
+    "prediction_threshold": 0.5,
+    "accuracy": 0.64
+  },
+  "risk_management": {
+    "position_size_percent": 2.0,
+    "stop_loss_percent": 2.0,
+    "take_profit_percent": 5.0,
+    "max_concurrent_trades": 1
+  },
+  "performance": {
+    "total_return": 10.20040498489655,
+    "win_rate": 100.0,
+    "num_trades": 2,
+    "max_drawdown": 0.0,
+    "end_capital": 55.100202492448275
+  },
+  "timestamp": "2026-01-02T11:10:24.642709"
+}

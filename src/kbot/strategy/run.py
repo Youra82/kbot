@@ -42,8 +42,8 @@ def load_ohlcv(symbol, start, end, timeframe):
         last = ohlcv[-1][0]
         # Fix: Nutze parse_timeframe() statt +1ms (TitanBot's Method)
         since = last + timeframe_duration_in_ms
-        if len(ohlcv) < limit:
-            break
+        # Entfernt: if len(ohlcv) < limit: break
+        # Bitget gibt manchmal weniger als limit zurück, auch wenn mehr Daten da sind!
     if not all_ohlcv:
         raise Exception(f"Keine Daten von Bitget für {symbol} im Zeitraum {start} bis {end}")
     df = pd.DataFrame(all_ohlcv, columns=['timestamp','open','high','low','close','volume'])

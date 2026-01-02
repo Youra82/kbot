@@ -2,7 +2,8 @@
 # run_pipeline.sh: KBot Interaktive Parameter-Optimierungs-Pipeline
 # Findet optimale Parameter für die Kanal-Erkennungs-Strategie
 
-set -e
+# Nur bei Setup-Fehlern abbrechen, bei Pipeline-Fehlern weitermachen
+trap 'echo "ERROR: Setup fehlgeschlagen"; exit 1' ERR
 
 # Farben
 GREEN='\033[0;32m'
@@ -169,14 +170,18 @@ for symbol in $SYMBOLS; do
         
         # ========== STUFE 1: TRAINING ==========
         echo -e "\n${GREEN}>>> STUFE 1/3: Trainiere Modell für $symbol ($timeframe)...${NC}"
-        TRAINER_OUTPUT=$(python3 "$TRAINER" --symbols "$symbol" --timeframes "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1)
+        if ! TRAINER_OUTPUT=$(python3 "$TRAINER" --symbols "$symbol" --timeframes "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1); then
+            echo -e "${RED}✗ Training-Fehler für $symbol ($timeframe)${NC}"
+            ((FAILED_COUNT++))
+            continue
+        fi
         echo "$TRAINER_OUTPUT"
         
         # Extrahiere Modell-Genauigkeit
         MODEL_ACCURACY=$(echo "$TRAINER_OUTPUT" | grep -oP 'Test-Genauigkeit:\s*\K[0-9.]+' | head -1)
         
         if [[ -z "$MODEL_ACCURACY" ]] || ! (( $(echo "$MODEL_ACCURACY >= $MIN_ACCURACY" | bc -l 2>/dev/null) )); then
-            echo -e "${RED}✗ Training fehlgeschlagen oder Genauigkeit < ${MIN_ACCURACY}% (Genauigkeit: ${MODEL_ACCURACY}%)${NC}"
+            echo -e "${RED}✗ Genauigkeit unzureichend (${MODEL_ACCURACY}% < ${MIN_ACCURACY}%)${NC}"
             ((FAILED_COUNT++))
             continue
         fi
@@ -185,13 +190,17 @@ for symbol in $SYMBOLS; do
         # ========== STUFE 2: THRESHOLD FINDER ==========
         if [ -f "$FIND_BEST_THRESHOLD" ]; then
             echo -e "\n${GREEN}>>> STUFE 2/3: Suche besten Threshold...${NC}"
-            THRESHOLD_OUTPUT=$(python3 "$FIND_BEST_THRESHOLD" --symbol "$symbol" --timeframe "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1)
-            BEST_THRESHOLD=$(echo "$THRESHOLD_OUTPUT" | tail -n 1)
-            
-            if [[ "$BEST_THRESHOLD" =~ ^[0-9]+\.[0-9]+$ ]]; then
-                echo -e "${GREEN}✓ Bester Threshold gefunden: $BEST_THRESHOLD${NC}"
+            if THRESHOLD_OUTPUT=$(python3 "$FIND_BEST_THRESHOLD" --symbol "$symbol" --timeframe "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1); then
+                BEST_THRESHOLD=$(echo "$THRESHOLD_OUTPUT" | tail -n 1)
+                
+                if [[ "$BEST_THRESHOLD" =~ ^[0-9]+\.[0-9]+$ ]]; then
+                    echo -e "${GREEN}✓ Bester Threshold gefunden: $BEST_THRESHOLD${NC}"
+                else
+                    echo -e "${YELLOW}⚠ Kein Threshold gefunden, verwende Default${NC}"
+                    BEST_THRESHOLD="0.5"
+                fi
             else
-                echo -e "${YELLOW}⚠ Kein Threshold gefunden, verwende Default${NC}"
+                echo -e "${YELLOW}⚠ Threshold Finder Fehler, verwende Default${NC}"
                 BEST_THRESHOLD="0.5"
             fi
         else
@@ -213,12 +222,12 @@ for symbol in $SYMBOLS; do
             --min-win-rate "$MIN_WR" \
             --min-return "$MIN_PNL" \
             --jobs "$N_CORES" \
-            --save-config; then
+            --save-config 2>&1; then
             OPTIMAL_CONFIGS+=("$symbol ($timeframe) - Genauigkeit: ${MODEL_ACCURACY}%")
             echo -e "${GREEN}✓ Pipeline für $symbol ($timeframe) erfolgreich${NC}"
             ((SUCCESSFUL_COUNT++))
         else
-            echo -e "${RED}✗ Optimizer-Fehler bei $symbol ($timeframe)${NC}"
+            echo -e "${YELLOW}⚠ Optimizer für $symbol ($timeframe) abgeschlossen (eventuell keine guten Konfigurationen)${NC}"
             ((FAILED_COUNT++))
         fi
     done

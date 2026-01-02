@@ -1,316 +1,177 @@
-#!/usr/bin/env python3
-# src/kbot/analysis/optimizer.py
-# KBot: Parameter-Optimierung für Kanal-Erkennungs-Strategie
-
+# src/jaegerbot/analysis/optimizer.py
 import os
 import sys
 import json
-import argparse
+import optuna
 import numpy as np
-import pandas as pd
-from datetime import datetime, timedelta
+import argparse
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import logging
-from tqdm import tqdm
-from itertools import product
-from pathlib import Path
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+logging.getLogger('absl').setLevel(logging.ERROR)
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, module='keras')
 
-# Setup Python Path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
+sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
+from kbot.analysis.backtester import load_data, run_ann_backtest
+from kbot.utils.telegram import send_message
+from kbot.analysis.evaluator import evaluate_dataset
 
-# Setup Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+HISTORICAL_DATA = None
+CURRENT_MODEL_PATHS = {}
+CURRENT_TIMEFRAME = None
+FIXED_THRESHOLD = None
 
+MAX_DRAWDOWN_CONSTRAINT = 0.30
+MIN_WIN_RATE_CONSTRAINT = 55.0
+MIN_PNL_CONSTRAINT = 0.0
+START_CAPITAL = 1000
+OPTIM_MODE = "strict"
 
-def optimize_parameters(
-    symbol,
-    timeframe,
-    start_date,
-    end_date,
-    start_capital=1000,
-    mode="strict",
-    max_dd=30.0,
-    min_win_rate=55.0,
-    min_return=0.0,
-):
-    """
-    Optimiert die Kanal-Erkennungs-Parameter mittels Grid-Search.
-    
-    Args:
-        symbol: Trading-Symbol (z.B. BTCUSDT)
-        timeframe: Timeframe (z.B. 1d, 4h)
-        start_date: Startdatum (YYYY-MM-DD)
-        end_date: Enddatum (YYYY-MM-DD)
-        start_capital: Startkapital in USD
-    
-    Returns:
-        Dict mit optimalen Parametern und Ergebnissen
-    """
-    
-    print(f"\n{'=' * 70}")
-    print(f"Optimiere Parameter für {symbol} ({timeframe})")
-    print(f"Zeitraum: {start_date} bis {end_date}")
-    print(f"{'=' * 70}")
-    
-    try:
-        # Lade Kursdaten
-        df = load_ohlcv(symbol, start_date, end_date, timeframe)
-        
-        if df.empty or len(df) < 60:
-            logger.error(f"Nicht genügend Kursdaten für {symbol} ({timeframe})")
-            return None
-        
-        # Berechne erwartete Kerzen-Anzahl basierend auf Timeframe
-        expected_candles = {
-            '5m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 288),  # 1440/5
-            '15m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 96),   # 1440/15
-            '30m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 48),   # 1440/30
-            '1h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 24),    # 1440/60
-            '2h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 12),    # 1440/120
-            '4h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 6),     # 1440/240
-            '6h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 4),     # 1440/360
-            '1d': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days),
-        }
-        
-        expected = expected_candles.get(timeframe, len(df))
-        actual_days = (df.index[-1] - df.index[0]).days if len(df) > 0 else 0
-        data_coverage = (len(df) / expected * 100) if expected > 0 else 100
-        
-        logger.info(f"Geladen: {len(df)} Kerzen (erwartet: ~{expected} für {timeframe})")
-        logger.info(f"Zeitraum angefragt: {start_date} bis {end_date} ({(pd.Timestamp(end_date) - pd.Timestamp(start_date)).days} Tage)")
-        logger.info(f"Tatsächliche Daten: {df.index[0].date() if len(df) > 0 else 'N/A'} bis {df.index[-1].date() if len(df) > 0 else 'N/A'} ({actual_days} Tage, {data_coverage:.1f}% Abdeckung)")
-        
-        # Warnung bei geringer Datenabdeckung
-        if data_coverage < 50:
-            logger.warning(f"⚠️  WARNUNG: Nur {data_coverage:.1f}% der erwarteten Daten verfügbar!")
-            logger.warning(f"⚠️  Börse hat wahrscheinlich nicht genug historische Daten für {symbol} {timeframe}")
-            logger.warning(f"⚠️  Training/Optimierung könnte unzuverlässig sein!")
-        
-        # Parameter-Grid für Grid-Search
-        # window: Fenster-Größe für Kanal-Analyse
-        # min_channel_width: Minimale Kanal-Breite (%)
-        # slope_threshold: Minimale Steigung für bedeutungsvolle Trends
-        # Erweitertes Grid für bessere Genauigkeit (1024 Kombinationen statt 243)
-        param_grid = {
-            'window': [35, 40, 45, 50, 55, 60],
-            'min_channel_width': [0.0005, 0.001, 0.0015, 0.002, 0.0025, 0.003],
-            'slope_threshold': [0.005, 0.01, 0.015, 0.02, 0.025, 0.03],
-            'entry_threshold': [0.005, 0.01, 0.015, 0.02],
-            'exit_threshold': [0.015, 0.02, 0.025, 0.03],
-        }
-        
-        best_result = {
-            'symbol': symbol,
-            'timeframe': timeframe,
-            'total_return': -999,
-            'win_rate': 0,
-            'num_trades': 0,
-            'max_dd': 0,
-            'end_capital': 0,
-            'score': -999,
-            'params': {}
-        }
-        
-        # Erstelle alle Parameter-Kombinationen für Grid-Search
-        param_combinations = list(product(
-            param_grid['window'],
-            param_grid['min_channel_width'],
-            param_grid['slope_threshold'],
-            param_grid['entry_threshold'],
-            param_grid['exit_threshold']
-        ))
-        
-        logger.info(f"Starte Grid-Search mit {len(param_combinations)} Kombinationen...")
-        print()  # Leerzeile für schönere Ausgabe
-        
-        # Grid-Search mit Ladebalken
-        for window, min_width, slope_thresh, entry_thresh, exit_thresh in tqdm(
-            param_combinations,
-            desc=f"Optimiere {symbol} ({timeframe})",
-            unit="combo",
-            ncols=80
-        ):
-            try:
-                # Erkenne Kanäle mit aktuellen Parametern
-                channels = detect_channels(
-                    df,
-                    window=window,
-                    min_channel_width=min_width,
-                    slope_threshold=slope_thresh
-                )
-                
-                # Backtest durchführen
-                end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
-                    df,
-                    channels,
-                    start_capital=start_capital,
-                    entry_threshold=entry_thresh,
-                    exit_threshold=exit_thresh
-                )
-                
-                # Bewertungs-Score berechnen (risikoadjustiert)
-                if num_trades > 0:
-                    if max_dd < 0:
-                        risk_adjusted_return = total_return / abs(max_dd)
-                    else:
-                        risk_adjusted_return = total_return * 1.5
-                    score = risk_adjusted_return + (win_rate * 0.5)
-                else:
-                    score = -999
-
-                # Modus-abhängige Filter
-                dd_abs = abs(max_dd)
-                if mode == "strict":
-                    if win_rate < min_win_rate:
-                        continue
-                    if total_return < min_return:
-                        continue
-                    if dd_abs > max_dd:
-                        continue
-                else:  # best_profit
-                    if dd_abs > max_dd:
-                        continue
-
-                # Update Best
-                if score > best_result['score']:
-                    best_result = {
-                        'symbol': symbol,
-                        'timeframe': timeframe,
-                        'total_return': total_return,
-                        'win_rate': win_rate,
-                        'num_trades': num_trades,
-                        'max_dd': max_dd,
-                        'end_capital': end_capital,
-                        'score': score,
-                        'params': {
-                            'window': window,
-                            'min_channel_width': min_width,
-                            'slope_threshold': slope_thresh,
-                            'entry_threshold': entry_thresh,
-                            'exit_threshold': exit_thresh
-                        }
-                    }
-            
-            except Exception as e:
-                logger.debug(f"Fehler bei Kombination: {str(e)}")
-                continue
-        
-        # Ergebnisse anzeigen
-        if best_result['num_trades'] > 0:
-            print(f"\n{'=' * 70}")
-            print(f"OPTIMALE PARAMETER GEFUNDEN für {symbol} ({timeframe})")
-            print(f"{'=' * 70}")
-            print(f"✓ Endkapital:      ${best_result['end_capital']:,.2f}")
-            print(f"✓ Gesamtrendite:   {best_result['total_return']:.2f}%")
-            print(f"✓ Anzahl Trades:   {best_result['num_trades']}")
-            print(f"✓ Gewinnquote:     {best_result['win_rate']:.1f}%")
-            print(f"✓ Max Drawdown:    {best_result['max_dd']:.2f}%")
-            print(f"\nOptimale Parameter:")
-            print(f"  - Window:              {best_result['params']['window']}")
-            print(f"  - Min Channel Width:   {best_result['params']['min_channel_width']:.4f}")
-            print(f"  - Slope Threshold:     {best_result['params']['slope_threshold']:.4f}")
-            print(f"  - Entry Threshold:     {best_result['params']['entry_threshold']:.4f}")
-            print(f"  - Exit Threshold:      {best_result['params']['exit_threshold']:.4f}")
-            print(f"{'=' * 70}\n")
-            
-            return best_result
-        else:
-            logger.warning(f"Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe})")
-            return None
-    
-    except Exception as e:
-        logger.error(f"Fehler bei Parameter-Optimierung für {symbol} ({timeframe}): {str(e)}")
-        return None
-
-
-def save_optimal_config(result, output_dir=None):
-    """Speichere optimale Konfiguration als JSON in src/kbot/strategy/configs/ (wie JaegerBot)"""
-    
-    if not result:
-        return None
-    
-    # Nutze src/kbot/strategy/configs/ wie bei JaegerBot
-    if output_dir is None:
-        output_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
-    
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Standardisiertes Dateinamens-Format: config_SYMBOL_TIMEFRAME.json
-    symbol_clean = result['symbol'].replace('/', '').replace(':', '')
-    config_filename = f"config_{symbol_clean}_{result['timeframe']}.json"
-    config_path = os.path.join(output_dir, config_filename)
-    
-    # Struktur wie JaegerBot: market, strategy, performance, timestamp
-    config = {
-        'market': {
-            'symbol': result['symbol'],
-            'timeframe': result['timeframe']
-        },
-        'strategy': {
-            'window': result['params']['window'],
-            'min_channel_width': result['params']['min_channel_width'],
-            'slope_threshold': result['params']['slope_threshold'],
-            'entry_threshold': result['params']['entry_threshold'],
-            'exit_threshold': result['params']['exit_threshold']
-        },
-        'performance': {
-            'total_return': result['total_return'],
-            'win_rate': result['win_rate'],
-            'num_trades': result['num_trades'],
-            'max_drawdown': result['max_dd'],
-            'end_capital': result['end_capital']
-        },
-        'timestamp': datetime.now().isoformat()
+def objective(trial, symbol):
+    # --- KORRIGIERT: Entferne initial_sl_pct, füge ATR-basierte Parameter hinzu ---
+    params = {
+        'prediction_threshold': FIXED_THRESHOLD,
+        'risk_reward_ratio': trial.suggest_float('risk_reward_ratio', 1.0, 5.0),
+        'risk_per_trade_pct': trial.suggest_float('risk_per_trade_pct', 0.5, 2.0),
+        'leverage': trial.suggest_int('leverage', 5, 25),
+        # Neue Parameter für dynamischen SL
+        'atr_multiplier_sl': trial.suggest_float('atr_multiplier_sl', 1.0, 4.0),
+        'min_sl_pct': trial.suggest_float('min_sl_pct', 0.3, 2.0),
+        # Trailing Stop Parameter
+        'trailing_stop_activation_rr': trial.suggest_float('trailing_stop_activation_rr', 1.0, 4.0),
+        'trailing_stop_callback_rate_pct': trial.suggest_float('trailing_stop_callback_rate_pct', 0.5, 3.0)
     }
-    
-    with open(config_path, 'w') as f:
-        json.dump(config, f, indent=2)
-    
-    logger.info(f"Konfiguration gespeichert: {config_path}")
-    return config_path
+    # --- ENDE KORRIGIERT ---
+
+    result = run_ann_backtest(
+        HISTORICAL_DATA.copy(),
+        params,
+        CURRENT_MODEL_PATHS,
+        START_CAPITAL,
+        timeframe=CURRENT_TIMEFRAME
+    )
+
+    pnl, drawdown, trades, win_rate = result.get('total_pnl_pct', -1000), result.get('max_drawdown_pct', 1.0), result.get('trades_count', 0), result.get('win_rate', 0)
+
+    if OPTIM_MODE == "strict" and (drawdown > MAX_DRAWDOWN_CONSTRAINT or win_rate < MIN_WIN_RATE_CONSTRAINT or pnl < MIN_PNL_CONSTRAINT or trades < 20):
+        raise optuna.exceptions.TrialPruned()
+    elif OPTIM_MODE == "best_profit" and (drawdown > MAX_DRAWDOWN_CONSTRAINT or trades < 15):
+        raise optuna.exceptions.TrialPruned()
+
+    drawdown_safe = max(drawdown, 0.01)
+    return pnl / drawdown_safe
+
+def create_safe_filename(symbol, timeframe):
+    return f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="KBot Parameter-Optimizer für Kanal-Erkennungs-Strategie"
-    )
-    parser.add_argument('--symbol', type=str, required=True, help='Trading-Symbol (z.B. BTCUSDT)')
-    parser.add_argument('--timeframe', type=str, required=True, help='Timeframe (z.B. 1d, 4h)')
-    parser.add_argument('--start-date', type=str, required=True, help='Startdatum (YYYY-MM-DD)')
-    parser.add_argument('--end-date', type=str, required=True, help='Enddatum (YYYY-MM-DD)')
-    parser.add_argument('--start-capital', type=float, default=1000, help='Startkapital (Standard: 1000)')
-    parser.add_argument('--mode', type=str, choices=['strict', 'best_profit'], default='strict', help='Optimierungs-Modus (strict|best_profit)')
-    parser.add_argument('--max-dd', type=float, default=30.0, help='Maximaler Drawdown in % (Filter)')
-    parser.add_argument('--min-win-rate', type=float, default=55.0, help='Minimale Win-Rate in % (nur strict)')
-    parser.add_argument('--min-return', type=float, default=0.0, help='Minimale Gesamtrendite in % (nur strict)')
-    parser.add_argument('--jobs', type=int, default=-1, help='Anzahl CPU-Kerne (-1 = alle, aktuell nur zur Info)')
-    parser.add_argument('--save-config', action='store_true', help='Speichere optimale Konfiguration')
-    
+    global HISTORICAL_DATA, CURRENT_MODEL_PATHS, CURRENT_TIMEFRAME, FIXED_THRESHOLD, MAX_DRAWDOWN_CONSTRAINT, MIN_WIN_RATE_CONSTRAINT, MIN_PNL_CONSTRAINT, START_CAPITAL, OPTIM_MODE
+
+    parser = argparse.ArgumentParser(description="Parameter-Optimierung für KBot")
+    parser.add_argument('--symbols', required=True, type=str)
+    parser.add_argument('--timeframes', required=True, type=str)
+    parser.add_argument('--start_date', required=True, type=str)
+    parser.add_argument('--end_date', required=True, type=str)
+    parser.add_argument('--jobs', required=True, type=int)
+    parser.add_argument('--max_drawdown', required=True, type=float)
+    parser.add_argument('--start_capital', required=True, type=float)
+    parser.add_argument('--min_win_rate', required=True, type=float)
+    parser.add_argument('--trials', required=True, type=int)
+    parser.add_argument('--min_pnl', required=True, type=float)
+    parser.add_argument('--mode', required=True, type=str)
+    parser.add_argument('--threshold', required=True, type=float)
+    parser.add_argument('--top_n', type=int, default=0)
     args = parser.parse_args()
-    
-    # Optimiere Parameter
-    result = optimize_parameters(
-        symbol=args.symbol,
-        timeframe=args.timeframe,
-        start_date=args.start_date,
-        end_date=args.end_date,
-        start_capital=args.start_capital,
-        mode=args.mode,
-        max_dd=args.max_dd,
-        min_win_rate=args.min_win_rate,
-        min_return=args.min_return
-    )
-    
-    # Speichere Konfiguration wenn gewünscht
-    # Standardmäßig in src/kbot/strategy/configs/ wie bei JaegerBot
-    if result and args.save_config:
-        save_optimal_config(result)
+
+    FIXED_THRESHOLD = args.threshold
+    MAX_DRAWDOWN_CONSTRAINT, MIN_WIN_RATE_CONSTRAINT, MIN_PNL_CONSTRAINT = args.max_drawdown / 100.0, args.min_win_rate, args.min_pnl
+    START_CAPITAL, N_TRIALS, OPTIM_MODE, TOP_N_STRATEGIES = args.start_capital, args.trials, args.mode, args.top_n
+
+    symbols, timeframes = args.symbols.split(), args.timeframes.split()
+    TASKS = [{'symbol': f"{s}/USDT:USDT", 'timeframe': tf} for s in symbols for tf in timeframes]
+
+    for task in TASKS:
+        symbol, timeframe = task['symbol'], task['timeframe']
+        CURRENT_TIMEFRAME = timeframe
+
+        print(f"\n===== Optimiere: {symbol} ({timeframe}) mit festem Threshold: {FIXED_THRESHOLD} =====")
+
+        safe_filename = create_safe_filename(symbol, timeframe)
+        CURRENT_MODEL_PATHS = {'model': os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_predictor_{safe_filename}.h5'), 'scaler': os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_scaler_{safe_filename}.joblib')}
+
+        HISTORICAL_DATA = load_data(symbol, timeframe, args.start_date, args.end_date)
+        if HISTORICAL_DATA.empty: continue
+
+        print("\n--- Bewertung der Datensatz-Qualität ---")
+        evaluation = evaluate_dataset(HISTORICAL_DATA.copy(), timeframe)
+        print(f"Note: {evaluation['score']} / 10\n" + "\n".join(evaluation['justification']) + "\n----------------------------------------")
+
+        DB_FILE = os.path.join(PROJECT_ROOT, 'artifacts', 'db', 'optuna_studies.db')
+        os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
+
+        STORAGE_URL = f"sqlite:///{DB_FILE}?timeout=60"
+        study_name = f"ann_{safe_filename}_{OPTIM_MODE}"
+
+        study = optuna.create_study(storage=STORAGE_URL, study_name=study_name, direction="maximize", load_if_exists=True)
+
+        objective_wrapper = lambda trial: objective(trial, symbol)
+        study.optimize(objective_wrapper, n_trials=N_TRIALS, n_jobs=args.jobs, show_progress_bar=True)
+
+        valid_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+        if not valid_trials: 
+            print(f"\n❌ Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe)}")
+            continue
+
+        best_trial = max(valid_trials, key=lambda t: t.value)
+        
+        # Prüfe ob der beste Trial profitabel ist
+        if best_trial.value is None or best_trial.value <= 0:
+            print(f"\n❌ Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe)}")
+            print(f"   (Beste Trial: {best_trial.value}% Gewinn)")
+            continue
+        
+        best_params = best_trial.params
+        best_params['prediction_threshold'] = FIXED_THRESHOLD
+
+        config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
+        os.makedirs(config_dir, exist_ok=True)
+        config_output_path = os.path.join(config_dir, f'config_{safe_filename}.json')
+
+        behavior_config = {"use_longs": True, "use_shorts": True}
+
+        # --- KORRIGIERT: Speichere ATR-basierte Parameter (anstelle des alten initial_sl_pct) ---
+        config_output = {
+            "market": {"symbol": symbol, "timeframe": timeframe},
+            "strategy": {"prediction_threshold": FIXED_THRESHOLD},
+            "risk": {
+                "margin_mode": "isolated",
+                "risk_per_trade_pct": round(best_params['risk_per_trade_pct'], 2),
+                # Entfernt: "initial_sl_pct"
+                "risk_reward_ratio": round(best_params['risk_reward_ratio'], 2),
+                "leverage": best_params['leverage'],
+                "trailing_stop_activation_rr": round(best_params['trailing_stop_activation_rr'], 2),
+                "trailing_stop_callback_rate_pct": round(best_params['trailing_stop_callback_rate_pct'], 2),
+                # Neue Parameter
+                'atr_multiplier_sl': round(best_params['atr_multiplier_sl'], 2),
+                'min_sl_pct': round(best_params['min_sl_pct'], 2)
+            },
+            "behavior": behavior_config
+        }
+        # --- ENDE KORRIGIERT ---
+        with open(config_output_path, 'w') as f: json.dump(config_output, f, indent=4)
+        print(f"\n✓ Profitable Konfiguration gespeichert: {config_output_path}")
+
+    try:
+        with open(os.path.join(PROJECT_ROOT, 'secret.json'), "r") as f: secrets = json.load(f)
+        telegram_config = secrets.get('telegram', {})
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

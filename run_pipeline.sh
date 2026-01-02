@@ -75,9 +75,10 @@ printf "+-------------+--------------------------------+\n"
 read -p "Startdatum (YYYY-MM-DD) oder 'a' für Automatik [Standard: a]: " START_DATE_INPUT
 START_DATE_INPUT=${START_DATE_INPUT:-a}
 
-read -p "Enddatum (YYYY-MM-DD, Enter = heute): " END_DATE
+read -p "Enddatum (YYYY-MM-DD, Enter = gestern): " END_DATE
 if [ -z "$END_DATE" ]; then
-    END_DATE=$(date +%F)
+    # Verwende GESTERN statt heute, weil die heutige Kerze noch nicht abgeschlossen ist
+    END_DATE=$(date -d "yesterday" +%F)
 fi
 
 read -p "Startkapital (USD, Standard: 1000): " START_CAPITAL

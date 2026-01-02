@@ -15,29 +15,7 @@
 
 ---
 
-## 🚀 Alle Trading Bot Repositories
-
-| Bot | Strategie | Status | Repository |
-|-----|-----------|--------|-----------|
-| **KBot** | Kanal-Erkennung (Parallel/Dreieck/Keil) | ✅ Aktiv | https://github.com/Youra82/kbot |
-| **JaegerBot** | Trend-Folge mit SuperTrend & Volume | ✅ Aktiv | https://github.com/Youra82/jaegerbot |
-| **LTBBot** | Long-Term Breakout Trading | ✅ Aktiv | https://github.com/Youra82/ltbbot |
-| **PBot** | Pattern-basierte Strategien | ✅ Aktiv | https://github.com/Youra82/pbot |
-| **STBot** | Short-Term Scalping | ✅ Aktiv | https://github.com/Youra82/stbot |
-| **TitanBot** | Multi-Strategie Aggregator | ✅ Aktiv | https://github.com/Youra82/titanbot |
-| **UTBot2** | Universal Trading Bot v2 | ✅ Aktiv | https://github.com/Youra82/utbot2 |
-
-### 📝 Git Push Befehl (Force Mode)
-```bash
-git pull origin main 2>/dev/null || true
-git add -A
-git commit -m "Update: Strategie-Optimierungen und Konfigurationen" 2>/dev/null || true
-git push origin main --force
-```
-
----
-
-## 📊 Übersicht
+##  Übersicht
 
 KBot ist ein spezialisierter Trading-Bot, der automatisch Chart-Kanäle (parallel, Dreieck, Keil) auf dem Kryptowährungsmarkt erkennt und eigenständig von Kanalrand zu Kanalrand handelt. Das System benötigt keine Machine-Learning-Modelle oder Trainings-Pipelines und ist optimiert für stabilen Betrieb auf Ubuntu-Servern.
 

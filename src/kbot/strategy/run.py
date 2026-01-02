@@ -26,8 +26,12 @@ def load_ohlcv(symbol, start, end, timeframe):
     
     since = int(pd.Timestamp(start).timestamp() * 1000)
     end_ts = int(pd.Timestamp(end).timestamp() * 1000)
-    tf_map = {'1d':'1d','4h':'4h','1h':'1h','6h':'6h','30m':'30m','15m':'15m','5m':'5m'}
+    tf_map = {'1d':'1d','4h':'4h','1h':'1h','6h':'6h','30m':'30m','15m':'15m','5m':'5m','10m':'10m','2h':'2h'}
     tf = tf_map.get(timeframe, '1d')
+    
+    # TitanBot's überlegene Logik: parse_timeframe() für korrekte Zeitberechnung
+    timeframe_duration_in_ms = exchange.parse_timeframe(tf) * 1000
+    
     all_ohlcv = []
     limit = 500
     while since < end_ts:
@@ -36,8 +40,8 @@ def load_ohlcv(symbol, start, end, timeframe):
             break
         all_ohlcv += ohlcv
         last = ohlcv[-1][0]
-        # Bitget gibt Kerzen ab since, also +1ms um Überschneidung zu vermeiden
-        since = last + 1
+        # Fix: Nutze parse_timeframe() statt +1ms (TitanBot's Method)
+        since = last + timeframe_duration_in_ms
         if len(ohlcv) < limit:
             break
     if not all_ohlcv:

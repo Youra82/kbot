@@ -10,6 +10,158 @@ import os
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
+def calculate_adaptive_trend_features(df, use_long_term=False):
+    """
+    Berechnet adaptive Trend-Features basierend auf logarithmischer Regression
+    mit automatischer Periodenwahl durch Pearson-Korrelation.
+    
+    Übersetzt aus dem PineScript "Adaptive Trend Finder" von Julien_Eche.
+    
+    Args:
+        df: DataFrame mit OHLCV-Daten und Index als Datetime
+        use_long_term: Boolean, ob Long-Term (300-1200) oder Short-Term (20-200) Perioden verwendet werden
+    
+    Returns:
+        Dictionary mit Features: pearson_r, trend_strength, detected_period, slope, std_dev, etc.
+    """
+    # Perioden-Arrays je nach Modus
+    if use_long_term:
+        periods = [300, 350, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 1050, 1100, 1150, 1200]
+    else:
+        periods = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    
+    close_prices = df['close'].values
+    
+    if len(close_prices) < max(periods):
+        # Nicht genug Daten
+        return {
+            'atf_pearson_r': 0.0,
+            'atf_trend_strength': 0.0,
+            'atf_detected_period': 0,
+            'atf_slope': 0.0,
+            'atf_std_dev': 0.0,
+            'atf_upper_channel_dist': 0.0,
+            'atf_lower_channel_dist': 0.0
+        }
+    
+    best_pearson_r = -1.0
+    best_period = periods[0]
+    best_slope = 0.0
+    best_intercept = 0.0
+    best_std_dev = 0.0
+    
+    # Für jede Periode: Log-Regression und Pearson-R berechnen
+    for length in periods:
+        if len(close_prices) < length:
+            continue
+            
+        # Letzte 'length' Preise nehmen
+        prices = close_prices[-length:]
+        log_prices = np.log(prices)
+        
+        # X-Werte (Zeit-Index): 1, 2, 3, ..., length
+        x_values = np.arange(1, length + 1)
+        
+        # Lineare Regression auf Log-Preisen
+        sum_x = np.sum(x_values)
+        sum_xx = np.sum(x_values * x_values)
+        sum_y = np.sum(log_prices)
+        sum_yx = np.sum(x_values * log_prices)
+        
+        # Slope und Intercept berechnen
+        slope = (length * sum_yx - sum_x * sum_y) / (length * sum_xx - sum_x * sum_x)
+        average = sum_y / length
+        intercept = average - slope * sum_x / length + slope
+        
+        # Residuen und Standard-Abweichung berechnen
+        regres = intercept + slope * (length - 1) * 0.5
+        fitted_values = intercept + slope * (x_values - 1)
+        residuals = log_prices - fitted_values
+        
+        # Unbiased Standard Deviation
+        std_dev = np.sqrt(np.sum(residuals ** 2) / (length - 1))
+        
+        # Pearson-Korrelation berechnen
+        dxt = log_prices - average
+        dyt = fitted_values - regres
+        
+        sum_dxx = np.sum(dxt * dxt)
+        sum_dyy = np.sum(dyt * dyt)
+        sum_dyx = np.sum(dxt * dyt)
+        
+        divisor = sum_dxx * sum_dyy
+        if divisor > 0:
+            pearson_r = abs(sum_dyx / np.sqrt(divisor))  # Absolute Korrelation
+        else:
+            pearson_r = 0.0
+        
+        # Beste Korrelation speichern
+        if pearson_r > best_pearson_r:
+            best_pearson_r = pearson_r
+            best_period = length
+            best_slope = slope
+            best_intercept = intercept
+            best_std_dev = std_dev
+    
+    # Trend-Stärke klassifizieren (basierend auf Pearson-R)
+    if best_pearson_r < 0.2:
+        trend_strength = 0.1  # Extremely Weak
+    elif best_pearson_r < 0.3:
+        trend_strength = 0.2  # Very Weak
+    elif best_pearson_r < 0.4:
+        trend_strength = 0.3  # Weak
+    elif best_pearson_r < 0.5:
+        trend_strength = 0.4  # Mostly Weak
+    elif best_pearson_r < 0.6:
+        trend_strength = 0.5  # Somewhat Weak
+    elif best_pearson_r < 0.7:
+        trend_strength = 0.6  # Moderately Weak
+    elif best_pearson_r < 0.8:
+        trend_strength = 0.7  # Moderate
+    elif best_pearson_r < 0.9:
+        trend_strength = 0.8  # Moderately Strong
+    elif best_pearson_r < 0.92:
+        trend_strength = 0.85  # Mostly Strong
+    elif best_pearson_r < 0.94:
+        trend_strength = 0.9  # Strong
+    elif best_pearson_r < 0.96:
+        trend_strength = 0.95  # Very Strong
+    elif best_pearson_r < 0.98:
+        trend_strength = 0.97  # Exceptionally Strong
+    else:
+        trend_strength = 1.0  # Ultra Strong
+    
+    # Aktuellen Preis zur Trendlinie und Channels vergleichen
+    current_price = close_prices[-1]
+    current_log_price = np.log(current_price)
+    
+    # Vorhersage-Wert am aktuellen Zeitpunkt (Ende der Periode)
+    predicted_log_price = best_intercept  # Am Ende (x=0 in reversed time)
+    predicted_price = np.exp(predicted_log_price)
+    
+    # Kanal-Grenzen (2 Standardabweichungen, wie im PineScript devMultiplier=2.0)
+    dev_multiplier = 2.0
+    upper_bound = predicted_price * np.exp(dev_multiplier * best_std_dev)
+    lower_bound = predicted_price / np.exp(dev_multiplier * best_std_dev)
+    
+    # Distanz zu den Kanälen (normalisiert)
+    upper_channel_dist = (upper_bound - current_price) / current_price
+    lower_channel_dist = (current_price - lower_bound) / current_price
+    
+    # Trendrichtung (positiver oder negativer Slope)
+    trend_direction = 1.0 if best_slope > 0 else -1.0
+    
+    return {
+        'atf_pearson_r': best_pearson_r,
+        'atf_trend_strength': trend_strength * trend_direction,  # Mit Richtung gewichtet
+        'atf_detected_period': best_period,
+        'atf_slope': best_slope,
+        'atf_std_dev': best_std_dev,
+        'atf_upper_channel_dist': upper_channel_dist,
+        'atf_lower_channel_dist': lower_channel_dist,
+        'atf_price_to_trend': (current_price - predicted_price) / predicted_price  # Abweichung von der Trendlinie
+    }
+
 def create_ann_features(df):
     # Bestehende Features
     bollinger = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
@@ -95,6 +247,12 @@ def create_ann_features(df):
     # NEU: Historical Volatility
     df['hist_volatility'] = df['close'].pct_change().rolling(window=20).std() * np.sqrt(252)
     
+    # *** ADAPTIVE TREND FINDER FEATURES ***
+    # Berechne Short-Term Trend Features
+    atf_features = calculate_adaptive_trend_features(df, use_long_term=False)
+    for key, value in atf_features.items():
+        df[key] = value
+    
     return df
 
 def prepare_data_for_ann(df, timeframe: str, verbose: bool = True):
@@ -172,7 +330,12 @@ def prepare_data_for_ann(df, timeframe: str, verbose: bool = True):
         'day_of_week', 'hour_of_day',
         
         # Returns & Volatilität
-        'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility'
+        'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility',
+        
+        # *** ADAPTIVE TREND FINDER FEATURES ***
+        'atf_pearson_r', 'atf_trend_strength', 'atf_slope', 
+        'atf_std_dev', 'atf_upper_channel_dist', 'atf_lower_channel_dist', 
+        'atf_price_to_trend'
     ]
     # ---
 

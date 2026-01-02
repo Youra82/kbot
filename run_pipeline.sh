@@ -2,8 +2,8 @@
 # run_pipeline.sh: KBot Interaktive Parameter-Optimierungs-Pipeline
 # Findet optimale Parameter für die Kanal-Erkennungs-Strategie
 
-# Nur bei Setup-Fehlern abbrechen, bei Pipeline-Fehlern weitermachen
-trap 'echo "ERROR: Setup fehlgeschlagen"; exit 1' ERR
+# KEIN set -e oder trap ERR mehr!
+# Pipeline-Fehler sollen nicht zum Abbruch führen
 
 # Farben
 GREEN='\033[0;32m'
@@ -28,7 +28,7 @@ if [ ! -f "$VENV_PATH" ]; then
     exit 1
 fi
 
-source "$VENV_PATH"
+source "$VENV_PATH" || { echo -e "${RED}❌ Fehler beim Aktivieren der Virtual Environment${NC}"; exit 1; }
 echo -e "${GREEN}✓ Virtual Environment aktiviert${NC}"
 
 # CLEANUP-Assistent

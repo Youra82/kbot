@@ -17,6 +17,8 @@ echo -e "=======================================================${NC}"
 
 # Pfade definieren
 VENV_PATH=".venv/bin/activate"
+TRAINER="src/kbot/analysis/trainer.py"
+FIND_BEST_THRESHOLD="src/kbot/analysis/find_best_threshold.py"
 OPTIMIZER="src/kbot/analysis/optimizer.py"
 
 # Virtuelle Umgebung aktivieren
@@ -27,6 +29,21 @@ fi
 
 source "$VENV_PATH"
 echo -e "${GREEN}✓ Virtual Environment aktiviert${NC}"
+
+# CLEANUP-Assistent
+echo -e "\n${YELLOW}Möchtest du alle alten, generierten Modelle & Konfigurationen löschen?${NC}"
+read -p "Dies wird für einen kompletten Neustart empfohlen. (j/n) [Standard: n]: " CLEANUP_CHOICE
+CLEANUP_CHOICE=${CLEANUP_CHOICE:-n}
+CLEANUP_CHOICE=$(echo ${CLEANUP_CHOICE} | tr -d '[:space:]')
+
+if [[ "${CLEANUP_CHOICE,,}" == "j" ]]; then
+    echo -e "${YELLOW}Lösche alte Modelle und Konfigurationen...${NC}"
+    rm -f src/kbot/strategy/configs/config_*.json
+    rm -f artifacts/models/ann_*
+    echo -e "${GREEN}✓ Aufräumen abgeschlossen${NC}"
+else
+    echo -e "${GREEN}✓ Alte Ergebnisse werden beibehalten${NC}"
+fi
 
 # Interaktive Eingabe
 echo -e "\n${YELLOW}--- Konfiguration der Optimierung ---${NC}\n"
@@ -91,10 +108,15 @@ else
     MIN_PNL=-99999
 fi
 
-echo -e "\n${YELLOW}--- Optimierung wird gestartet ---${NC}\n"
+read -p "Mindest-Modell-Genauigkeit % [Standard: 50]: " MIN_ACCURACY
+MIN_ACCURACY=${MIN_ACCURACY:-50}
+
+echo -e "\n${YELLOW}--- 3-Stufen-Pipeline wird gestartet ---${NC}\n"
 
 # Speichere optimale Konfigurationen
 OPTIMAL_CONFIGS=()
+SUCCESSFUL_COUNT=0
+FAILED_COUNT=0
 
 # Hilfsfunktion: Bestimme lookback_days basierend auf Timeframe
 get_lookback_days() {
@@ -118,11 +140,11 @@ get_lookback_days() {
     esac
 }
 
-# Starte Optimierung für jede Symbol/Timeframe-Kombination
+# Starte 3-Stufen-Pipeline für jede Symbol/Timeframe-Kombination
 for symbol in $SYMBOLS; do
     for timeframe in $TIMEFRAMES; do
         echo -e "\n${BLUE}======================================================="
-        echo "   Optimiere: $symbol ($timeframe)"
+        echo "   Pipeline: $symbol ($timeframe)"
         echo -e "=======================================================${NC}"
         
         # Bestimme Start- und End-Datum
@@ -145,7 +167,40 @@ for symbol in $SYMBOLS; do
         
         echo -e "${BLUE}  Datenzeitraum: $CURRENT_START_DATE bis $CURRENT_END_DATE${NC}"
         
-        echo -e "\n${BLUE}>>> Optimiere $symbol ($timeframe)...${NC}"
+        # ========== STUFE 1: TRAINING ==========
+        echo -e "\n${GREEN}>>> STUFE 1/3: Trainiere Modell für $symbol ($timeframe)...${NC}"
+        TRAINER_OUTPUT=$(python3 "$TRAINER" --symbols "$symbol" --timeframes "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1)
+        echo "$TRAINER_OUTPUT"
+        
+        # Extrahiere Modell-Genauigkeit
+        MODEL_ACCURACY=$(echo "$TRAINER_OUTPUT" | grep -oP 'Test-Genauigkeit:\s*\K[0-9.]+' | head -1)
+        
+        if [[ -z "$MODEL_ACCURACY" ]] || ! (( $(echo "$MODEL_ACCURACY >= $MIN_ACCURACY" | bc -l 2>/dev/null) )); then
+            echo -e "${RED}✗ Training fehlgeschlagen oder Genauigkeit < ${MIN_ACCURACY}% (Genauigkeit: ${MODEL_ACCURACY}%)${NC}"
+            ((FAILED_COUNT++))
+            continue
+        fi
+        echo -e "${GREEN}✓ Training erfolgreich (Genauigkeit: ${MODEL_ACCURACY}%)${NC}"
+        
+        # ========== STUFE 2: THRESHOLD FINDER ==========
+        if [ -f "$FIND_BEST_THRESHOLD" ]; then
+            echo -e "\n${GREEN}>>> STUFE 2/3: Suche besten Threshold...${NC}"
+            THRESHOLD_OUTPUT=$(python3 "$FIND_BEST_THRESHOLD" --symbol "$symbol" --timeframe "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1)
+            BEST_THRESHOLD=$(echo "$THRESHOLD_OUTPUT" | tail -n 1)
+            
+            if [[ "$BEST_THRESHOLD" =~ ^[0-9]+\.[0-9]+$ ]]; then
+                echo -e "${GREEN}✓ Bester Threshold gefunden: $BEST_THRESHOLD${NC}"
+            else
+                echo -e "${YELLOW}⚠ Kein Threshold gefunden, verwende Default${NC}"
+                BEST_THRESHOLD="0.5"
+            fi
+        else
+            echo -e "${YELLOW}⚠ Threshold Finder nicht vorhanden, überspringe Stufe 2${NC}"
+            BEST_THRESHOLD="0.5"
+        fi
+        
+        # ========== STUFE 3: OPTIMIZER ==========
+        echo -e "\n${GREEN}>>> STUFE 3/3: Optimiere Parameter für $symbol ($timeframe)...${NC}"
         
         if python3 "$OPTIMIZER" \
             --symbol "$symbol" \
@@ -159,29 +214,36 @@ for symbol in $SYMBOLS; do
             --min-return "$MIN_PNL" \
             --jobs "$N_CORES" \
             --save-config; then
-            OPTIMAL_CONFIGS+=("$symbol ($timeframe)")
-            echo -e "${GREEN}✓ Optimierung für $symbol ($timeframe) abgeschlossen${NC}"
+            OPTIMAL_CONFIGS+=("$symbol ($timeframe) - Genauigkeit: ${MODEL_ACCURACY}%")
+            echo -e "${GREEN}✓ Pipeline für $symbol ($timeframe) erfolgreich${NC}"
+            ((SUCCESSFUL_COUNT++))
         else
-            echo -e "${RED}✗ Fehler bei $symbol ($timeframe)${NC}"
+            echo -e "${RED}✗ Optimizer-Fehler bei $symbol ($timeframe)${NC}"
+            ((FAILED_COUNT++))
         fi
     done
 done
 
 # Zusammenfassung
 echo -e "\n${BLUE}======================================================="
-echo "   Optimierung abgeschlossen!"
+echo "   🏁 KBot 3-Stufen-Pipeline abgeschlossen!"
 echo -e "=======================================================${NC}\n"
 
+echo -e "${BLUE}Zusammenfassung:${NC}"
+echo -e "  ✓ Erfolgreich:    ${SUCCESSFUL_COUNT}"
+echo -e "  ✗ Fehlgeschlagen: ${FAILED_COUNT}"
+echo -e "  📊 Gesamt:        $((SUCCESSFUL_COUNT + FAILED_COUNT))"
+
 if [ ${#OPTIMAL_CONFIGS[@]} -gt 0 ]; then
-    echo -e "${GREEN}✓ Optimierte Strategien:${NC}"
+    echo -e "\n${GREEN}✓ Optimierte Strategien:${NC}"
     for config in "${OPTIMAL_CONFIGS[@]}"; do
         echo -e "  • $config"
     done
     echo -e "\n${YELLOW}Die optimalen Konfigurationen wurden in 'src/kbot/strategy/configs/' gespeichert.${NC}"
     echo -e "${YELLOW}Du kannst sie jetzt mit './show_results.sh' verwenden.${NC}"
 else
-    echo -e "${RED}❌ Keine erfolgreiche Optimierungen!${NC}"
+    echo -e "${RED}❌ Keine erfolgreiche Pipelines!${NC}"
     exit 1
 fi
 
-echo -e "\n${GREEN}✓ Pipeline abgeschlossen!${NC}"
+echo -e "\n${GREEN}✓ Alle Stufen abgeschlossen (Training → Threshold → Optimizer)!${NC}\n"

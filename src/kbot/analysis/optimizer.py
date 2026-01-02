@@ -125,14 +125,14 @@ def main():
 
         valid_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
         if not valid_trials: 
-            print(f"\n❌ Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe)}")
+            print(f"\n❌ Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe})")
             continue
 
         best_trial = max(valid_trials, key=lambda t: t.value)
         
         # Prüfe ob der beste Trial profitabel ist
         if best_trial.value is None or best_trial.value <= 0:
-            print(f"\n❌ Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe)}")
+            print(f"\n❌ Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe})")
             print(f"   (Beste Trial: {best_trial.value}% Gewinn)")
             continue
         

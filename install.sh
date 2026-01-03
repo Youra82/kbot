@@ -35,6 +35,7 @@ echo -e "\n${YELLOW}4/5: Aktiviere die virtuelle Umgebung und installiere die no
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install plotly
 echo -e "${GREEN}✔ Alle Python-Bibliotheken wurden erfolgreich installiert.${NC}"
 deactivate
 

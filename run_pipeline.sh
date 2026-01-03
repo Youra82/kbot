@@ -1,6 +1,6 @@
 #!/bin/bash
-# Sofortiger Abbruch bei schwerwiegenden Fehlern
-set -e
+# Robust, aber ohne hartes sofortiges Abbrechen (wir fangen Fehler selbst ab)
+set -o pipefail
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

@@ -88,13 +88,20 @@ if [ "$MODE" = "4" ]; then
     START_CAP=${START_CAP:-1000}
     read -p "Fenster für Kanäle (window) [Standard: 50]: " WINDOW
     WINDOW=${WINDOW:-50}
+    read -p "Charts an Telegram senden? (j/n) [Standard: j]: " SEND_TG
+    SEND_TG=${SEND_TG:-j}
 
     echo -e "\n${CYAN}Erzeuge interaktive Charts aus settings.json (aktive Strategien)...${NC}"
-    python3 src/kbot/analysis/interactive_status.py \
+    CMD=(python3 src/kbot/analysis/interactive_status.py \
         --start "$START_DATE" \
         --end "$END_DATE" \
         --start-capital "$START_CAP" \
-        --window "$WINDOW"
+        --window "$WINDOW")
+    if [[ "$SEND_TG" == "j" || "$SEND_TG" == "J" ]]; then
+        CMD+=(--send-telegram)
+    fi
+
+    "${CMD[@]}"
 
     echo -e "${CYAN}Fertig. Öffne die ausgegebene HTML-Datei im Browser oder VS Code für Zoom/Pane.${NC}"
     exit 0

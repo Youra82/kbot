@@ -14,6 +14,7 @@ from typing import List, Dict
 
 import pandas as pd
 import plotly.graph_objects as go
+import requests
 
 from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
 
@@ -123,12 +124,30 @@ def make_plot(symbol: str, timeframe: str, start: str, end: str, start_capital: 
     return out_path
 
 
+def send_document(bot_token: str, chat_id: str, file_path: Path, caption: str = "") -> bool:
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+    with open(file_path, "rb") as f:
+        files = {"document": (file_path.name, f)}
+        data = {"chat_id": chat_id, "caption": caption}
+        resp = requests.post(url, data=data, files=files, timeout=30)
+    if resp.status_code != 200:
+        print(f"❌ Telegram Upload fehlgeschlagen ({resp.status_code}): {resp.text}")
+        return False
+    j = resp.json()
+    if not j.get("ok"):
+        print(f"❌ Telegram API-Fehler: {j}")
+        return False
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="Interaktive Kanal-Charts aus settings.json erzeugen")
     parser.add_argument("--start", required=True, help="Startdatum YYYY-MM-DD")
     parser.add_argument("--end", required=True, help="Enddatum YYYY-MM-DD")
     parser.add_argument("--start-capital", type=float, default=1000.0)
     parser.add_argument("--window", type=int, default=50)
+    parser.add_argument("--send-telegram", action="store_true", help="Ergebnis-HTML an Telegram senden (secret.json notwendig)")
+    parser.add_argument("--caption-prefix", default="KBot Kanal-Chart", help="Caption-Prefix für Telegram")
     args = parser.parse_args()
 
     settings_path = PROJECT_ROOT / "settings.json"
@@ -156,6 +175,29 @@ def main():
         for p in outputs:
             print(f"  {p}")
         print("(HTML im Browser öffnen für Zoom/Pan)")
+
+        if args.send_telegram:
+            try:
+                secrets = json.load(open(PROJECT_ROOT / "secret.json", "r", encoding="utf-8"))
+                telegram = secrets.get("telegram", {})
+                bot_token = telegram.get("bot_token")
+                chat_id = telegram.get("chat_id")
+            except Exception as e:
+                print(f"❌ Konnte secret.json nicht lesen: {e}")
+                return
+
+            if not bot_token or not chat_id:
+                print("❌ Telegram bot_token oder chat_id fehlt in secret.json")
+                return
+
+            print("\nSende Charts an Telegram...")
+            for p in outputs:
+                caption = f"{args.caption_prefix}: {p.name}"
+                ok = send_document(bot_token, chat_id, p, caption)
+                if ok:
+                    print(f"✔ Gesendet: {p.name}")
+                else:
+                    print(f"❌ Fehlgeschlagen: {p.name}")
     else:
         print("Keine Charts erzeugt.")
 

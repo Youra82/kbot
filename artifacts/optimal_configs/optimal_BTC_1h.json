@@ -1,0 +1,19 @@
+{
+  "symbol": "BTC",
+  "timeframe": "1h",
+  "parameters": {
+    "window": 40,
+    "min_channel_width": 0.003,
+    "slope_threshold": 0.03,
+    "entry_threshold": 0.02,
+    "exit_threshold": 0.03
+  },
+  "performance": {
+    "total_return": 0.3124182797072024,
+    "win_rate": 40.0,
+    "num_trades": 5,
+    "max_drawdown": -0.3896610958649518,
+    "end_capital": 50.1562091398536
+  },
+  "timestamp": "2026-01-01T20:23:01.030392"
+}

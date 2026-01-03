@@ -1,27 +1,20 @@
 {
   "live_trading_settings": {
-    "use_auto_optimizer_results": false,
+    "use_auto_optimizer_results": true,
     "active_strategies": [
       {
-        "symbol": "ADA/USDT:USDT",
-        "timeframe": "4h",
+        "symbol": "ETH/USDT:USDT",
+        "timeframe": "6h",
         "use_macd_filter": false,
         "active": true,
-        "comment": "Bestes Modell: 64% Genauigkeit"
+        "comment": "Automatisch optimiert (ETHUSDTUSDT 6h)"
       },
       {
-        "symbol": "DOGE/USDT:USDT",
-        "timeframe": "4h",
+        "symbol": "XRP/USDT:USDT",
+        "timeframe": "6h",
         "use_macd_filter": false,
         "active": true,
-        "comment": "Solides Modell: 59% Genauigkeit"
-      },
-      {
-        "symbol": "BTC/USDT:USDT",
-        "timeframe": "4h",
-        "use_macd_filter": false,
-        "active": true,
-        "comment": "Stabil & liquid: 54% Genauigkeit"
+        "comment": "Automatisch optimiert (XRPUSDTUSDT 6h)"
       }
     ]
   }

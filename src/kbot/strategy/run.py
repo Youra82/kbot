@@ -52,19 +52,19 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Kanal-Erkennung über Pivot-Spitzen (von Spitze zu Spitze) ---
+# --- Kanal-Erkennung: genau ein Kanal zwischen letzter HH->HH und LL->LL ---
 def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, pivot_lookback=5):
     """
-    Erkennt Kanäle, indem jeweils die letzten beiden Pivot-Highs und Pivot-Lows
-    verbunden werden. Dadurch entstehen Linien tatsächlich von Spitze zu Spitze
-    statt einer Regression über alle Kerzen.
+    Baut pro Kerze genau einen Kanal, indem die letzten zwei Pivot-Hochs (HH)
+    verbunden werden und die letzten zwei Pivot-Tiefs (LL) verbunden werden.
+    Dadurch entsteht ein sauberer, einziger Kanal (keine überlappenden Linien).
 
     Args:
         df: OHLC DataFrame
-        window: Wie weit die Pivots in der Vergangenheit liegen dürfen (Kerzen)
-        min_channel_width: Minimale Kanal-Breite als % vom Preis
-        slope_threshold: Ungenutzt, bleibt für Kompatibilität bestehen
-        pivot_lookback: Anzahl Kerzen links/rechts zur Pivot-Bestätigung
+        window: maximale Alter der genutzten Pivots (Kerzen)
+        min_channel_width: minimale Breite als Anteil am Preis
+        slope_threshold: nur für Signatur-Kompatibilität
+        pivot_lookback: Kerzen links/rechts zur Pivot-Bestätigung
     """
     highs = df['high'].values
     lows = df['low'].values
@@ -88,10 +88,10 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         return start_val + slope * (target_idx - start_idx)
 
     for i in range(window, len(df)):
+        # Letzte zwei HH und LL vor aktueller Kerze
         ph_pos = np.searchsorted(pivot_high_idx, i, side='right')
         pl_pos = np.searchsorted(pivot_low_idx, i, side='right')
 
-        # Weniger als zwei valide Pivots -> kein Kanal
         if ph_pos < 2 or pl_pos < 2:
             channels.append({'high': np.nan, 'low': np.nan, 'type': 'none', 'index': df.index[i], 'width': 0.0, 'fit_quality': 0.0})
             continue
@@ -99,7 +99,7 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         h1_idx, h2_idx = pivot_high_idx[ph_pos - 2], pivot_high_idx[ph_pos - 1]
         l1_idx, l2_idx = pivot_low_idx[pl_pos - 2], pivot_low_idx[pl_pos - 1]
 
-        # Pivots müssen innerhalb des Fensters liegen, sonst sind sie zu alt
+        # Nur frische Pivots (innerhalb Fenster)
         if (i - h2_idx) > window or (i - l2_idx) > window:
             channels.append({'high': np.nan, 'low': np.nan, 'type': 'none', 'index': df.index[i], 'width': 0.0, 'fit_quality': 0.0})
             continue
@@ -112,24 +112,12 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         mid_val = (high_line + low_line) / 2
         channel_width = (high_line - low_line) / mid_val if mid_val > 0 else 0.0
 
-        # Abweichung der Pivots von ihren Linien als Qualitätsmaß
-        high_err = abs(highs[h1_idx] - line_val(h2_idx, highs[h2_idx], slope_high, h1_idx))
-        low_err = abs(lows[l1_idx] - line_val(l2_idx, lows[l2_idx], slope_low, l1_idx))
-        norm = max(mid_val, 1e-6)
-        fit_quality = 1 / (1 + (high_err + low_err) / norm)
+        # Qualitätsmaß: hier simpel, da Linie durch die Pivots exakt geht
+        fit_quality = 1.0 if channel_width > 0 else 0.0
 
         ctype = 'none'
-        if high_line > low_line and channel_width >= min_channel_width and fit_quality >= 0.25:
-            slope_diff = abs(slope_high - slope_low)
-            slope_scale = max(abs(slope_high), abs(slope_low), 1e-8)
-            slope_diff_ratio = slope_diff / slope_scale
-
-            if np.sign(slope_high) != np.sign(slope_low):
-                ctype = 'triangle'
-            elif slope_diff_ratio < 0.2:
-                ctype = 'parallel'
-            else:
-                ctype = 'wedge'
+        if high_line > low_line and channel_width >= min_channel_width:
+            ctype = 'parallel'  # einheitlicher Kanal-Typ für Plot/Backtest
 
         channels.append({
             'high': high_line,

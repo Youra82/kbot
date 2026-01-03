@@ -101,13 +101,13 @@ def make_plot(symbol: str, timeframe: str, start: str, end: str, start_capital: 
     if entry_x:
         fig.add_trace(go.Scatter(
             x=entry_x, y=entry_y, mode="markers",
-            marker=dict(color="#16a34a", symbol="triangle-up", size=9),
+            marker=dict(color="#16a34a", symbol="triangle-up", size=14, line=dict(width=1.2, color="#0f5132")),
             name="Entry"
         ))
     if exit_x:
         fig.add_trace(go.Scatter(
             x=exit_x, y=exit_y, mode="markers",
-            marker=dict(color="#dc2626", symbol="triangle-down", size=9),
+            marker=dict(color="#dc2626", symbol="triangle-down", size=14, line=dict(width=1.2, color="#7f1d1d")),
             name="Exit"
         ))
 

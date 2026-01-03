@@ -52,86 +52,132 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Kanal-Erkennung: Strahlen durch HH1->HH2 und LL1->LL2, Break -> neuer Kanal ---
-def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, pivot_lookback=5):
+# --- Adaptive Trend Finder: Logarithmische Regression mit Auto-Perioden-Selektion ---
+def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, dev_multiplier=2.0):
     """
-    Bildet genau einen aktiven Kanal aus den letzten zwei Pivot-Hochs (HH1->HH2)
-    und den letzten zwei Pivot-Tiefs (LL1->LL2). Die Linien werden als Strahlen
-    fortgeführt. Wird der Strahl oben/unten gebrochen, ist der Kanal für diese
-    Kerze ungültig; beim nächsten verfügbaren Pivot-Paar entsteht automatisch
-    ein neuer Kanal.
-
+    Implementiert den Adaptive Trend Finder Algorithmus:
+    - Berechnet logarithmische Regression über verschiedene Perioden (20-200)
+    - Wählt die Periode mit der höchsten Pearson-Korrelation
+    - Zeichnet einen Kanal basierend auf exp(log-Regression ± dev*stdDev)
+    
     Args:
         df: OHLC DataFrame
-        window: maximale Alter der genutzten Pivots (Kerzen)
-        min_channel_width: minimale Breite als Anteil am Preis
-        slope_threshold: Signatur-Kompatibilität
-        pivot_lookback: Kerzen links/rechts zur Pivot-Bestätigung
+        window: Maximum Periode (wird für Kompatibilität beibehalten, Standard: 200)
+        min_channel_width: minimale Breite (wird durch dev_multiplier ersetzt)
+        slope_threshold: ungenutzt (Kompatibilität)
+        dev_multiplier: Standard-Abweichung Multiplikator (Standard: 2.0)
     """
-    highs = df['high'].values
-    lows = df['low'].values
     closes = df['close'].values
+    n = len(df)
+    
+    # Perioden für Short-Term Channel (wie im TradingView Indikator)
+    periods = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    
+    def calc_log_regression(source, length, end_idx):
+        """Berechnet logarithmische Regression für gegebene Länge bis end_idx"""
+        if end_idx < length:
+            return None, None, None, None
+        
+        log_source = np.log(source[end_idx - length + 1:end_idx + 1])
+        x_vals = np.arange(1, length + 1)
+        
+        sum_x = x_vals.sum()
+        sum_xx = (x_vals * x_vals).sum()
+        sum_y = log_source.sum()
+        sum_yx = (x_vals * log_source).sum()
+        
+        # Berechne Steigung und Intercept
+        slope = (length * sum_yx - sum_x * sum_y) / (length * sum_xx - sum_x * sum_x)
+        average = sum_y / length
+        intercept = average - slope * sum_x / length + slope
+        
+        # Berechne Standardabweichung und Pearson R
+        sum_dev = 0.0
+        sum_dxx = 0.0
+        sum_dyy = 0.0
+        sum_dyx = 0.0
+        regres = intercept + slope * (length - 1) * 0.5
+        sum_slp = intercept
+        
+        for i in range(length):
+            lsrc = log_source[i]
+            dxt = lsrc - average
+            dyt = sum_slp - regres
+            residual = lsrc - sum_slp
+            sum_slp += slope
+            sum_dxx += dxt * dxt
+            sum_dyy += dyt * dyt
+            sum_dyx += dxt * dyt
+            sum_dev += residual * residual
+        
+        std_dev = np.sqrt(sum_dev / (length - 1)) if length > 1 else 0.0
+        divisor = sum_dxx * sum_dyy
+        pearson_r = sum_dyx / np.sqrt(divisor) if divisor > 0 else 0.0
+        
+        return slope, intercept, std_dev, abs(pearson_r)
+    
     channels = []
-
-    # Pivot-Erkennung (Swing High/Low)
-    pivot_high_mask = np.zeros(len(df), dtype=bool)
-    pivot_low_mask = np.zeros(len(df), dtype=bool)
-    for i in range(pivot_lookback, len(df) - pivot_lookback):
-        left = i - pivot_lookback
-        right = i + pivot_lookback + 1
-        if highs[i] >= highs[left:right].max():
-            pivot_high_mask[i] = True
-        if lows[i] <= lows[left:right].min():
-            pivot_low_mask[i] = True
-
-    pivot_high_idx = np.where(pivot_high_mask)[0]
-    pivot_low_idx = np.where(pivot_low_mask)[0]
-
-    def line_val(start_idx, start_val, slope, target_idx):
-        return start_val + slope * (target_idx - start_idx)
-
-    for i in range(window, len(df)):
-        # Letzte zwei HH und LL vor aktueller Kerze
-        ph_pos = np.searchsorted(pivot_high_idx, i, side='right')
-        pl_pos = np.searchsorted(pivot_low_idx, i, side='right')
-
-        if ph_pos < 2 or pl_pos < 2:
-            channels.append({'high': np.nan, 'low': np.nan, 'type': 'none', 'index': df.index[i], 'width': 0.0, 'fit_quality': 0.0})
+    
+    # Für jede Kerze: finde beste Periode und berechne Kanal
+    for i in range(n):
+        if i < periods[0]:  # Nicht genug Daten
+            channels.append({
+                'high': np.nan,
+                'low': np.nan,
+                'type': 'none',
+                'index': df.index[i],
+                'width': 0.0,
+                'fit_quality': 0.0
+            })
             continue
-
-        h1_idx, h2_idx = pivot_high_idx[ph_pos - 2], pivot_high_idx[ph_pos - 1]
-        l1_idx, l2_idx = pivot_low_idx[pl_pos - 2], pivot_low_idx[pl_pos - 1]
-
-        # Nur frische Pivots (innerhalb Fenster)
-        if (i - h2_idx) > window or (i - l2_idx) > window:
-            channels.append({'high': np.nan, 'low': np.nan, 'type': 'none', 'index': df.index[i], 'width': 0.0, 'fit_quality': 0.0})
+        
+        best_pearson = -1
+        best_slope = None
+        best_intercept = None
+        best_std_dev = None
+        best_period = None
+        
+        # Finde Periode mit höchster Korrelation
+        for period in periods:
+            if i >= period:
+                slope, intercept, std_dev, pearson_r = calc_log_regression(closes, period, i)
+                if pearson_r is not None and pearson_r > best_pearson:
+                    best_pearson = pearson_r
+                    best_slope = slope
+                    best_intercept = intercept
+                    best_std_dev = std_dev
+                    best_period = period
+        
+        if best_slope is None:
+            channels.append({
+                'high': np.nan,
+                'low': np.nan,
+                'type': 'none',
+                'index': df.index[i],
+                'width': 0.0,
+                'fit_quality': 0.0
+            })
             continue
-
-        slope_high = (highs[h2_idx] - highs[h1_idx]) / max((h2_idx - h1_idx), 1e-9)
-        slope_low = (lows[l2_idx] - lows[l1_idx]) / max((l2_idx - l1_idx), 1e-9)
-
-        high_line = line_val(h2_idx, highs[h2_idx], slope_high, i)
-        low_line = line_val(l2_idx, lows[l2_idx], slope_low, i)
-        mid_val = (high_line + low_line) / 2
-        channel_width = (high_line - low_line) / mid_val if mid_val > 0 else 0.0
-
-        price = closes[i]
-        broke_top = price > high_line
-        broke_bottom = price < low_line
-
-        if high_line <= low_line or channel_width < min_channel_width or broke_top or broke_bottom:
-            channels.append({'high': high_line, 'low': low_line, 'type': 'none', 'index': df.index[i], 'width': channel_width, 'fit_quality': 0.0})
-            continue
-
+        
+        # Berechne Kanal-Werte für aktuelle Kerze
+        # Mittellinie: exp(intercept + slope * 0) = exp(intercept)
+        mid_price = np.exp(best_intercept)
+        
+        # Obere/Untere Linie: mid * exp(±dev_multiplier * std_dev)
+        high_line = mid_price * np.exp(dev_multiplier * best_std_dev)
+        low_line = mid_price / np.exp(dev_multiplier * best_std_dev)
+        
+        channel_width = (high_line - low_line) / mid_price if mid_price > 0 else 0.0
+        
         channels.append({
             'high': high_line,
             'low': low_line,
             'type': 'parallel',
             'index': df.index[i],
             'width': channel_width,
-            'fit_quality': 1.0
+            'fit_quality': float(best_pearson)
         })
-
+    
     ch_df = pd.DataFrame(channels)
     ch_df.index = ch_df['index']
     return ch_df[['high', 'low', 'type', 'width', 'fit_quality']]

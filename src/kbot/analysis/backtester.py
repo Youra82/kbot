@@ -8,10 +8,10 @@ import sys
 import ta # Import für ATR/ADX benötigt
 import math # Import für math.ceil
 
-# Import für Channel-Erkennung
+# Import für Fibonacci Bollinger Bands
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
-from kbot.strategy.run import detect_channels
+from kbot.strategy.run import fibonacci_bollinger_bands, fib_backtest
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
@@ -73,20 +73,15 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
     if not timeframe:
         raise ValueError("Backtester benötigt ein 'timeframe' Argument für die Daten-Vorbereitung!")
 
-    # Channel-Parameter aus params (asymmetrisch)
-    dev_multiplier_upper = params.get('dev_multiplier_upper', 2.0)
-    dev_multiplier_lower = params.get('dev_multiplier_lower', 2.0)
-    entry_threshold = params.get('entry_threshold', 0.015)
-    exit_threshold = params.get('exit_threshold', 0.025)
+    # Fibonacci Bollinger Bands Parameter
+    fib_length = params.get('fib_length', 200)
+    fib_mult = params.get('fib_mult', 3.0)
 
     data_with_features = create_ann_features(data.copy())
     data_with_features.dropna(inplace=True)
     
-    # --- Berechne Adaptive Trend Channels mit asymmetrischen Multiplikatoren ---
-    channels = detect_channels(data.copy(), window=50, dev_multiplier_upper=dev_multiplier_upper, dev_multiplier_lower=dev_multiplier_lower)
-    # Merge channels in data_with_features
-    data_with_features = data_with_features.join(channels[['high', 'low', 'type']], how='left', rsuffix='_channel')
-    data_with_features.rename(columns={'high_channel': 'channel_high', 'low_channel': 'channel_low', 'type': 'channel_type'}, inplace=True)
+    # --- Berechne Fibonacci Bollinger Bands ---
+    bands = fibonacci_bollinger_bands(data.copy(), length=fib_length, mult=fib_mult)
     # ---
     
     # --- NEU: SuperTrend Richtung hinzufügen (ST-Richtung der VORHERIGEN Kerze) ---
@@ -94,7 +89,7 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
     data_with_features.dropna(inplace=True)
     # ---
 
-    if data_with_features.empty:
+    if data_with_features.empty or bands.empty:
         return {"total_pnl_pct": 0, "trades_count": 0, "win_rate": 0, "max_drawdown_pct": 1.0, "end_capital": start_capital}
 
     # *** ERWEITERTE FEATURE-LISTE FÜR BACKTEST ***
@@ -248,17 +243,18 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
                         if current['atr_normalized'] > avg_atr * 2.0:
                             trade_allowed = False
                     
-                    # Channel Entry-Filter: Nur Long nahe unterem Rand, nur Short nahe oberem Rand
-                    channel_high = current.get('channel_high', np.nan)
-                    channel_low = current.get('channel_low', np.nan)
-                    channel_type = current.get('channel_type', 'none')
-                    
-                    if not pd.isna(channel_high) and not pd.isna(channel_low) and channel_type != 'none':
+                    # Fibonacci Bands Entry-Filter: Nur Long nahe lower_6, nur Short nahe upper_6
+                    if not bands.empty and i < len(bands):
+                        band_row = bands.iloc[i]
+                        lower_6 = band_row.get('lower_6', np.nan)
+                        upper_6 = band_row.get('upper_6', np.nan)
                         close_price = current['close']
-                        if side == 'long' and close_price > channel_low * (1 + entry_threshold):
-                            trade_allowed = False  # Long nur nahe unterem Rand
-                        elif side == 'short' and close_price < channel_high * (1 - entry_threshold):
-                            trade_allowed = False  # Short nur nahe oberem Rand
+                        
+                        if not pd.isna(lower_6) and not pd.isna(upper_6):
+                            if side == 'long' and close_price > lower_6 * 1.005:  # 0.5% tolerance
+                                trade_allowed = False  # Long nur nahe lower_6
+                            elif side == 'short' and close_price < upper_6 * 0.995:  # 0.5% tolerance
+                                trade_allowed = False  # Short nur nahe upper_6
                 # *** ENDE NEUE FILTER ***
 
                 if side and trade_allowed:

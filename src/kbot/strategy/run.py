@@ -52,184 +52,81 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Adaptive Trend Finder: Logarithmische Regression mit asymmetrischen Kanälen ---
-def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, dev_multiplier=2.0, dev_multiplier_upper=None, dev_multiplier_lower=None):
+# --- Fibonacci Bollinger Bands ---
+def fibonacci_bollinger_bands(df, length=200, mult=3.0):
     """
-    Adaptive Trend Finder mit asymmetrischen Kanälen:
-    - Logarithmische Regression über verschiedene Perioden (20-200)
-    - Wählt die Periode mit der höchsten Pearson-Korrelation
-    - Separate dev_multiplier für Ober- und Unterkante (asymmetrisch)
+    Fibonacci Bollinger Bands Strategy:
+    - VWMA als Basis
+    - 6 Fibonacci-Level oben und unten (0.236, 0.382, 0.5, 0.618, 0.764, 1.0)
     
     Args:
         df: OHLC DataFrame
-        window: Maximum Periode (Standard: 200)
-        dev_multiplier: Default-Wert (wenn upper/lower nicht gesetzt)
-        dev_multiplier_upper: Multiplikator für Obergrenze (für Upswings)
-        dev_multiplier_lower: Multiplikator für Untergrenze (für Downswings)
+        length: VWMA-Periode (Standard: 200)
+        mult: Standardabweichungs-Multiplikator (Standard: 3.0)
+    
+    Returns:
+        DataFrame mit Bändern: upper_1-6, lower_1-6, basis
     """
-    # Fallback: Wenn nicht asymmetrisch definiert, nutze symmetrisch
-    if dev_multiplier_upper is None:
-        dev_multiplier_upper = dev_multiplier
-    if dev_multiplier_lower is None:
-        dev_multiplier_lower = dev_multiplier
+    # Berechne VWMA (Volume Weighted Moving Average)
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    vwma = (typical_price * df['volume']).rolling(window=length).sum() / df['volume'].rolling(window=length).sum()
     
-    closes = df['close'].values
-    n = len(df)
+    # Berechne Standardabweichung
+    src = (df['high'] + df['low'] + df['close']) / 3  # hlc3
+    stdev = src.rolling(window=length).std()
     
-    # Perioden für Short-Term Channel (wie im TradingView Indikator)
-    periods = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
+    # Basis und Deviation
+    basis = vwma
+    dev = mult * stdev
     
-    def calc_log_regression(source, length, end_idx):
-        """
-        TradingView Adaptive Trend Finder Regression
-        """
-        if end_idx < length - 1:
-            return None, None, None, None
-        
-        window_data = source[end_idx - length + 1:end_idx + 1]
-        log_source = np.log(window_data)
-        
-        sum_x = 0.0
-        sum_xx = 0.0
-        sum_yx = 0.0
-        sum_y = 0.0
-        
-        for i in range(1, length + 1):
-            lsrc = log_source[i - 1]
-            sum_x += i
-            sum_xx += i * i
-            sum_yx += i * lsrc
-            sum_y += lsrc
-        
-        slope = (length * sum_yx - sum_x * sum_y) / (length * sum_xx - sum_x * sum_x)
-        average = sum_y / length
-        intercept = average - slope * sum_x / length + slope
-        
-        period_1 = length - 1
-        sum_dev = 0.0
-        sum_dxx = 0.0
-        sum_dyy = 0.0
-        sum_dyx = 0.0
-        regres = intercept + slope * period_1 * 0.5
-        sum_slp = intercept
-        
-        for i in range(length):
-            lsrc = log_source[i]
-            dxt = lsrc - average
-            dyt = sum_slp - regres
-            lsrc_residual = lsrc - sum_slp
-            sum_slp += slope
-            sum_dxx += dxt * dxt
-            sum_dyy += dyt * dyt
-            sum_dyx += dxt * dyt
-            sum_dev += lsrc_residual * lsrc_residual
-        
-        std_dev = np.sqrt(sum_dev / period_1) if period_1 > 0 else 0.0
-        divisor = sum_dxx * sum_dyy
-        pearson_r = sum_dyx / np.sqrt(divisor) if divisor > 0 else 0.0
-        
-        return slope, intercept, std_dev, abs(pearson_r)
+    # Fibonacci-Level
+    fib_levels = [0.236, 0.382, 0.5, 0.618, 0.764, 1.0]
     
-    channels = []
+    bands = pd.DataFrame(index=df.index)
+    bands['basis'] = basis
+    bands['dev'] = dev
     
-    for i in range(n):
-        if i < periods[0]:
-            channels.append({
-                'high': np.nan,
-                'low': np.nan,
-                'type': 'none',
-                'index': df.index[i],
-                'width': 0.0,
-                'fit_quality': 0.0
-            })
-            continue
-        
-        best_pearson = -1
-        best_slope = None
-        best_intercept = None
-        best_std_dev = None
-        best_period = None
-        
-        for period in periods:
-            if i >= period:
-                slope, intercept, std_dev, pearson_r = calc_log_regression(closes, period, i)
-                if pearson_r is not None and pearson_r > best_pearson:
-                    best_pearson = pearson_r
-                    best_slope = slope
-                    best_intercept = intercept
-                    best_std_dev = std_dev
-                    best_period = period
-        
-        if best_slope is None:
-            channels.append({
-                'high': np.nan,
-                'low': np.nan,
-                'type': 'none',
-                'index': df.index[i],
-                'width': 0.0,
-                'fit_quality': 0.0
-            })
-            continue
-        
-        # Mittelpunkt aus Regression
-        current_log_price = best_intercept + best_slope * (best_period - 1)
-        mid_price = np.exp(current_log_price)
-        
-        # ASYMMETRISCHE Kanäle: separate Multiplikatoren für Ober- und Unterkante
-        high_line = mid_price * np.exp(dev_multiplier_upper * best_std_dev)
-        low_line = mid_price / np.exp(dev_multiplier_lower * best_std_dev)
-        
-        channel_width = (high_line - low_line) / mid_price if mid_price > 0 else 0.0
-        
-        channels.append({
-            'high': high_line,
-            'low': low_line,
-            'type': 'parallel',
-            'index': df.index[i],
-            'width': channel_width,
-            'fit_quality': float(best_pearson)
-        })
+    for i, fib in enumerate(fib_levels, start=1):
+        bands[f'upper_{i}'] = basis + (fib * dev)
+        bands[f'lower_{i}'] = basis - (fib * dev)
     
-    ch_df = pd.DataFrame(channels)
-    ch_df.index = ch_df['index']
-    return ch_df[['high', 'low', 'type', 'width', 'fit_quality']]
+    bands['type'] = 'fibonacci'
+    
+    return bands[['basis', 'dev', 'upper_1', 'upper_2', 'upper_3', 'upper_4', 'upper_5', 'upper_6',
+                  'lower_1', 'lower_2', 'lower_3', 'lower_4', 'lower_5', 'lower_6', 'type']]
 
-# --- Kanal-Trading-Backtest (OPTIMIERT) ---
+# --- Fibonacci Bollinger Bands Backtest ---
 
-def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, exit_threshold=0.025):
+def fib_backtest(df, bands, start_capital=1000, entry_level='lower_6', exit_level='upper_6'):
     """
-    Optimierter Kanal-basierter Backtest mit Long & Short Trading.
+    Fibonacci Bollinger Bands Backtest mit Long & Short Trading.
     
     Args:
         df: OHLC DataFrame
-        channels: Kanal-Daten von detect_channels()
+        bands: Fibonacci Bands von fibonacci_bollinger_bands()
         start_capital: Startkapital
-        entry_threshold: Einstiegs-Schwellenwert (% vom Kanal-Rand)
-        exit_threshold: Ausstiegs-Schwellenwert (% vom Kanal-Rand)
+        entry_level: Level für Entry (z.B. 'lower_6' für Long, 'upper_6' für Short)
+        exit_level: Level für Exit
     """
     capital = start_capital
     position = 0  # 0: keine Position, 1: long, -1: short
     entry_price = 0
     entry_idx = 0
     trades = []
-    ch_idx = channels.index
+    bands_idx = bands.index
     equity_curve = [capital]
     
-    for i in range(1, len(channels)):
-        price = df.loc[ch_idx[i], 'close']
-        high = channels['high'].iloc[i]
-        low = channels['low'].iloc[i]
-        ctype = channels['type'].iloc[i]
-        fit_quality = channels['fit_quality'].iloc[i]
-        date = ch_idx[i]
+    for i in range(1, len(bands)):
+        price = df.loc[bands_idx[i], 'close']
+        basis = bands['basis'].iloc[i]
+        date = bands_idx[i]
         
-        # Nur bei Kanälen mit guter Fit-Qualität handeln
-        if ctype == 'none' or fit_quality < 0.4:
+        if pd.isna(basis):
             continue
         
         # --- LONG TRADES ---
-        # EINSTIEG LONG: Preis nähert sich dem unteren Kanalrand
-        if position == 0 and price <= low * (1 + entry_threshold):
+        # EINSTIEG LONG: Preis berührt lower_6 (unterste Fib-Linie)
+        if position == 0 and price <= bands['lower_6'].iloc[i]:
             position = 1
             entry_price = price
             entry_idx = i
@@ -238,11 +135,11 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
                 'side': 'long',
                 'date': date,
                 'price': price,
-                'kanaltyp': ctype
+                'level': 'lower_6'
             })
         
-        # AUSSTIEG LONG 1: Preis erreicht oberen Kanalrand
-        elif position == 1 and price >= high * (1 - exit_threshold):
+        # AUSSTIEG LONG: Preis erreicht upper_6
+        elif position == 1 and price >= bands['upper_6'].iloc[i]:
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
             trades.append({
@@ -252,31 +149,13 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
                 'price': price,
                 'pnl': pnl,
                 'capital': capital,
-                'kanaltyp': ctype
+                'level': 'upper_6'
             })
             equity_curve.append(capital)
             position = 0
-            entry_idx = 0
         
-        # AUSSTIEG LONG 2: Zu lange in Position (> 10 Kerzen) ohne Gewinn
-        elif position == 1 and (i - entry_idx) > 10 and price < entry_price * 1.002:
-            pnl = (price - entry_price) / entry_price * capital
-            capital += pnl
-            trades.append({
-                'type': 'SELL (T/O)',
-                'side': 'long',
-                'date': date,
-                'price': price,
-                'pnl': pnl,
-                'capital': capital,
-                'kanaltyp': ctype
-            })
-            equity_curve.append(capital)
-            position = 0
-            entry_idx = 0
-        
-        # STOP LOSS LONG: Wenn Preis zu stark fällt (-3%)
-        elif position == 1 and price < entry_price * 0.97:
+        # STOP LOSS LONG: Price fällt unter lower_1
+        elif position == 1 and price < bands['lower_1'].iloc[i]:
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
             trades.append({
@@ -286,15 +165,14 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
                 'price': price,
                 'pnl': pnl,
                 'capital': capital,
-                'kanaltyp': ctype
+                'level': 'lower_1'
             })
             equity_curve.append(capital)
             position = 0
-            entry_idx = 0
         
         # --- SHORT TRADES ---
-        # EINSTIEG SHORT: Preis nähert sich dem oberen Kanalrand
-        elif position == 0 and price >= high * (1 - entry_threshold):
+        # EINSTIEG SHORT: Preis berührt upper_6 (oberste Fib-Linie)
+        elif position == 0 and price >= bands['upper_6'].iloc[i]:
             position = -1
             entry_price = price
             entry_idx = i
@@ -303,11 +181,11 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
                 'side': 'short',
                 'date': date,
                 'price': price,
-                'kanaltyp': ctype
+                'level': 'upper_6'
             })
         
-        # AUSSTIEG SHORT 1: Preis erreicht unteren Kanalrand
-        elif position == -1 and price <= low * (1 + exit_threshold):
+        # AUSSTIEG SHORT: Preis erreicht lower_6
+        elif position == -1 and price <= bands['lower_6'].iloc[i]:
             pnl = (entry_price - price) / entry_price * capital
             capital += pnl
             trades.append({
@@ -317,31 +195,13 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
                 'price': price,
                 'pnl': pnl,
                 'capital': capital,
-                'kanaltyp': ctype
+                'level': 'lower_6'
             })
             equity_curve.append(capital)
             position = 0
-            entry_idx = 0
         
-        # AUSSTIEG SHORT 2: Zu lange in Position (> 10 Kerzen) ohne Gewinn
-        elif position == -1 and (i - entry_idx) > 10 and price > entry_price * 0.998:
-            pnl = (entry_price - price) / entry_price * capital
-            capital += pnl
-            trades.append({
-                'type': 'BUY (T/O)',
-                'side': 'short',
-                'date': date,
-                'price': price,
-                'pnl': pnl,
-                'capital': capital,
-                'kanaltyp': ctype
-            })
-            equity_curve.append(capital)
-            position = 0
-            entry_idx = 0
-        
-        # STOP LOSS SHORT: Wenn Preis zu stark steigt (+3%)
-        elif position == -1 and price > entry_price * 1.03:
+        # STOP LOSS SHORT: Price steigt über upper_1
+        elif position == -1 and price > bands['upper_1'].iloc[i]:
             pnl = (entry_price - price) / entry_price * capital
             capital += pnl
             trades.append({
@@ -351,17 +211,15 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
                 'price': price,
                 'pnl': pnl,
                 'capital': capital,
-                'kanaltyp': ctype
+                'level': 'upper_1'
             })
             equity_curve.append(capital)
             position = 0
-            entry_idx = 0
     
     # Offene Position am Ende schließen
-    if position == 1 and len(ch_idx) > 0:
-        price = df.loc[ch_idx[-1], 'close']
-        date = ch_idx[-1]
-        ctype = channels['type'].iloc[-1]
+    if position == 1 and len(bands_idx) > 0:
+        price = df.loc[bands_idx[-1], 'close']
+        date = bands_idx[-1]
         pnl = (price - entry_price) / entry_price * capital
         capital += pnl
         trades.append({
@@ -370,14 +228,12 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
             'date': date,
             'price': price,
             'pnl': pnl,
-            'capital': capital,
-            'kanaltyp': ctype
+            'capital': capital
         })
         equity_curve.append(capital)
-    elif position == -1 and len(ch_idx) > 0:
-        price = df.loc[ch_idx[-1], 'close']
-        date = ch_idx[-1]
-        ctype = channels['type'].iloc[-1]
+    elif position == -1 and len(bands_idx) > 0:
+        price = df.loc[bands_idx[-1], 'close']
+        date = bands_idx[-1]
         pnl = (entry_price - price) / entry_price * capital
         capital += pnl
         trades.append({
@@ -386,23 +242,23 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
             'date': date,
             'price': price,
             'pnl': pnl,
-            'capital': capital,
-            'kanaltyp': ctype
+            'capital': capital
         })
         equity_curve.append(capital)
+    
     total_return = (capital - start_capital) / start_capital * 100
-    num_trades = len([t for t in trades if t['type']=='SELL'])
+    num_trades = len([t for t in trades if t['type'].startswith(('SELL', 'BUY'))])
     win_trades = [t for t in trades if t.get('pnl',0)>0]
     win_rate = len(win_trades) / num_trades * 100 if num_trades else 0
+    
     # Maximaler Drawdown berechnen
     eq = np.array(equity_curve)
-    if len(eq) > 1:
-        peak = np.maximum.accumulate(eq)
-        dd = (eq - peak) / peak
-        max_dd = dd.min() * 100  # in Prozent
-    else:
-        max_dd = 0.0
-    return capital, total_return, num_trades, win_rate, trades, max_dd
+    running_max = np.maximum.accumulate(eq)
+    drawdown = (eq - running_max) / running_max * 100
+    max_drawdown = np.min(drawdown) if len(drawdown) > 0 else 0.0
+    
+    return capital, total_return, num_trades, win_rate, trades, abs(max_drawdown)
+
 
 
 def main():
@@ -430,8 +286,8 @@ def main():
         print("Nicht genügend Kursdaten für Backtest.")
         sys.exit(1)
 
-    channels = detect_channels(df, window=50)
-    capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(df, channels, start_capital=args.start_capital)
+    bands = fibonacci_bollinger_bands(df, length=200, mult=3.0)
+    capital, total_return, num_trades, win_rate, trades, max_dd = fib_backtest(df, bands, start_capital=args.start_capital)
 
     print("Ergebnisse:")
     print(f"  Endkapital:   {capital:.2f} USD")
@@ -441,15 +297,7 @@ def main():
     print(f"  Max. Drawdown: {max_dd:.2f} %\n")
 
     if trades:
-        # Zähle wie oft jeder Kanaltyp verwendet wurde
-        from collections import Counter
-        kanaltypen = [t.get('kanaltyp','unbekannt') for t in trades if t.get('kanaltyp')]
-        if kanaltypen:
-            print("Verwendete Kanaltypen:")
-            for ktyp, count in Counter(kanaltypen).items():
-                print(f"  {ktyp}: {count}x")
-        else:
-            print("Keine Kanaltypen in Trades gefunden.")
+        print(f"Gesamttrades: {len(trades)}")
     else:
         print("Keine Trades im Zeitraum.")
 

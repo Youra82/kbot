@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
 
-from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
+from kbot.strategy.run import load_ohlcv, fibonacci_bollinger_bands, fib_backtest
 
 
 def load_optimal_config(symbol, timeframe):
@@ -91,33 +91,23 @@ def run_single_backtest(symbol, timeframe, start_date, end_date, start_capital, 
         
         if optimal_params and use_optimal:
             print(f"  ℹ Nutze optimierte Parameter aus src/kbot/strategy/configs/")
-            channels = detect_channels(
+            bands = fibonacci_bollinger_bands(
                 df, 
-                window=optimal_params.get('window', 50),
-                min_channel_width=optimal_params.get('min_channel_width', 0.002),
-                slope_threshold=optimal_params.get('slope_threshold', 0.02),
-                dev_multiplier=optimal_params.get('dev_multiplier', 2.0)
+                length=optimal_params.get('fib_length', 200),
+                mult=optimal_params.get('fib_mult', 3.0)
             )
             
-            end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
+            end_capital, total_return, num_trades, win_rate, trades, max_dd = fib_backtest(
                 df, 
-                channels, 
-                start_capital=start_capital,
-                entry_threshold=optimal_params.get('entry_threshold', 0.015),
-                exit_threshold=optimal_params.get('exit_threshold', 0.025)
+                bands, 
+                start_capital=start_capital
             )
         else:
             # Verwende Standard-Parameter
-            channels = detect_channels(
-                df, 
-                window=50,
-                min_channel_width=0.002,
-                slope_threshold=0.02,
-                dev_multiplier=2.0
-            )
+            bands = fibonacci_bollinger_bands(df, length=200, mult=3.0)
             
-            end_capital, total_return, num_trades, win_rate, trades, max_dd = channel_backtest(
-                df, channels, start_capital=start_capital
+            end_capital, total_return, num_trades, win_rate, trades, max_dd = fib_backtest(
+                df, bands, start_capital=start_capital
             )
         
         # Ergebnisse anzeigen

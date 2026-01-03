@@ -45,11 +45,9 @@ def objective(trial, symbol):
         # Trailing Stop Parameter
         'trailing_stop_activation_rr': trial.suggest_float('trailing_stop_activation_rr', 1.0, 4.0),
         'trailing_stop_callback_rate_pct': trial.suggest_float('trailing_stop_callback_rate_pct', 0.5, 3.0),
-        # Channel Trading Parameter (ASYMMETRISCH: separate Multiplikatoren für Up/Down)
-        'dev_multiplier_upper': trial.suggest_float('dev_multiplier_upper', 1.5, 3.5),  # Für Upswings
-        'dev_multiplier_lower': trial.suggest_float('dev_multiplier_lower', 1.5, 3.5),  # Für Downswings
-        'entry_threshold': 0.015,  # 1.5% Toleranz für Entry nahe Kanal-Kanten
-        'exit_threshold': 0.025   # 2.5% Toleranz für Exit
+        # Fibonacci Bollinger Bands Parameter
+        'fib_length': trial.suggest_int('fib_length', 100, 300),
+        'fib_mult': trial.suggest_float('fib_mult', 2.0, 4.5)
     }
     # --- ENDE KORRIGIERT ---
 
@@ -150,15 +148,13 @@ def main():
 
         behavior_config = {"use_longs": True, "use_shorts": True}
 
-        # --- KORRIGIERT: Speichere ATR-basierte Parameter (anstelle des alten initial_sl_pct) ---
+        # --- Speichere Fibonacci Bollinger Bands Parameter ---
         config_output = {
             "market": {"symbol": symbol, "timeframe": timeframe},
             "strategy": {
                 "prediction_threshold": FIXED_THRESHOLD,
-                "dev_multiplier_upper": round(best_params['dev_multiplier_upper'], 2),  # Asymmetrisch: Upswings
-                "dev_multiplier_lower": round(best_params['dev_multiplier_lower'], 2),  # Asymmetrisch: Downswings
-                "entry_threshold": 0.015,  # 1.5%
-                "exit_threshold": 0.025   # 2.5%
+                "fib_length": best_params['fib_length'],
+                "fib_mult": round(best_params['fib_mult'], 2)
             },
             "risk": {
                 "margin_mode": "isolated",
@@ -172,7 +168,7 @@ def main():
             },
             "behavior": behavior_config
         }
-        # --- ENDE KORRIGIERT ---
+        # --- ENDE ---
         with open(config_output_path, 'w') as f: json.dump(config_output, f, indent=4)
         print(f"\n✓ Profitable Konfiguration gespeichert: {config_output_path}")
 

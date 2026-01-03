@@ -20,8 +20,8 @@ import requests
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
-OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "channel_plots"
+from kbot.strategy.run import load_ohlcv, fibonacci_bollinger_bands, fib_backtest
+OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "fib_plots"
 
 
 def load_config_strategies(config_dir: Path) -> List[Dict]:
@@ -50,16 +50,18 @@ def make_plot(symbol: str, timeframe: str, start: str, end: str, start_capital: 
     if df.empty or len(df) < window + 5:
         raise RuntimeError(f"Zu wenige Daten für {symbol} {timeframe}.")
 
-    channels = detect_channels(df, window=window)
-    final_capital, total_return, _, _, trades, max_dd = channel_backtest(
-        df, channels, start_capital=start_capital
+    bands = fibonacci_bollinger_bands(df, length=window, mult=3.0)
+    final_capital, total_return, _, _, trades, max_dd = fib_backtest(
+        df, bands, start_capital=start_capital
     )
 
-    # Slice df auf Kanalindex, damit Längen übereinstimmen
-    plot_df = df.loc[channels.index].copy()
-    plot_df["channel_high"] = channels["high"].values
-    plot_df["channel_low"] = channels["low"].values
-    plot_df["channel_type"] = channels["type"].values
+    # Slice df auf Bands-Index, damit Längen übereinstimmen
+    plot_df = df.loc[bands.index].copy()
+    plot_df["upper_6"] = bands["upper_6"].values
+    plot_df["upper_1"] = bands["upper_1"].values
+    plot_df["lower_6"] = bands["lower_6"].values
+    plot_df["lower_1"] = bands["lower_1"].values
+    plot_df["basis"] = bands["basis"].values
 
     fig = go.Figure()
 
@@ -72,25 +74,32 @@ def make_plot(symbol: str, timeframe: str, start: str, end: str, start_capital: 
         showlegend=True
     ))
 
-    type_colors = {
-        "parallel": "#22c55e",
-        "wedge": "#f97316",
-        "triangle": "#8b5cf6",
-        "none": "#6b7280"
-    }
-    for ctype, color in type_colors.items():
-        mask = plot_df["channel_type"] == ctype
-        if mask.any():
-            fig.add_trace(go.Scatter(
-                x=plot_df.index[mask], y=plot_df.loc[mask, "channel_high"],
-                mode="lines", line=dict(color=color, width=1.2),
-                name=f"High {ctype}", showlegend=True
-            ))
-            fig.add_trace(go.Scatter(
-                x=plot_df.index[mask], y=plot_df.loc[mask, "channel_low"],
-                mode="lines", line=dict(color=color, width=1.2, dash="dash"),
-                name=f"Low {ctype}", showlegend=True
-            ))
+    # Fibonacci Bollinger Bands Plotting
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, y=plot_df["basis"],
+        mode="lines", line=dict(color="#0ea5e9", width=1.2),
+        name="VWMA Basis", showlegend=True
+    ))
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, y=plot_df["upper_1"],
+        mode="lines", line=dict(color="#facc15", width=1.0, dash="dash"),
+        name="Upper Fib 1", showlegend=True
+    ))
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, y=plot_df["lower_1"],
+        mode="lines", line=dict(color="#facc15", width=1.0, dash="dash"),
+        name="Lower Fib 1", showlegend=True
+    ))
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, y=plot_df["upper_6"],
+        mode="lines", line=dict(color="#ef4444", width=1.2),
+        name="Upper Fib 6", showlegend=True
+    ))
+    fig.add_trace(go.Scatter(
+        x=plot_df.index, y=plot_df["lower_6"],
+        mode="lines", line=dict(color="#22c55e", width=1.2),
+        name="Lower Fib 6", showlegend=True
+    ))
 
     # Trades
     entry_long_x, entry_long_y, entry_short_x, entry_short_y = [], [], [], []

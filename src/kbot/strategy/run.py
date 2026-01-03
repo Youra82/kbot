@@ -75,56 +75,56 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
     
     def calc_log_regression(source, length, end_idx):
         """
-        Berechnet logarithmische Regression für gegebene Länge bis end_idx.
-        Wichtig: x-Werte laufen RÜCKWÄRTS wie im TradingView Code:
-        - x=1 entspricht der NEUESTEN Kerze (end_idx)
-        - x=length entspricht der ÄLTESTEN Kerze (end_idx - length + 1)
+        Berechnet logarithmische Regression genau nach TradingView Adaptive Trend Finder.
+        Die Regression ordnet x-Werte rückwärts zu: x=1 für neueste, x=length für älteste Kerze.
         """
         if end_idx < length - 1:
             return None, None, None, None
         
-        # Log-Preise von alt nach neu
-        log_source = np.log(source[end_idx - length + 1:end_idx + 1])
+        # Slice von ältester bis neuester Kerze
+        window_data = source[end_idx - length + 1:end_idx + 1]
         
-        # Summenwerte wie im TradingView Code
         sum_x = 0.0
         sum_xx = 0.0
         sum_yx = 0.0
         sum_y = 0.0
         
-        # x läuft von 1 bis length, aber y läuft rückwärts (von neu nach alt)
+        # TradingView Loop 1: x=1..length, logSource[i-1] mit i=1..length
+        # Das bedeutet: x=1 → neueste Kerze (index -1 bzw. end des Arrays)
+        #              x=length → älteste Kerze (index 0)
         for i in range(1, length + 1):
-            lsrc = log_source[length - i]  # Rückwärts: neueste zuerst
+            log_price = np.log(window_data[length - i])  # Rückwärts: length-1=neueste, 0=älteste
             sum_x += i
             sum_xx += i * i
-            sum_yx += i * lsrc
-            sum_y += lsrc
+            sum_yx += i * log_price
+            sum_y += log_price
         
-        # Berechne Steigung und Intercept
+        # Linear regression: y = slope * x + intercept (in log-space)
         slope = (length * sum_yx - sum_x * sum_y) / (length * sum_xx - sum_x * sum_x)
         average = sum_y / length
         intercept = average - slope * sum_x / length + slope
         
-        # Berechne Standardabweichung und Pearson R
+        # Standardabweichung und Pearson R wie im TradingView Code
+        period_1 = length - 1
         sum_dev = 0.0
         sum_dxx = 0.0
         sum_dyy = 0.0
         sum_dyx = 0.0
-        regres = intercept + slope * (length - 1) * 0.5
+        regres = intercept + slope * period_1 * 0.5
         sum_slp = intercept
         
         for i in range(length):
-            lsrc = log_source[i]
-            dxt = lsrc - average
+            log_price = np.log(window_data[i])
+            dxt = log_price - average
             dyt = sum_slp - regres
-            residual = lsrc - sum_slp
+            residual = log_price - sum_slp
             sum_slp += slope
             sum_dxx += dxt * dxt
             sum_dyy += dyt * dyt
             sum_dyx += dxt * dyt
             sum_dev += residual * residual
         
-        std_dev = np.sqrt(sum_dev / (length - 1)) if length > 1 else 0.0
+        std_dev = np.sqrt(sum_dev / period_1) if period_1 > 0 else 0.0
         divisor = sum_dxx * sum_dyy
         pearson_r = sum_dyx / np.sqrt(divisor) if divisor > 0 else 0.0
         

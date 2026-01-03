@@ -93,31 +93,59 @@ def make_plot(symbol: str, timeframe: str, start: str, end: str, start_capital: 
             ))
 
     # Trades
-    entry_x, entry_y, exit_x, exit_y = [], [], [], []
+    entry_long_x, entry_long_y, entry_short_x, entry_short_y = [], [], [], []
+    exit_long_x, exit_long_y, exit_short_x, exit_short_y = [], [], [], []
     for t in trades:
         t_type = t.get("type", "")
         date = pd.to_datetime(t.get("date")) if t.get("date") is not None else None
         price = t.get("price")
         if date is None or price is None:
             continue
+        side = t.get("side", "").lower()
+        # Fallback: ableiten aus type falls side fehlt
+        if not side:
+            if "long" in t_type.lower():
+                side = "long"
+            elif "short" in t_type.lower():
+                side = "short"
         if t_type.startswith("BUY"):
-            entry_x.append(date)
-            entry_y.append(price)
+            if side == "short":
+                entry_short_x.append(date); entry_short_y.append(price)
+            else:
+                entry_long_x.append(date); entry_long_y.append(price)
         elif t_type.startswith("SELL"):
-            exit_x.append(date)
-            exit_y.append(price)
+            if side == "short":
+                exit_short_x.append(date); exit_short_y.append(price)
+            else:
+                exit_long_x.append(date); exit_long_y.append(price)
 
-    if entry_x:
+    # Entry Long
+    if entry_long_x:
         fig.add_trace(go.Scatter(
-            x=entry_x, y=entry_y, mode="markers",
+            x=entry_long_x, y=entry_long_y, mode="markers",
             marker=dict(color="#16a34a", symbol="triangle-up", size=14, line=dict(width=1.2, color="#0f5132")),
-            name="Entry"
+            name="Entry Long"
         ))
-    if exit_x:
+    # Entry Short
+    if entry_short_x:
         fig.add_trace(go.Scatter(
-            x=exit_x, y=exit_y, mode="markers",
-            marker=dict(color="#dc2626", symbol="triangle-down", size=14, line=dict(width=1.2, color="#7f1d1d")),
-            name="Exit"
+            x=entry_short_x, y=entry_short_y, mode="markers",
+            marker=dict(color="#f59e0b", symbol="triangle-down", size=14, line=dict(width=1.2, color="#92400e")),
+            name="Entry Short"
+        ))
+    # Exit Long
+    if exit_long_x:
+        fig.add_trace(go.Scatter(
+            x=exit_long_x, y=exit_long_y, mode="markers",
+            marker=dict(color="#22d3ee", symbol="circle", size=12, line=dict(width=1.1, color="#0e7490")),
+            name="Exit Long"
+        ))
+    # Exit Short
+    if exit_short_x:
+        fig.add_trace(go.Scatter(
+            x=exit_short_x, y=exit_short_y, mode="markers",
+            marker=dict(color="#ef4444", symbol="diamond", size=12, line=dict(width=1.1, color="#7f1d1d")),
+            name="Exit Short"
         ))
 
     fig.update_layout(

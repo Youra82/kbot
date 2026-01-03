@@ -4,7 +4,10 @@
         "timeframe": "6h"
     },
     "strategy": {
-        "prediction_threshold": 0.6
+        "prediction_threshold": 0.6,
+        "dev_multiplier": 2.0,
+        "entry_threshold": 0.015,
+        "exit_threshold": 0.025
     },
     "risk": {
         "margin_mode": "isolated",

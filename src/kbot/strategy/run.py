@@ -205,17 +205,17 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
 
 def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, exit_threshold=0.025):
     """
-    Optimierter Kanal-basierter Backtest mit verbessertem Risikomanagement.
+    Optimierter Kanal-basierter Backtest mit Long & Short Trading.
     
     Args:
         df: OHLC DataFrame
         channels: Kanal-Daten von detect_channels()
         start_capital: Startkapital
-        entry_threshold: Einstiegs-Schwellenwert (% vom Kanal-Tiefpunkt)
-        exit_threshold: Ausstiegs-Schwellenwert (% vom Kanal-Hochpunkt)
+        entry_threshold: Einstiegs-Schwellenwert (% vom Kanal-Rand)
+        exit_threshold: Ausstiegs-Schwellenwert (% vom Kanal-Rand)
     """
     capital = start_capital
-    position = 0
+    position = 0  # 0: keine Position, 1: long, -1: short
     entry_price = 0
     entry_idx = 0
     trades = []
@@ -234,24 +234,27 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
         if ctype == 'none' or fit_quality < 0.4:
             continue
         
-        # EINSTIEG: Preis nähert sich dem unteren Kanalrand
+        # --- LONG TRADES ---
+        # EINSTIEG LONG: Preis nähert sich dem unteren Kanalrand
         if position == 0 and price <= low * (1 + entry_threshold):
             position = 1
             entry_price = price
             entry_idx = i
             trades.append({
                 'type': 'BUY',
+                'side': 'long',
                 'date': date,
                 'price': price,
                 'kanaltyp': ctype
             })
         
-        # AUSSTIEG 1: Preis erreicht oberen Kanalrand
+        # AUSSTIEG LONG 1: Preis erreicht oberen Kanalrand
         elif position == 1 and price >= high * (1 - exit_threshold):
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
             trades.append({
                 'type': 'SELL',
+                'side': 'long',
                 'date': date,
                 'price': price,
                 'pnl': pnl,
@@ -262,12 +265,13 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
             position = 0
             entry_idx = 0
         
-        # AUSSTIEG 2: Zu lange in Position (> 10 Kerzen) ohne Gewinn
+        # AUSSTIEG LONG 2: Zu lange in Position (> 10 Kerzen) ohne Gewinn
         elif position == 1 and (i - entry_idx) > 10 and price < entry_price * 1.002:
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
             trades.append({
                 'type': 'SELL (T/O)',
+                'side': 'long',
                 'date': date,
                 'price': price,
                 'pnl': pnl,
@@ -278,12 +282,78 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
             position = 0
             entry_idx = 0
         
-        # STOP LOSS: Wenn Preis zu stark fällt (-3%)
+        # STOP LOSS LONG: Wenn Preis zu stark fällt (-3%)
         elif position == 1 and price < entry_price * 0.97:
             pnl = (price - entry_price) / entry_price * capital
             capital += pnl
             trades.append({
                 'type': 'SELL (SL)',
+                'side': 'long',
+                'date': date,
+                'price': price,
+                'pnl': pnl,
+                'capital': capital,
+                'kanaltyp': ctype
+            })
+            equity_curve.append(capital)
+            position = 0
+            entry_idx = 0
+        
+        # --- SHORT TRADES ---
+        # EINSTIEG SHORT: Preis nähert sich dem oberen Kanalrand
+        elif position == 0 and price >= high * (1 - entry_threshold):
+            position = -1
+            entry_price = price
+            entry_idx = i
+            trades.append({
+                'type': 'SELL',
+                'side': 'short',
+                'date': date,
+                'price': price,
+                'kanaltyp': ctype
+            })
+        
+        # AUSSTIEG SHORT 1: Preis erreicht unteren Kanalrand
+        elif position == -1 and price <= low * (1 + exit_threshold):
+            pnl = (entry_price - price) / entry_price * capital
+            capital += pnl
+            trades.append({
+                'type': 'BUY',
+                'side': 'short',
+                'date': date,
+                'price': price,
+                'pnl': pnl,
+                'capital': capital,
+                'kanaltyp': ctype
+            })
+            equity_curve.append(capital)
+            position = 0
+            entry_idx = 0
+        
+        # AUSSTIEG SHORT 2: Zu lange in Position (> 10 Kerzen) ohne Gewinn
+        elif position == -1 and (i - entry_idx) > 10 and price > entry_price * 0.998:
+            pnl = (entry_price - price) / entry_price * capital
+            capital += pnl
+            trades.append({
+                'type': 'BUY (T/O)',
+                'side': 'short',
+                'date': date,
+                'price': price,
+                'pnl': pnl,
+                'capital': capital,
+                'kanaltyp': ctype
+            })
+            equity_curve.append(capital)
+            position = 0
+            entry_idx = 0
+        
+        # STOP LOSS SHORT: Wenn Preis zu stark steigt (+3%)
+        elif position == -1 and price > entry_price * 1.03:
+            pnl = (entry_price - price) / entry_price * capital
+            capital += pnl
+            trades.append({
+                'type': 'BUY (SL)',
+                'side': 'short',
                 'date': date,
                 'price': price,
                 'pnl': pnl,
@@ -303,6 +373,7 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
         capital += pnl
         trades.append({
             'type': 'SELL (End)',
+            'side': 'long',
             'date': date,
             'price': price,
             'pnl': pnl,
@@ -310,7 +381,21 @@ def channel_backtest(df, channels, start_capital=1000, entry_threshold=0.015, ex
             'kanaltyp': ctype
         })
         equity_curve.append(capital)
-        trades.append({'type':'SELL','date':date,'price':price,'pnl':pnl,'capital':capital,'kanaltyp':ctype})
+    elif position == -1 and len(ch_idx) > 0:
+        price = df.loc[ch_idx[-1], 'close']
+        date = ch_idx[-1]
+        ctype = channels['type'].iloc[-1]
+        pnl = (entry_price - price) / entry_price * capital
+        capital += pnl
+        trades.append({
+            'type': 'BUY (End)',
+            'side': 'short',
+            'date': date,
+            'price': price,
+            'pnl': pnl,
+            'capital': capital,
+            'kanaltyp': ctype
+        })
         equity_curve.append(capital)
     total_return = (capital - start_capital) / start_capital * 100
     num_trades = len([t for t in trades if t['type']=='SELL'])

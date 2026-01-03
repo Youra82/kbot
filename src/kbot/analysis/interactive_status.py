@@ -9,6 +9,7 @@ Erzeugt interaktive (Plotly) Charts für alle aktiven Strategien aus settings.js
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import List, Dict
 
@@ -16,9 +17,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import requests
 
-from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
 OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "channel_plots"
 
 

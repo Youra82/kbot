@@ -8,6 +8,11 @@ import sys
 import ta # Import für ATR/ADX benötigt
 import math # Import für math.ceil
 
+# Import für Channel-Erkennung
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'src'))
+from kbot.strategy.run import detect_channels
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
@@ -68,8 +73,20 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
     if not timeframe:
         raise ValueError("Backtester benötigt ein 'timeframe' Argument für die Daten-Vorbereitung!")
 
+    # Channel-Parameter aus params (falls vorhanden, sonst Defaults)
+    dev_multiplier = params.get('dev_multiplier', 2.0)
+    entry_threshold = params.get('entry_threshold', 0.015)
+    exit_threshold = params.get('exit_threshold', 0.025)
+
     data_with_features = create_ann_features(data.copy())
     data_with_features.dropna(inplace=True)
+    
+    # --- Berechne Adaptive Trend Channels ---
+    channels = detect_channels(data.copy(), window=50, dev_multiplier=dev_multiplier)
+    # Merge channels in data_with_features
+    data_with_features = data_with_features.join(channels[['high', 'low', 'type']], how='left', rsuffix='_channel')
+    data_with_features.rename(columns={'high_channel': 'channel_high', 'low_channel': 'channel_low', 'type': 'channel_type'}, inplace=True)
+    # ---
     
     # --- NEU: SuperTrend Richtung hinzufügen (ST-Richtung der VORHERIGEN Kerze) ---
     data_with_features['supertrend_direction'] = calculate_supertrend_direction(data_with_features)
@@ -229,6 +246,17 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
                         avg_atr = data_with_features['atr_normalized'].iloc[i-50:i].mean()
                         if current['atr_normalized'] > avg_atr * 2.0:
                             trade_allowed = False
+                    
+                    # Channel Entry-Filter: Nur Long nahe unterem Rand, nur Short nahe oberem Rand
+                    channel_high = current.get('channel_high', np.nan)
+                    channel_low = current.get('channel_low', np.nan)
+                    channel_type = current.get('channel_type', 'none')
+                    
+                    if not pd.isna(channel_high) and not pd.isna(channel_low) and channel_type != 'none':
+                        if side == 'long' and entry_price > channel_low * (1 + entry_threshold):
+                            trade_allowed = False  # Long nur nahe unterem Rand
+                        elif side == 'short' and entry_price < channel_high * (1 - entry_threshold):
+                            trade_allowed = False  # Short nur nahe oberem Rand
                 # *** ENDE NEUE FILTER ***
 
                 if side and trade_allowed:

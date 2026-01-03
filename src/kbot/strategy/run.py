@@ -75,36 +75,36 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
     
     def calc_log_regression(source, length, end_idx):
         """
-        Berechnet logarithmische Regression genau nach TradingView Adaptive Trend Finder.
-        Die Regression ordnet x-Werte rückwärts zu: x=1 für neueste, x=length für älteste Kerze.
+        TradingView Adaptive Trend Finder Regression:
+        x=1 bis x=length, wobei logSource[i-1] für i=1..length
+        → i=1: logSource[0] (älteste Kerze)
+        → i=length: logSource[length-1] (neueste Kerze)
+        Also: x=1 für älteste, x=length für neueste
         """
         if end_idx < length - 1:
             return None, None, None, None
         
-        # Slice von ältester bis neuester Kerze
         window_data = source[end_idx - length + 1:end_idx + 1]
+        log_source = np.log(window_data)
         
         sum_x = 0.0
         sum_xx = 0.0
         sum_yx = 0.0
         sum_y = 0.0
         
-        # TradingView Loop 1: x=1..length, logSource[i-1] mit i=1..length
-        # Das bedeutet: x=1 → neueste Kerze (index -1 bzw. end des Arrays)
-        #              x=length → älteste Kerze (index 0)
+        # Loop wie im PineScript: for i = 1 to length, lSrc = logSource[i - 1]
         for i in range(1, length + 1):
-            log_price = np.log(window_data[length - i])  # Rückwärts: length-1=neueste, 0=älteste
+            lsrc = log_source[i - 1]  # i=1 → index 0 (älteste), i=length → index length-1 (neueste)
             sum_x += i
             sum_xx += i * i
-            sum_yx += i * log_price
-            sum_y += log_price
+            sum_yx += i * lsrc
+            sum_y += lsrc
         
-        # Linear regression: y = slope * x + intercept (in log-space)
         slope = (length * sum_yx - sum_x * sum_y) / (length * sum_xx - sum_x * sum_x)
         average = sum_y / length
         intercept = average - slope * sum_x / length + slope
         
-        # Standardabweichung und Pearson R wie im TradingView Code
+        # Standardabweichung Loop
         period_1 = length - 1
         sum_dev = 0.0
         sum_dxx = 0.0
@@ -114,15 +114,15 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         sum_slp = intercept
         
         for i in range(length):
-            log_price = np.log(window_data[i])
-            dxt = log_price - average
+            lsrc = log_source[i]
+            dxt = lsrc - average
             dyt = sum_slp - regres
-            residual = log_price - sum_slp
+            lsrc_residual = lsrc - sum_slp
             sum_slp += slope
             sum_dxx += dxt * dxt
             sum_dyy += dyt * dyt
             sum_dyx += dxt * dyt
-            sum_dev += residual * residual
+            sum_dev += lsrc_residual * lsrc_residual
         
         std_dev = np.sqrt(sum_dev / period_1) if period_1 > 0 else 0.0
         divisor = sum_dxx * sum_dyy
@@ -173,9 +173,14 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
             })
             continue
         
-        # Berechne Kanal-Werte für aktuelle Kerze
-        # Mittellinie: exp(intercept + slope * 0) = exp(intercept)
-        mid_price = np.exp(best_intercept)
+        # TradingView: endPrice = exp(intercept), startPrice = exp(intercept + slope * (period - 1))
+        # Da x=length die neueste Kerze ist, entspricht intercept + slope * (length - 1) dem x=0 extrapolierten Punkt
+        # Für die aktuelle Kerze (neueste): x=length → price = exp(intercept + slope * (length - 1))
+        # Aber im Code steht endPrice = exp(intercept), also muss intercept bereits den extrapolierten x=0 Punkt darstellen
+        
+        # Der Kanal wird an der aktuellen Kerze bewertet, die x=length entspricht
+        current_log_price = best_intercept + best_slope * (best_period - 1)
+        mid_price = np.exp(current_log_price)
         
         # Obere/Untere Linie: mid * exp(±dev_multiplier * std_dev)
         high_line = mid_price * np.exp(dev_multiplier * best_std_dev)

@@ -48,19 +48,18 @@ if [ "$MODE" = "3" ] && [ -f ".optimal_configs.tmp" ]; then
 	if [ "$UPDATE_SETTINGS" = "j" ] || [ "$UPDATE_SETTINGS" = "J" ]; then
 		echo -e "\n${BLUE}Lese optimale Konfigurationen...${NC}"
 		
-		# Lese Config-Namen aus .optimal_configs.tmp
-		configs=""
-		while IFS= read -r config_name; do
-			# Entferne Carriage-Returns und überspringe leere Zeilen
-			config_name=$(echo "$config_name" | tr -d '\r')
-			[ -z "$config_name" ] && continue
-			configs="$configs $config_name"
-		done < .optimal_configs.tmp
+		# Lese Config-Namen aus .optimal_configs.tmp (robust, mehrere Einträge)
+		if [ ! -s .optimal_configs.tmp ]; then
+			echo -e "${RED}❌ Keine Configs in .optimal_configs.tmp gefunden.${NC}"
+			exit 1
+		fi
+		
+		mapfile -t config_array < .optimal_configs.tmp
 		
 		# Rufe Update-Script auf
 		if [ -f "$UPDATE_SETTINGS_SCRIPT" ]; then
 			echo -e "${BLUE}Aktualisiere settings.json...${NC}"
-			python3 "$UPDATE_SETTINGS_SCRIPT" $configs
+			python3 "$UPDATE_SETTINGS_SCRIPT" "${config_array[@]}"
 			UPDATE_EXIT=$?
 			
 			if [ $UPDATE_EXIT -eq 0 ]; then

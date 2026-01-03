@@ -32,7 +32,8 @@ def load_active_strategies(settings_path: Path) -> List[Dict]:
 
 
 def sanitize(text: str) -> str:
-    return "".join(c for c in text if c.isalnum() or c in ("-", "_", ":", "/"))
+    # Entferne/ersetze problematische Pfadzeichen, damit Dateinamen flach bleiben
+    return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in text)
 
 
 def make_plot(symbol: str, timeframe: str, start: str, end: str, start_capital: float, window: int) -> Path:

@@ -44,7 +44,11 @@ def objective(trial, symbol):
         'min_sl_pct': trial.suggest_float('min_sl_pct', 0.3, 2.0),
         # Trailing Stop Parameter
         'trailing_stop_activation_rr': trial.suggest_float('trailing_stop_activation_rr', 1.0, 4.0),
-        'trailing_stop_callback_rate_pct': trial.suggest_float('trailing_stop_callback_rate_pct', 0.5, 3.0)
+        'trailing_stop_callback_rate_pct': trial.suggest_float('trailing_stop_callback_rate_pct', 0.5, 3.0),
+        # Channel Trading Parameter
+        'dev_multiplier': trial.suggest_float('dev_multiplier', 1.5, 3.0),
+        'entry_threshold': trial.suggest_float('entry_threshold', 0.005, 0.03),
+        'exit_threshold': trial.suggest_float('exit_threshold', 0.01, 0.05)
     }
     # --- ENDE KORRIGIERT ---
 
@@ -148,7 +152,12 @@ def main():
         # --- KORRIGIERT: Speichere ATR-basierte Parameter (anstelle des alten initial_sl_pct) ---
         config_output = {
             "market": {"symbol": symbol, "timeframe": timeframe},
-            "strategy": {"prediction_threshold": FIXED_THRESHOLD},
+            "strategy": {
+                "prediction_threshold": FIXED_THRESHOLD,
+                "dev_multiplier": round(best_params['dev_multiplier'], 2),
+                "entry_threshold": round(best_params['entry_threshold'], 4),
+                "exit_threshold": round(best_params['exit_threshold'], 4)
+            },
             "risk": {
                 "margin_mode": "isolated",
                 "risk_per_trade_pct": round(best_params['risk_per_trade_pct'], 2),

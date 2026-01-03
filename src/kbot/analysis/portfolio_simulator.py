@@ -39,7 +39,7 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
         data_with_features = strat['data'].copy()
         if not data_with_features.empty:
             st_direction = calculate_supertrend_direction(data_with_features)
-            st_data_cache[strat['symbol']] = st_direction
+            st_data_cache[key] = st_direction
     # --- ENDE SuperTrend Trenddaten laden ---
 
     print("2/4: Generiere Handelssignale für alle Strategien...")
@@ -127,7 +127,7 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
         data_with_features['prediction'] = predictions
         
         # SuperTrend Direction für den Filter hinzufügen
-        st_direction_series = st_data_cache.get(symbol)
+        st_direction_series = st_data_cache.get(key)
         if st_direction_series is None or st_direction_series.empty: continue
 
         data_with_features['st_direction'] = st_direction_series
@@ -142,9 +142,9 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
         # Sammle alle Signale
         # Speichere RR-Ratio für den Exit-PnL-Cap
         for index, row in long_signals_filtered.iterrows():
-            all_signals.append({'timestamp': index, 'symbol': symbol, 'timeframe': timeframe, 'side': 'long', 'entry_price': row['close'], 'params': params, 'config_key': key, 'risk_per_trade_pct': params.get('risk_per_trade_pct', 1.0) / 100, 'risk_reward_ratio': rr_ratio})
+            all_signals.append({'timestamp': index, 'symbol': symbol, 'symbol_key': key, 'timeframe': timeframe, 'side': 'long', 'entry_price': row['close'], 'params': params, 'config_key': key, 'risk_per_trade_pct': params.get('risk_per_trade_pct', 1.0) / 100, 'risk_reward_ratio': rr_ratio})
         for index, row in short_signals_filtered.iterrows():
-            all_signals.append({'timestamp': index, 'symbol': symbol, 'timeframe': timeframe, 'side': 'short', 'entry_price': row['close'], 'params': params, 'config_key': key, 'risk_per_trade_pct': params.get('risk_per_trade_pct', 1.0) / 100, 'risk_reward_ratio': rr_ratio})
+            all_signals.append({'timestamp': index, 'symbol': symbol, 'symbol_key': key, 'timeframe': timeframe, 'side': 'short', 'entry_price': row['close'], 'params': params, 'config_key': key, 'risk_per_trade_pct': params.get('risk_per_trade_pct', 1.0) / 100, 'risk_reward_ratio': rr_ratio})
 
     if not all_signals:
         print("Keine Handelssignale im gewählten Zeitraum gefunden.")
@@ -273,7 +273,7 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
         # --- 3b. Neue Signale prüfen und Positionen eröffnen ---
         while signal_idx < len(all_signals) and all_signals[signal_idx]['timestamp'] == ts:
             signal = all_signals[signal_idx]
-            symbol_key = signal['symbol']
+            symbol_key = signal['symbol_key']
             config_key = signal['config_key']
             
             # Schlüssel für die offene Position

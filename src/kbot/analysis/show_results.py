@@ -56,14 +56,16 @@ def run_single_analysis_via_simulator(start_date, end_date, start_capital):
         if data.empty:
             print(f"--> WARNUNG: Konnte keine Daten laden. Überspringe."); continue
 
-        # Nur eine Strategie in das Dict laden
+        # Nur eine Strategie in das Dict laden; Schlüssel eindeutig pro Config
+        strategy_key = filename
+        model_loaded, scaler_loaded = load_model_and_scaler(model_paths['model'], model_paths['scaler'])
         strategies_data = {
-            symbol: {
+            strategy_key: {
                 'symbol': symbol, 
                 'timeframe': timeframe, 
                 'data': data, 
-                'model': load_model_and_scaler(model_paths['model'], model_paths['scaler'])[0], 
-                'scaler': load_model_and_scaler(model_paths['model'], model_paths['scaler'])[1], 
+                'model': model_loaded, 
+                'scaler': scaler_loaded, 
                 'params': {**config.get('strategy', {}), **config.get('risk', {})}
             }
         }
@@ -158,6 +160,7 @@ def run_shared_mode(is_auto: bool, start_date, end_date, start_capital, max_draw
         with open(os.path.join(configs_dir, filename), 'r') as f: config = json.load(f)
         symbol, timeframe = config['market']['symbol'], config['market']['timeframe']
         safe_filename = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
+        strategy_key = filename  # eindeutiger Schlüssel pro Config-Datei
         
         # Versuche, Modell und Scaler zu laden
         model_paths = {'model': os.path.join(models_dir, f'ann_predictor_{safe_filename}.h5'), 'scaler': os.path.join(models_dir, f'ann_scaler_{safe_filename}.joblib')}
@@ -169,7 +172,7 @@ def run_shared_mode(is_auto: bool, start_date, end_date, start_capital, max_draw
             
         data = load_data(symbol, timeframe, start_date, end_date)
         if model and scaler and not data.empty:
-            strategies_data[symbol] = {'symbol': symbol, 'timeframe': timeframe, 'data': data, 'model': model, 'scaler': scaler, 'params': {**config.get('strategy', {}), **config.get('risk', {})}}
+            strategies_data[strategy_key] = {'symbol': symbol, 'timeframe': timeframe, 'data': data, 'model': model, 'scaler': scaler, 'params': {**config.get('strategy', {}), **config.get('risk', {})}}
         else:
             print(f"WARNUNG: Konnte Daten/Modell für {filename} nicht laden. Wird ignoriert.")
     
@@ -197,10 +200,8 @@ def run_shared_mode(is_auto: bool, start_date, end_date, start_capital, max_draw
         strategies_data_for_optimizer = {}
         for filename in selected_files:
             try:
-                with open(os.path.join(configs_dir, filename), 'r') as f: config = json.load(f)
-                symbol_key = config['market']['symbol']
-                if symbol_key in strategies_data:
-                    strategies_data_for_optimizer[filename] = strategies_data[symbol_key]
+                if filename in strategies_data:
+                    strategies_data_for_optimizer[filename] = strategies_data[filename]
             except Exception:
                 pass # Fehlerhafte Configs wurden bereits beim Laden ignoriert
 

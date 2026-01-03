@@ -52,84 +52,97 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Erweiterte Kanal-Erkennung: parallel, wedge, triangle (OPTIMIERT) ---
-def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05):
+# --- Kanal-Erkennung über Pivot-Spitzen (von Spitze zu Spitze) ---
+def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, pivot_lookback=5):
     """
-    Erkennt Handelskanäle mit verbesserten Validierungen.
-    
+    Erkennt Kanäle, indem jeweils die letzten beiden Pivot-Highs und Pivot-Lows
+    verbunden werden. Dadurch entstehen Linien tatsächlich von Spitze zu Spitze
+    statt einer Regression über alle Kerzen.
+
     Args:
         df: OHLC DataFrame
-        window: Fenster-Größe für Kanal-Analyse (Standard: 50 Kerzen)
-        min_channel_width: Minimale Kanal-Breite als % vom Preis (Standard: 0.5%)
-        slope_threshold: Minimale Steigung für bedeutungsvolle Trends (Standard: 0.05)
+        window: Wie weit die Pivots in der Vergangenheit liegen dürfen (Kerzen)
+        min_channel_width: Minimale Kanal-Breite als % vom Preis
+        slope_threshold: Ungenutzt, bleibt für Kompatibilität bestehen
+        pivot_lookback: Anzahl Kerzen links/rechts zur Pivot-Bestätigung
     """
-    idx = np.arange(len(df))
     highs = df['high'].values
     lows = df['low'].values
-    closes = df['close'].values
     channels = []
-    
+
+    # Pivot-Erkennung (Swing High/Low)
+    pivot_high_mask = np.zeros(len(df), dtype=bool)
+    pivot_low_mask = np.zeros(len(df), dtype=bool)
+    for i in range(pivot_lookback, len(df) - pivot_lookback):
+        left = i - pivot_lookback
+        right = i + pivot_lookback + 1
+        if highs[i] >= highs[left:right].max():
+            pivot_high_mask[i] = True
+        if lows[i] <= lows[left:right].min():
+            pivot_low_mask[i] = True
+
+    pivot_high_idx = np.where(pivot_high_mask)[0]
+    pivot_low_idx = np.where(pivot_low_mask)[0]
+
+    def line_val(start_idx, start_val, slope, target_idx):
+        return start_val + slope * (target_idx - start_idx)
+
     for i in range(window, len(df)):
-        x = idx[i-window:i]
-        y_high = highs[i-window:i]
-        y_low = lows[i-window:i]
-        y_close = closes[i-window:i]
-        
-        coef_high = np.polyfit(x, y_high, 1)
-        coef_low = np.polyfit(x, y_low, 1)
-        
-        # Berechne Kanal-Breite und Stabilität
-        high_val = np.polyval(coef_high, x[-1])
-        low_val = np.polyval(coef_low, x[-1])
-        mid_val = (high_val + low_val) / 2
-        channel_width = (high_val - low_val) / mid_val if mid_val > 0 else 0
-        
-        # Berechne R² für Fit-Qualität
-        y_high_pred = np.polyval(coef_high, x)
-        y_low_pred = np.polyval(coef_low, x)
-        ss_res_high = np.sum((y_high - y_high_pred) ** 2)
-        ss_tot_high = np.sum((y_high - np.mean(y_high)) ** 2)
-        r2_high = 1 - (ss_res_high / ss_tot_high) if ss_tot_high > 0 else 0
-        
-        ss_res_low = np.sum((y_low - y_low_pred) ** 2)
-        ss_tot_low = np.sum((y_low - np.mean(y_low)) ** 2)
-        r2_low = 1 - (ss_res_low / ss_tot_low) if ss_tot_low > 0 else 0
-        
-        fit_quality = min(r2_high, r2_low)
-        
-        # Klassifizierung mit strengeren Bedingungen
+        ph_pos = np.searchsorted(pivot_high_idx, i, side='right')
+        pl_pos = np.searchsorted(pivot_low_idx, i, side='right')
+
+        # Weniger als zwei valide Pivots -> kein Kanal
+        if ph_pos < 2 or pl_pos < 2:
+            channels.append({'high': np.nan, 'low': np.nan, 'type': 'none', 'index': df.index[i], 'width': 0.0, 'fit_quality': 0.0})
+            continue
+
+        h1_idx, h2_idx = pivot_high_idx[ph_pos - 2], pivot_high_idx[ph_pos - 1]
+        l1_idx, l2_idx = pivot_low_idx[pl_pos - 2], pivot_low_idx[pl_pos - 1]
+
+        # Pivots müssen innerhalb des Fensters liegen, sonst sind sie zu alt
+        if (i - h2_idx) > window or (i - l2_idx) > window:
+            channels.append({'high': np.nan, 'low': np.nan, 'type': 'none', 'index': df.index[i], 'width': 0.0, 'fit_quality': 0.0})
+            continue
+
+        slope_high = (highs[h2_idx] - highs[h1_idx]) / max((h2_idx - h1_idx), 1e-9)
+        slope_low = (lows[l2_idx] - lows[l1_idx]) / max((l2_idx - l1_idx), 1e-9)
+
+        high_line = line_val(h2_idx, highs[h2_idx], slope_high, i)
+        low_line = line_val(l2_idx, lows[l2_idx], slope_low, i)
+        mid_val = (high_line + low_line) / 2
+        channel_width = (high_line - low_line) / mid_val if mid_val > 0 else 0.0
+
+        # Abweichung der Pivots von ihren Linien als Qualitätsmaß
+        high_err = abs(highs[h1_idx] - line_val(h2_idx, highs[h2_idx], slope_high, h1_idx))
+        low_err = abs(lows[l1_idx] - line_val(l2_idx, lows[l2_idx], slope_low, l1_idx))
+        norm = max(mid_val, 1e-6)
+        fit_quality = 1 / (1 + (high_err + low_err) / norm)
+
         ctype = 'none'
-        
-        # Nur Kanäle mit ausreichender Breite und Fit-Qualität
-        if channel_width >= min_channel_width and fit_quality >= 0.5:
-            slope_diff = abs(coef_high[0] - coef_low[0])
-            slope_high = abs(coef_high[0])
-            slope_low = abs(coef_low[0])
-            
-            # Parallele Kanäle: Ähnliche Steigung UND stabil
-            if slope_diff < 0.08 * max(slope_high, slope_low, 1e-8):
-                ctype = 'parallel'
-            # Keile: Gleiche Richtung UND deutliche Steigung
-            elif (np.sign(coef_high[0]) == np.sign(coef_low[0]) and 
-                  slope_high > slope_threshold and slope_low > slope_threshold):
-                ctype = 'wedge'
-            # Dreiecke: Konvergierende Linien
-            elif coef_high[0] < -slope_threshold and coef_low[0] > slope_threshold:
+        if high_line > low_line and channel_width >= min_channel_width and fit_quality >= 0.25:
+            slope_diff = abs(slope_high - slope_low)
+            slope_scale = max(abs(slope_high), abs(slope_low), 1e-8)
+            slope_diff_ratio = slope_diff / slope_scale
+
+            if np.sign(slope_high) != np.sign(slope_low):
                 ctype = 'triangle'
-        
+            elif slope_diff_ratio < 0.2:
+                ctype = 'parallel'
+            else:
+                ctype = 'wedge'
+
         channels.append({
-            'high': high_val, 
-            'low': low_val, 
-            'type': ctype, 
+            'high': high_line,
+            'low': low_line,
+            'type': ctype,
             'index': df.index[i],
             'width': channel_width,
-            'fit_quality': fit_quality
+            'fit_quality': float(fit_quality)
         })
-    
-    # DataFrame mit Kanaltypen
+
     ch_df = pd.DataFrame(channels)
     ch_df.index = ch_df['index']
-    return ch_df[['high','low','type','width','fit_quality']]
+    return ch_df[['high', 'low', 'type', 'width', 'fit_quality']]
 
 # --- Kanal-Trading-Backtest (OPTIMIERT) ---
 

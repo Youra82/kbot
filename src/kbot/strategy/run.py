@@ -74,17 +74,31 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
     periods = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
     
     def calc_log_regression(source, length, end_idx):
-        """Berechnet logarithmische Regression für gegebene Länge bis end_idx"""
-        if end_idx < length:
+        """
+        Berechnet logarithmische Regression für gegebene Länge bis end_idx.
+        Wichtig: x-Werte laufen RÜCKWÄRTS wie im TradingView Code:
+        - x=1 entspricht der NEUESTEN Kerze (end_idx)
+        - x=length entspricht der ÄLTESTEN Kerze (end_idx - length + 1)
+        """
+        if end_idx < length - 1:
             return None, None, None, None
         
+        # Log-Preise von alt nach neu
         log_source = np.log(source[end_idx - length + 1:end_idx + 1])
-        x_vals = np.arange(1, length + 1)
         
-        sum_x = x_vals.sum()
-        sum_xx = (x_vals * x_vals).sum()
-        sum_y = log_source.sum()
-        sum_yx = (x_vals * log_source).sum()
+        # Summenwerte wie im TradingView Code
+        sum_x = 0.0
+        sum_xx = 0.0
+        sum_yx = 0.0
+        sum_y = 0.0
+        
+        # x läuft von 1 bis length, aber y läuft rückwärts (von neu nach alt)
+        for i in range(1, length + 1):
+            lsrc = log_source[length - i]  # Rückwärts: neueste zuerst
+            sum_x += i
+            sum_xx += i * i
+            sum_yx += i * lsrc
+            sum_y += lsrc
         
         # Berechne Steigung und Intercept
         slope = (length * sum_yx - sum_x * sum_y) / (length * sum_xx - sum_x * sum_x)

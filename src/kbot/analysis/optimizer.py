@@ -153,18 +153,18 @@ def main():
             "market": {"symbol": symbol, "timeframe": timeframe},
             "strategy": {
                 "prediction_threshold": FIXED_THRESHOLD,
-                "fib_length": best_params.get('fib_length', 200),
-                "fib_mult": round(best_params.get('fib_mult', 3.0), 2)
+                "fib_length": best_params['fib_length'],
+                "fib_mult": round(best_params['fib_mult'], 2)
             },
             "risk": {
                 "margin_mode": "isolated",
-                "risk_per_trade_pct": round(best_params.get('risk_per_trade_pct', 1.0), 2),
-                "risk_reward_ratio": round(best_params.get('risk_reward_ratio', 1.5), 2),
-                "leverage": best_params.get('leverage', 10),
-                "trailing_stop_activation_rr": round(best_params.get('trailing_stop_activation_rr', 2.0), 2),
-                "trailing_stop_callback_rate_pct": round(best_params.get('trailing_stop_callback_rate_pct', 1.0), 2),
-                'atr_multiplier_sl': round(best_params.get('atr_multiplier_sl', 2.0), 2),
-                'min_sl_pct': round(best_params.get('min_sl_pct', 1.0), 2)
+                "risk_per_trade_pct": round(best_params['risk_per_trade_pct'], 2),
+                "risk_reward_ratio": round(best_params['risk_reward_ratio'], 2),
+                "leverage": best_params['leverage'],
+                "trailing_stop_activation_rr": round(best_params['trailing_stop_activation_rr'], 2),
+                "trailing_stop_callback_rate_pct": round(best_params['trailing_stop_callback_rate_pct'], 2),
+                'atr_multiplier_sl': round(best_params['atr_multiplier_sl'], 2),
+                'min_sl_pct': round(best_params['min_sl_pct'], 2)
             },
             "behavior": behavior_config
         }

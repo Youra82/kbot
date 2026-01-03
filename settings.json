@@ -8,13 +8,6 @@
         "use_macd_filter": false,
         "active": true,
         "comment": "Automatisch optimiert (ETHUSDTUSDT 6h)"
-      },
-      {
-        "symbol": "XRP/USDT:USDT",
-        "timeframe": "6h",
-        "use_macd_filter": false,
-        "active": true,
-        "comment": "Automatisch optimiert (XRPUSDTUSDT 6h)"
       }
     ]
   }

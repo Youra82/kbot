@@ -37,39 +37,68 @@ show_file_content() {
     fi
 }
 
-# --- ANZEIGE ALLER RELEVANTEN CODE-DATEIEN ---
+# --- MENÜ ---
 echo -e "${BLUE}======================================================================${NC}"
-echo "           Vollständige Code-Dokumentation des KBot"
+echo "           KBot Status & Visualisierung"
 echo -e "${BLUE}======================================================================${NC}"
+echo "  1) Vollständige Code-Dokumentation anzeigen"
+echo "  4) Interaktive Kanal-Charts (aktive Strategien aus settings.json)"
+read -p "Auswahl [Standard: 1]: " MODE
+MODE=${MODE:-1}
 
-# Finde alle relevanten Dateien, ABER schließe secret.json vorerst aus.
-# Speichere die Pfade in einem Array.
-mapfile -t FILE_LIST < <(find . -path './.venv' -prune -o -path './secret.json' -prune -o \( -name "*.py" -o -name "*.sh" -o -name "*.json" -o -name "*.txt" -o -name ".gitignore" \) -print)
+# --- OPTION 1: Bestehende Code-Übersicht ---
+if [ "$MODE" = "1" ]; then
+    echo -e "${BLUE}======================================================================${NC}"
+    echo "           Vollständige Code-Dokumentation des KBot"
+    echo -e "${BLUE}======================================================================${NC}"
 
-# Zeige zuerst alle anderen Dateien an
-for filepath in "${FILE_LIST[@]}"; do
-    show_file_content "$filepath"
-done
+    mapfile -t FILE_LIST < <(find . -path './.venv' -prune -o -path './secret.json' -prune -o \( -name "*.py" -o -name "*.sh" -o -name "*.json" -o -name "*.txt" -o -name ".gitignore" \) -print)
 
-# Zeige die secret.json als LETZTE Datei an
-show_file_content "secret.json"
+    for filepath in "${FILE_LIST[@]}"; do
+        show_file_content "$filepath"
+    done
 
-# --- ANZEIGE DER PROJEKTSTRUKTUR AM ENDE ---
-echo -e "\n\n${BLUE}======================================================="
-echo "            Aktuelle Projektstruktur"
-echo -e "=======================================================${NC}"
+    show_file_content "secret.json"
 
-# Eine Funktion, die eine Baumstruktur mit Standard-Tools emuliert
-list_structure() {
-    find . -path '*/.venv' -prune -o \
-           -path '*/__pycache__' -prune -o \
-           -path './.git' -prune -o \
-           -path './artifacts/db' -prune -o \
-           -path './artifacts/models' -prune -o \
-           -path './logs' -prune -o \
-           -maxdepth 4 -print | sed -e 's;[^/]*/;|____;g;s;____|; |;g'
-}
+    echo -e "\n\n${BLUE}======================================================="
+    echo "            Aktuelle Projektstruktur"
+    echo -e "=======================================================${NC}"
+    list_structure() {
+        find . -path '*/.venv' -prune -o \
+               -path '*/__pycache__' -prune -o \
+               -path './.git' -prune -o \
+               -path './artifacts/db' -prune -o \
+               -path './artifacts/models' -prune -o \
+               -path './logs' -prune -o \
+               -maxdepth 4 -print | sed -e 's;[^/]*/;|____;g;s;____|; |;g'
+    }
+    list_structure
+    echo -e "${BLUE}=======================================================${NC}"
+    exit 0
+fi
 
-list_structure
+# --- OPTION 4: Interaktive Kanal-Charts ---
+if [ "$MODE" = "4" ]; then
+    TODAY=$(date +%F)
+    read -p "Startdatum (YYYY-MM-DD) [Standard: 2023-01-01]: " START_DATE
+    START_DATE=${START_DATE:-2023-01-01}
+    read -p "Enddatum   (YYYY-MM-DD) [Standard: $TODAY]: " END_DATE
+    END_DATE=${END_DATE:-$TODAY}
+    read -p "Startkapital (USD) [Standard: 1000]: " START_CAP
+    START_CAP=${START_CAP:-1000}
+    read -p "Fenster für Kanäle (window) [Standard: 50]: " WINDOW
+    WINDOW=${WINDOW:-50}
 
-echo -e "${BLUE}=======================================================${NC}"
+    echo -e "\n${CYAN}Erzeuge interaktive Charts aus settings.json (aktive Strategien)...${NC}"
+    python3 src/kbot/analysis/interactive_status.py \
+        --start "$START_DATE" \
+        --end "$END_DATE" \
+        --start-capital "$START_CAP" \
+        --window "$WINDOW"
+
+    echo -e "${CYAN}Fertig. Öffne die ausgegebene HTML-Datei im Browser oder VS Code für Zoom/Pane.${NC}"
+    exit 0
+fi
+
+echo -e "${RED}Ungültige Auswahl.${NC}"
+exit 1

@@ -92,18 +92,37 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
             'atf_price_to_trend'
         ]
 
-        # Kompatibilität: richte die Feature-Reihenfolge an der im Scaler gespeicherten Reihenfolge aus,
-        # und ignoriere zusätzliche Features, die der Scaler nicht kennt. Fehlende werden mit 0 gefüllt.
-        feature_cols = base_feature_cols
-        scaler_feature_cols = getattr(scaler, 'feature_names_in_', None)
-        if scaler_feature_cols is not None and len(scaler_feature_cols) > 0:
-            feature_cols = list(scaler_feature_cols)
+        # Modell-Eingangsgröße ermitteln
+        model_input_dim = None
+        try:
+            model_input_dim = model.input_shape[-1]
+        except Exception:
+            pass
+        if model_input_dim is None:
+            print("WARNUNG: Konnte Input-Shape des Modells nicht bestimmen. Überspringe Strategie.")
+            continue
+        if model_input_dim != len(base_feature_cols):
+            print(f"WARNUNG: Modell erwartet {model_input_dim} Features, Basis-Liste hat {len(base_feature_cols)}. Überspringe Strategie.")
+            continue
 
-        # Fehlende Spalten auffüllen, überzählige ignorieren
-        for col in feature_cols:
+        # Scaler-Feature-Namen nutzen, falls vorhanden; ansonsten Basisliste
+        scaler_feature_cols = getattr(scaler, 'feature_names_in_', None)
+        scaler_cols = list(scaler_feature_cols) if scaler_feature_cols is not None and len(scaler_feature_cols) > 0 else base_feature_cols
+
+        # Fehlende Spalten für den Scaler auffüllen
+        for col in scaler_cols:
             if col not in data_with_features.columns:
                 data_with_features[col] = 0.0
-        features_scaled = scaler.transform(data_with_features[feature_cols])
+
+        # Transformieren mit den Spalten, die der Scaler kennt
+        scaled_partial = scaler.transform(data_with_features[scaler_cols])
+
+        # Auf Modell-Feature-Reihenfolge (base_feature_cols) abbilden und fehlende mit 0 lassen
+        features_scaled = np.zeros((len(data_with_features), model_input_dim))
+        for idx, col in enumerate(scaler_cols):
+            if col in base_feature_cols:
+                target_idx = base_feature_cols.index(col)
+                features_scaled[:, target_idx] = scaled_partial[:, idx]
         predictions = model.predict(features_scaled, verbose=0).flatten()
         data_with_features['prediction'] = predictions
         

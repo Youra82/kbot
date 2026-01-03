@@ -64,27 +64,32 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
             # Basis-Features
             'bb_width', 'bb_pband', 'obv', 'rsi', 'macd_diff', 'macd', 
             'atr_normalized', 'adx', 'adx_pos', 'adx_neg',
-            
+
             # Volume-Features
             'volume_ratio', 'mfi', 'cmf',
-            
+
             # Trend-Features
             'price_to_ema20', 'price_to_ema50',
-            
+
             # Momentum-Features
             'stoch_k', 'stoch_d', 'williams_r', 'roc', 'cci',
-            
+
             # Support/Resistance
             'price_to_resistance', 'price_to_support',
-            
+
             # Price Action
             'high_low_range', 'close_to_high', 'close_to_low',
-            
+
             # Zeitliche Features
             'day_of_week', 'hour_of_day',
-            
+
             # Returns & Volatilität
-            'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility'
+            'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility',
+
+            # Adaptive Trend Finder
+            'atf_pearson_r', 'atf_trend_strength', 'atf_slope',
+            'atf_std_dev', 'atf_upper_channel_dist', 'atf_lower_channel_dist',
+            'atf_price_to_trend'
         ]
 
         # Skalieren und Vorhersage

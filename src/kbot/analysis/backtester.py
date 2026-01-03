@@ -79,17 +79,37 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
         return {"total_pnl_pct": 0, "trades_count": 0, "win_rate": 0, "max_drawdown_pct": 1.0, "end_capital": start_capital}
 
     # *** ERWEITERTE FEATURE-LISTE FÜR BACKTEST ***
-    # Feature 'ema_cross_20_50' entfernt (konsistent mit ann_model.py)
+    # Muss exakt mit ann_model.py übereinstimmen (Scaler-Feature-Reihenfolge!)
     feature_cols = [
-        'bb_width', 'bb_pband', 'obv', 'rsi', 'macd_diff', 'macd', 
+        # Basis-Features
+        'bb_width', 'bb_pband', 'obv', 'rsi', 'macd_diff', 'macd',
         'atr_normalized', 'adx', 'adx_pos', 'adx_neg',
+
+        # Volume-Features
         'volume_ratio', 'mfi', 'cmf',
+
+        # Trend-Features
         'price_to_ema20', 'price_to_ema50',
+
+        # Momentum-Features
         'stoch_k', 'stoch_d', 'williams_r', 'roc', 'cci',
+
+        # Support/Resistance
         'price_to_resistance', 'price_to_support',
+
+        # Price Action
         'high_low_range', 'close_to_high', 'close_to_low',
+
+        # Zeitliche Features
         'day_of_week', 'hour_of_day',
-        'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility'
+
+        # Returns & Volatilität
+        'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility',
+
+        # Adaptive Trend Finder
+        'atf_pearson_r', 'atf_trend_strength', 'atf_slope',
+        'atf_std_dev', 'atf_upper_channel_dist', 'atf_lower_channel_dist',
+        'atf_price_to_trend'
     ]
     # ---
     

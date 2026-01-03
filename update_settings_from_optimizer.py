@@ -121,7 +121,9 @@ def main():
     successful_configs = 0
     
     for config_name in config_names:
-        config_name = config_name.strip()
+        config_name = config_name.strip().replace('\r', '')
+        if not config_name:
+            continue
         symbol, timeframe = parse_config_name(config_name)
         
         if symbol is None:

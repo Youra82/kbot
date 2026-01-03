@@ -51,6 +51,9 @@ if [ "$MODE" = "3" ] && [ -f ".optimal_configs.tmp" ]; then
 		# Lese Config-Namen aus .optimal_configs.tmp
 		configs=""
 		while IFS= read -r config_name; do
+			# Entferne Carriage-Returns und überspringe leere Zeilen
+			config_name=$(echo "$config_name" | tr -d '\r')
+			[ -z "$config_name" ] && continue
 			configs="$configs $config_name"
 		done < .optimal_configs.tmp
 		

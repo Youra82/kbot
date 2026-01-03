@@ -60,7 +60,7 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
         if data_with_features.empty: continue
 
         # Feature-Spalten definieren (MUSS EXAKT mit ann_model.py übereinstimmen!)
-        feature_cols = [
+        base_feature_cols = [
             # Basis-Features
             'bb_width', 'bb_pband', 'obv', 'rsi', 'macd_diff', 'macd', 
             'atr_normalized', 'adx', 'adx_pos', 'adx_neg',
@@ -92,7 +92,17 @@ def run_portfolio_simulation(start_capital, strategies_data, start_date, end_dat
             'atf_price_to_trend'
         ]
 
-        # Skalieren und Vorhersage
+        # Kompatibilität: richte die Feature-Reihenfolge an der im Scaler gespeicherten Reihenfolge aus,
+        # und ignoriere zusätzliche Features, die der Scaler nicht kennt. Fehlende werden mit 0 gefüllt.
+        feature_cols = base_feature_cols
+        scaler_feature_cols = getattr(scaler, 'feature_names_in_', None)
+        if scaler_feature_cols is not None and len(scaler_feature_cols) > 0:
+            feature_cols = list(scaler_feature_cols)
+
+        # Fehlende Spalten auffüllen, überzählige ignorieren
+        for col in feature_cols:
+            if col not in data_with_features.columns:
+                data_with_features[col] = 0.0
         features_scaled = scaler.transform(data_with_features[feature_cols])
         predictions = model.predict(features_scaled, verbose=0).flatten()
         data_with_features['prediction'] = predictions

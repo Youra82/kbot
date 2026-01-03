@@ -253,9 +253,10 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
                     channel_type = current.get('channel_type', 'none')
                     
                     if not pd.isna(channel_high) and not pd.isna(channel_low) and channel_type != 'none':
-                        if side == 'long' and entry_price > channel_low * (1 + entry_threshold):
+                        close_price = current['close']
+                        if side == 'long' and close_price > channel_low * (1 + entry_threshold):
                             trade_allowed = False  # Long nur nahe unterem Rand
-                        elif side == 'short' and entry_price < channel_high * (1 - entry_threshold):
+                        elif side == 'short' and close_price < channel_high * (1 - entry_threshold):
                             trade_allowed = False  # Short nur nahe oberem Rand
                 # *** ENDE NEUE FILTER ***
 

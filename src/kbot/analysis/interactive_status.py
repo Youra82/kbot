@@ -24,11 +24,20 @@ from kbot.strategy.run import load_ohlcv, detect_channels, channel_backtest
 OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "channel_plots"
 
 
-def load_active_strategies(settings_path: Path) -> List[Dict]:
-    with open(settings_path, "r", encoding="utf-8") as f:
-        settings = json.load(f)
-    live = settings.get("live_trading_settings", {})
-    return live.get("active_strategies", [])
+def load_config_strategies(config_dir: Path) -> List[Dict]:
+    strategies: List[Dict] = []
+    for cfg in sorted(config_dir.glob("config_*.json")):
+        try:
+            with open(cfg, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            market = data.get("market", {})
+            symbol = market.get("symbol")
+            timeframe = market.get("timeframe")
+            if symbol and timeframe:
+                strategies.append({"symbol": symbol, "timeframe": timeframe})
+        except Exception as e:
+            print(f"⚠️  Konnte {cfg.name} nicht laden: {e}")
+    return strategies
 
 
 def sanitize(text: str) -> str:
@@ -153,10 +162,10 @@ def main():
     parser.add_argument("--caption-prefix", default="KBot Kanal-Chart", help="Caption-Prefix für Telegram")
     args = parser.parse_args()
 
-    settings_path = PROJECT_ROOT / "settings.json"
-    strategies = load_active_strategies(settings_path)
+    config_dir = PROJECT_ROOT / "src" / "kbot" / "strategy" / "configs"
+    strategies = load_config_strategies(config_dir)
     if not strategies:
-        print("Keine aktiven Strategien in settings.json gefunden.")
+        print("Keine Strategien gefunden (keine config_*.json im configs-Ordner).")
         return
 
     print(f"Gefundene Strategien: {len(strategies)} (aus settings.json)")

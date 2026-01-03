@@ -42,6 +42,17 @@ fi
 # --- Interaktive Abfrage ---
 read -p "Handelspaar(e) eingeben (ohne /USDT, z.B. BTC ETH): " SYMBOLS
 read -p "Zeitfenster eingeben (z.B. 1h 4h): " TIMEFRAMES
+
+# --- Validierung der Timeframes ---
+VALID_TIMEFRAMES="1m 5m 15m 30m 1h 2h 4h 6h 12h 1d 1w 1M"
+for tf in $TIMEFRAMES; do
+    if [[ ! " $VALID_TIMEFRAMES " =~ " $tf " ]]; then
+        echo -e "${RED}Fehler: Zeitrahmen '$tf' wird von Bitget nicht unterstützt!${NC}"
+        echo -e "${YELLOW}Unterstützte Timeframes: $VALID_TIMEFRAMES${NC}"
+        exit 1
+    fi
+done
+
 echo -e "\n${BLUE}--- Empfehlung: Optimaler Rückblick-Zeitraum ---${NC}"
 printf "+-------------+--------------------------------+\n"; printf "| Zeitfenster | Empfohlener Rückblick (Tage)   |\n"; printf "+-------------+--------------------------------+\n"; printf "| 5m, 15m     | 15 - 90 Tage                   |\n"; printf "| 30m, 1h     | 180 - 365 Tage                 |\n"; printf "| 2h, 4h      | 550 - 730 Tage                 |\n"; printf "| 6h, 1d      | 1095 - 1825 Tage               |\n"; printf "+-------------+--------------------------------+\n"
 read -p "Startdatum (JJJJ-MM-TT) oder 'a' für Automatik [Standard: a]: " START_DATE_INPUT; START_DATE_INPUT=${START_DATE_INPUT:-a}
@@ -82,7 +93,7 @@ for symbol in $SYMBOLS; do
         pipeline_success=false
         for i in {1..3}; do
             if [ "$START_DATE_INPUT" == "a" ]; then
-                lookback_days=365; case "$timeframe" in 5m|15m) lookback_days=60 ;; 30m|1h) lookback_days=365 ;; 2h|4h) lookback_days=730 ;; 6h|1d) lookback_days=1095 ;; esac
+                lookback_days=365; case "$timeframe" in 1m|5m|15m) lookback_days=60 ;; 30m|1h) lookback_days=365 ;; 2h|4h) lookback_days=730 ;; 6h|12h|1d) lookback_days=1095 ;; 1w|1M) lookback_days=1825 ;; esac
                 start_year_offset=$(( (i - 1) * 365 )); total_offset=$(( lookback_days + start_year_offset ))
                 CURRENT_START_DATE=$(date -d "$total_offset days ago" +%F); CURRENT_END_DATE=$(date -d "$start_year_offset days ago" +%F)
             else

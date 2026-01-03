@@ -33,32 +33,6 @@ def find_best_threshold(symbol: str, timeframe: str, start_date: str, end_date: 
     if data.empty:
         print("❌ Fehler: Keine Daten zum Analysieren gefunden.")
         return None
-    
-    # Berechne erwartete Kerzen-Anzahl basierend auf Timeframe
-    expected_candles = {
-        '5m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 288),
-        '15m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 96),
-        '30m': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 48),
-        '1h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 24),
-        '2h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 12),
-        '4h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 6),
-        '6h': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days * 4),
-        '1d': int((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days),
-    }
-    
-    expected = expected_candles.get(timeframe, len(data))
-    actual_days = (data.index[-1] - data.index[0]).days if len(data) > 0 else 0
-    data_coverage = (len(data) / expected * 100) if expected > 0 else 100
-    
-    print(f"📊 {len(data):,} Kerzen geladen (erwartet: ~{expected:,}, Abdeckung: {data_coverage:.1f}%)")
-    print(f"📅 Tatsächliche Daten: {data.index[0].date()} bis {data.index[-1].date()} ({actual_days} Tage)")
-    
-    # Warnung bei geringer Datenabdeckung
-    if data_coverage < 50:
-        print(f"⚠️  WARNUNG: Nur {data_coverage:.1f}% der erwarteten Daten verfügbar!")
-        print(f"⚠️  Börse hat wahrscheinlich nicht genug historische Daten für {symbol} {timeframe}")
-        print(f"⚠️  Threshold-Suche könnte unzuverlässig sein!")
-
 
     # 2. Vorhersagen für den gesamten Datensatz einmalig erstellen
     X, y_true = prepare_data_for_ann(data, timeframe, verbose=False)

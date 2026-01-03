@@ -33,6 +33,7 @@ def load_data(symbol, timeframe, start_date_str, end_date_str):
         with open(os.path.join(PROJECT_ROOT, 'secret.json'), "r") as f: secrets = json.load(f)
         api_setup = secrets.get('kbot')[0]
         exchange = Exchange(api_setup)
+        exchange.validate_timeframe(timeframe)
         full_data = exchange.fetch_historical_ohlcv(symbol, timeframe, start_date_str, end_date_str)
         if not full_data.empty:
             full_data.to_csv(cache_file)

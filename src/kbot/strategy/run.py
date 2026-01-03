@@ -52,23 +52,50 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Adaptive Trend Finder: Logarithmische Regression mit Auto-Perioden-Selektion ---
+# --- Adaptive Trend Finder: Logarithmische Regression mit ATR-basierter Kanal-Breite ---
 def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, dev_multiplier=2.0):
     """
-    Implementiert den Adaptive Trend Finder Algorithmus:
-    - Berechnet logarithmische Regression über verschiedene Perioden (20-200)
+    Adaptive Trend Finder mit volatilitäts-basierten (ATR) Kanälen:
+    - Logarithmische Regression über verschiedene Perioden (20-200)
     - Wählt die Periode mit der höchsten Pearson-Korrelation
-    - Zeichnet einen Kanal basierend auf exp(log-Regression ± dev*stdDev)
+    - Kanal-Breite basiert auf ATR (dynamisch je nach Volatilität)
     
     Args:
         df: OHLC DataFrame
-        window: Maximum Periode (wird für Kompatibilität beibehalten, Standard: 200)
-        min_channel_width: minimale Breite (wird durch dev_multiplier ersetzt)
+        window: Maximum Periode (Standard: 200)
+        min_channel_width: ungenutzt (ersetzt durch ATR)
         slope_threshold: ungenutzt (Kompatibilität)
-        dev_multiplier: Standard-Abweichung Multiplikator (Standard: 2.0)
+        dev_multiplier: ATR Multiplikator für Kanal-Breite (Standard: 2.0)
     """
     closes = df['close'].values
     n = len(df)
+    
+    # Berechne ATR (Average True Range) für volatilitäts-basierte Kanäle
+    def calculate_atr(df, period=14):
+        """Berechne ATR (Average True Range)"""
+        high = df['high'].values
+        low = df['low'].values
+        close = df['close'].values
+        
+        tr = np.zeros(n)
+        for i in range(n):
+            if i == 0:
+                tr[i] = high[i] - low[i]
+            else:
+                tr[i] = max(
+                    high[i] - low[i],
+                    abs(high[i] - close[i-1]),
+                    abs(low[i] - close[i-1])
+                )
+        
+        atr = np.zeros(n)
+        atr[period-1] = np.mean(tr[:period])
+        for i in range(period, n):
+            atr[i] = (atr[i-1] * (period - 1) + tr[i]) / period
+        
+        return atr
+    
+    atr_values = calculate_atr(df, period=14)
     
     # Perioden für Short-Term Channel (wie im TradingView Indikator)
     periods = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
@@ -132,7 +159,7 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
     
     channels = []
     
-    # Für jede Kerze: finde beste Periode und berechne Kanal
+    # Für jede Kerze: finde beste Periode und berechne Kanal mit ATR-Breite
     for i in range(n):
         if i < periods[0]:  # Nicht genug Daten
             channels.append({
@@ -173,18 +200,14 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
             })
             continue
         
-        # TradingView: endPrice = exp(intercept), startPrice = exp(intercept + slope * (period - 1))
-        # Da x=length die neueste Kerze ist, entspricht intercept + slope * (length - 1) dem x=0 extrapolierten Punkt
-        # Für die aktuelle Kerze (neueste): x=length → price = exp(intercept + slope * (length - 1))
-        # Aber im Code steht endPrice = exp(intercept), also muss intercept bereits den extrapolierten x=0 Punkt darstellen
-        
-        # Der Kanal wird an der aktuellen Kerze bewertet, die x=length entspricht
+        # Mittelpunkt aus Regression
         current_log_price = best_intercept + best_slope * (best_period - 1)
         mid_price = np.exp(current_log_price)
         
-        # Obere/Untere Linie: mid * exp(±dev_multiplier * std_dev)
-        high_line = mid_price * np.exp(dev_multiplier * best_std_dev)
-        low_line = mid_price / np.exp(dev_multiplier * best_std_dev)
+        # ATR-BASIERTE KANAL-BREITE (statt symmetrisch logarithmisch)
+        current_atr = atr_values[i]
+        high_line = mid_price + dev_multiplier * current_atr
+        low_line = mid_price - dev_multiplier * current_atr
         
         channel_width = (high_line - low_line) / mid_price if mid_price > 0 else 0.0
         

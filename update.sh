@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 echo "--- Sicheres Update wird ausgeführt (Robuste Version) ---"

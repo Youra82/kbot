@@ -52,22 +52,25 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Kanal-Erkennung: genau ein Kanal zwischen letzter HH->HH und LL->LL ---
+# --- Kanal-Erkennung: Strahlen durch HH1->HH2 und LL1->LL2, Break -> neuer Kanal ---
 def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, pivot_lookback=5):
     """
-    Baut pro Kerze genau einen Kanal, indem die letzten zwei Pivot-Hochs (HH)
-    verbunden werden und die letzten zwei Pivot-Tiefs (LL) verbunden werden.
-    Dadurch entsteht ein sauberer, einziger Kanal (keine überlappenden Linien).
+    Bildet genau einen aktiven Kanal aus den letzten zwei Pivot-Hochs (HH1->HH2)
+    und den letzten zwei Pivot-Tiefs (LL1->LL2). Die Linien werden als Strahlen
+    fortgeführt. Wird der Strahl oben/unten gebrochen, ist der Kanal für diese
+    Kerze ungültig; beim nächsten verfügbaren Pivot-Paar entsteht automatisch
+    ein neuer Kanal.
 
     Args:
         df: OHLC DataFrame
         window: maximale Alter der genutzten Pivots (Kerzen)
         min_channel_width: minimale Breite als Anteil am Preis
-        slope_threshold: nur für Signatur-Kompatibilität
+        slope_threshold: Signatur-Kompatibilität
         pivot_lookback: Kerzen links/rechts zur Pivot-Bestätigung
     """
     highs = df['high'].values
     lows = df['low'].values
+    closes = df['close'].values
     channels = []
 
     # Pivot-Erkennung (Swing High/Low)
@@ -112,20 +115,21 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         mid_val = (high_line + low_line) / 2
         channel_width = (high_line - low_line) / mid_val if mid_val > 0 else 0.0
 
-        # Qualitätsmaß: hier simpel, da Linie durch die Pivots exakt geht
-        fit_quality = 1.0 if channel_width > 0 else 0.0
+        price = closes[i]
+        broke_top = price > high_line
+        broke_bottom = price < low_line
 
-        ctype = 'none'
-        if high_line > low_line and channel_width >= min_channel_width:
-            ctype = 'parallel'  # einheitlicher Kanal-Typ für Plot/Backtest
+        if high_line <= low_line or channel_width < min_channel_width or broke_top or broke_bottom:
+            channels.append({'high': high_line, 'low': low_line, 'type': 'none', 'index': df.index[i], 'width': channel_width, 'fit_quality': 0.0})
+            continue
 
         channels.append({
             'high': high_line,
             'low': low_line,
-            'type': ctype,
+            'type': 'parallel',
             'index': df.index[i],
             'width': channel_width,
-            'fit_quality': float(fit_quality)
+            'fit_quality': 1.0
         })
 
     ch_df = pd.DataFrame(channels)

@@ -33,8 +33,38 @@ echo -e "${YELLOW}Wähle einen Analyse-Modus:${NC}"
 echo "  1) Einzel-Analyse (jede Strategie wird isoliert getestet)"
 echo "  2) Manuelle Portfolio-Simulation (du wählst die Strategien)"
 echo "  3) Automatische Portfolio-Optimierung (mit Drawdown-Limit)"
-read -p "Auswahl (1-3) [Standard: 1]: " MODE
+echo "  4) Interaktive Kanal-Charts (aktive Strategien, Plotly/Telegram)"
+read -p "Auswahl (1-4) [Standard: 1]: " MODE
 MODE=${MODE:-1}
+
+# Option 4: interaktive Charts aus settings.json
+if [ "$MODE" = "4" ]; then
+	TODAY=$(date +%F)
+	read -p "Startdatum (YYYY-MM-DD) [Standard: 2023-01-01]: " START_DATE
+	START_DATE=${START_DATE:-2023-01-01}
+	read -p "Enddatum   (YYYY-MM-DD) [Standard: $TODAY]: " END_DATE
+	END_DATE=${END_DATE:-$TODAY}
+	read -p "Startkapital (USD) [Standard: 1000]: " START_CAP
+	START_CAP=${START_CAP:-1000}
+	read -p "Fenster für Kanäle (window) [Standard: 50]: " WINDOW
+	WINDOW=${WINDOW:-50}
+	read -p "Charts an Telegram senden? (j/n) [Standard: j]: " SEND_TG
+	SEND_TG=${SEND_TG:-j}
+
+	CMD=(python3 src/kbot/analysis/interactive_status.py \
+		--start "$START_DATE" \
+		--end "$END_DATE" \
+		--start-capital "$START_CAP" \
+		--window "$WINDOW")
+	if [[ "$SEND_TG" == "j" || "$SEND_TG" == "J" ]]; then
+		CMD+=(--send-telegram)
+	fi
+
+	"${CMD[@]}"
+	echo -e "\n${GREEN}✓ Interaktive Charts erzeugt.${NC}"
+	deactivate
+	exit 0
+fi
 
 python3 "$RESULTS_SCRIPT" --mode "$MODE"
 

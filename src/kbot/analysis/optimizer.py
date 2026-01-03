@@ -45,8 +45,9 @@ def objective(trial, symbol):
         # Trailing Stop Parameter
         'trailing_stop_activation_rr': trial.suggest_float('trailing_stop_activation_rr', 1.0, 4.0),
         'trailing_stop_callback_rate_pct': trial.suggest_float('trailing_stop_callback_rate_pct', 0.5, 3.0),
-        # Channel Trading Parameter (FIXED aus ATF Screenshot)
-        'dev_multiplier': 2.0,  # Deviation Multiplier aus TradingView ATF
+        # Channel Trading Parameter (ASYMMETRISCH: separate Multiplikatoren für Up/Down)
+        'dev_multiplier_upper': trial.suggest_float('dev_multiplier_upper', 1.5, 3.5),  # Für Upswings
+        'dev_multiplier_lower': trial.suggest_float('dev_multiplier_lower', 1.5, 3.5),  # Für Downswings
         'entry_threshold': 0.015,  # 1.5% Toleranz für Entry nahe Kanal-Kanten
         'exit_threshold': 0.025   # 2.5% Toleranz für Exit
     }
@@ -154,19 +155,18 @@ def main():
             "market": {"symbol": symbol, "timeframe": timeframe},
             "strategy": {
                 "prediction_threshold": FIXED_THRESHOLD,
-                "dev_multiplier": 2.0,  # FIXED: aus TradingView ATF Screenshot
-                "entry_threshold": 0.015,  # FIXED: 1.5%
-                "exit_threshold": 0.025   # FIXED: 2.5%
+                "dev_multiplier_upper": round(best_params['dev_multiplier_upper'], 2),  # Asymmetrisch: Upswings
+                "dev_multiplier_lower": round(best_params['dev_multiplier_lower'], 2),  # Asymmetrisch: Downswings
+                "entry_threshold": 0.015,  # 1.5%
+                "exit_threshold": 0.025   # 2.5%
             },
             "risk": {
                 "margin_mode": "isolated",
                 "risk_per_trade_pct": round(best_params['risk_per_trade_pct'], 2),
-                # Entfernt: "initial_sl_pct"
                 "risk_reward_ratio": round(best_params['risk_reward_ratio'], 2),
                 "leverage": best_params['leverage'],
                 "trailing_stop_activation_rr": round(best_params['trailing_stop_activation_rr'], 2),
                 "trailing_stop_callback_rate_pct": round(best_params['trailing_stop_callback_rate_pct'], 2),
-                # Neue Parameter
                 'atr_multiplier_sl': round(best_params['atr_multiplier_sl'], 2),
                 'min_sl_pct': round(best_params['min_sl_pct'], 2)
             },

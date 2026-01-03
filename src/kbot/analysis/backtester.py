@@ -73,16 +73,17 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
     if not timeframe:
         raise ValueError("Backtester benötigt ein 'timeframe' Argument für die Daten-Vorbereitung!")
 
-    # Channel-Parameter aus params (falls vorhanden, sonst Defaults)
-    dev_multiplier = params.get('dev_multiplier', 2.0)
+    # Channel-Parameter aus params (asymmetrisch)
+    dev_multiplier_upper = params.get('dev_multiplier_upper', 2.0)
+    dev_multiplier_lower = params.get('dev_multiplier_lower', 2.0)
     entry_threshold = params.get('entry_threshold', 0.015)
     exit_threshold = params.get('exit_threshold', 0.025)
 
     data_with_features = create_ann_features(data.copy())
     data_with_features.dropna(inplace=True)
     
-    # --- Berechne Adaptive Trend Channels ---
-    channels = detect_channels(data.copy(), window=50, dev_multiplier=dev_multiplier)
+    # --- Berechne Adaptive Trend Channels mit asymmetrischen Multiplikatoren ---
+    channels = detect_channels(data.copy(), window=50, dev_multiplier_upper=dev_multiplier_upper, dev_multiplier_lower=dev_multiplier_lower)
     # Merge channels in data_with_features
     data_with_features = data_with_features.join(channels[['high', 'low', 'type']], how='left', rsuffix='_channel')
     data_with_features.rename(columns={'high_channel': 'channel_high', 'low_channel': 'channel_low', 'type': 'channel_type'}, inplace=True)

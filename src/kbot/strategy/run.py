@@ -52,61 +52,36 @@ def load_ohlcv(symbol, start, end, timeframe):
     return df[['open','high','low','close','volume']]
 
 
-# --- Adaptive Trend Finder: Logarithmische Regression mit ATR-basierter Kanal-Breite ---
-def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, dev_multiplier=2.0):
+# --- Adaptive Trend Finder: Logarithmische Regression mit asymmetrischen Kanälen ---
+def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05, dev_multiplier=2.0, dev_multiplier_upper=None, dev_multiplier_lower=None):
     """
-    Adaptive Trend Finder mit volatilitäts-basierten (ATR) Kanälen:
+    Adaptive Trend Finder mit asymmetrischen Kanälen:
     - Logarithmische Regression über verschiedene Perioden (20-200)
     - Wählt die Periode mit der höchsten Pearson-Korrelation
-    - Kanal-Breite basiert auf ATR (dynamisch je nach Volatilität)
+    - Separate dev_multiplier für Ober- und Unterkante (asymmetrisch)
     
     Args:
         df: OHLC DataFrame
         window: Maximum Periode (Standard: 200)
-        min_channel_width: ungenutzt (ersetzt durch ATR)
-        slope_threshold: ungenutzt (Kompatibilität)
-        dev_multiplier: ATR Multiplikator für Kanal-Breite (Standard: 2.0)
+        dev_multiplier: Default-Wert (wenn upper/lower nicht gesetzt)
+        dev_multiplier_upper: Multiplikator für Obergrenze (für Upswings)
+        dev_multiplier_lower: Multiplikator für Untergrenze (für Downswings)
     """
+    # Fallback: Wenn nicht asymmetrisch definiert, nutze symmetrisch
+    if dev_multiplier_upper is None:
+        dev_multiplier_upper = dev_multiplier
+    if dev_multiplier_lower is None:
+        dev_multiplier_lower = dev_multiplier
+    
     closes = df['close'].values
     n = len(df)
-    
-    # Berechne ATR (Average True Range) für volatilitäts-basierte Kanäle
-    def calculate_atr(df, period=14):
-        """Berechne ATR (Average True Range)"""
-        high = df['high'].values
-        low = df['low'].values
-        close = df['close'].values
-        
-        tr = np.zeros(n)
-        for i in range(n):
-            if i == 0:
-                tr[i] = high[i] - low[i]
-            else:
-                tr[i] = max(
-                    high[i] - low[i],
-                    abs(high[i] - close[i-1]),
-                    abs(low[i] - close[i-1])
-                )
-        
-        atr = np.zeros(n)
-        atr[period-1] = np.mean(tr[:period])
-        for i in range(period, n):
-            atr[i] = (atr[i-1] * (period - 1) + tr[i]) / period
-        
-        return atr
-    
-    atr_values = calculate_atr(df, period=14)
     
     # Perioden für Short-Term Channel (wie im TradingView Indikator)
     periods = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]
     
     def calc_log_regression(source, length, end_idx):
         """
-        TradingView Adaptive Trend Finder Regression:
-        x=1 bis x=length, wobei logSource[i-1] für i=1..length
-        → i=1: logSource[0] (älteste Kerze)
-        → i=length: logSource[length-1] (neueste Kerze)
-        Also: x=1 für älteste, x=length für neueste
+        TradingView Adaptive Trend Finder Regression
         """
         if end_idx < length - 1:
             return None, None, None, None
@@ -119,9 +94,8 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         sum_yx = 0.0
         sum_y = 0.0
         
-        # Loop wie im PineScript: for i = 1 to length, lSrc = logSource[i - 1]
         for i in range(1, length + 1):
-            lsrc = log_source[i - 1]  # i=1 → index 0 (älteste), i=length → index length-1 (neueste)
+            lsrc = log_source[i - 1]
             sum_x += i
             sum_xx += i * i
             sum_yx += i * lsrc
@@ -131,7 +105,6 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         average = sum_y / length
         intercept = average - slope * sum_x / length + slope
         
-        # Standardabweichung Loop
         period_1 = length - 1
         sum_dev = 0.0
         sum_dxx = 0.0
@@ -159,9 +132,8 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
     
     channels = []
     
-    # Für jede Kerze: finde beste Periode und berechne Kanal mit ATR-Breite
     for i in range(n):
-        if i < periods[0]:  # Nicht genug Daten
+        if i < periods[0]:
             channels.append({
                 'high': np.nan,
                 'low': np.nan,
@@ -178,7 +150,6 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         best_std_dev = None
         best_period = None
         
-        # Finde Periode mit höchster Korrelation
         for period in periods:
             if i >= period:
                 slope, intercept, std_dev, pearson_r = calc_log_regression(closes, period, i)
@@ -204,10 +175,9 @@ def detect_channels(df, window=50, min_channel_width=0.005, slope_threshold=0.05
         current_log_price = best_intercept + best_slope * (best_period - 1)
         mid_price = np.exp(current_log_price)
         
-        # ATR-BASIERTE KANAL-BREITE (statt symmetrisch logarithmisch)
-        current_atr = atr_values[i]
-        high_line = mid_price + dev_multiplier * current_atr
-        low_line = mid_price - dev_multiplier * current_atr
+        # ASYMMETRISCHE Kanäle: separate Multiplikatoren für Ober- und Unterkante
+        high_line = mid_price * np.exp(dev_multiplier_upper * best_std_dev)
+        low_line = mid_price / np.exp(dev_multiplier_lower * best_std_dev)
         
         channel_width = (high_line - low_line) / mid_price if mid_price > 0 else 0.0
         

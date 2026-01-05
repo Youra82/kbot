@@ -16,12 +16,13 @@ warnings.filterwarnings('ignore', category=UserWarning, module='keras')
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from kbot.analysis.backtester import load_data, run_ann_backtest
+from kbot.analysis.backtester import load_data, run_ann_backtest, add_volume_profile_features
 from kbot.utils.telegram import send_message
 from kbot.analysis.evaluator import evaluate_dataset
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 HISTORICAL_DATA = None
+HISTORICAL_DATA_WITH_VP = None  # Vorberechnete VP-Daten
 CURRENT_MODEL_PATHS = {}
 CURRENT_TIMEFRAME = None
 FIXED_THRESHOLD = None
@@ -51,12 +52,17 @@ def objective(trial, symbol):
     }
     # --- ENDE ---
 
+    # Nutze vorberechnete VP-Daten wenn verfügbar
+    data_to_use = HISTORICAL_DATA_WITH_VP.copy() if HISTORICAL_DATA_WITH_VP is not None else HISTORICAL_DATA.copy()
+    
     result = run_ann_backtest(
-        HISTORICAL_DATA.copy(),
+        data_to_use,
         params,
         CURRENT_MODEL_PATHS,
         START_CAPITAL,
-        timeframe=CURRENT_TIMEFRAME
+        timeframe=CURRENT_TIMEFRAME,
+        use_volume_profile=True,
+        vp_precomputed=True  # VP bereits vorberechnet, nicht nochmal berechnen
     )
 
     pnl, drawdown, trades, win_rate = result.get('total_pnl_pct', -1000), result.get('max_drawdown_pct', 1.0), result.get('trades_count', 0), result.get('win_rate', 0)
@@ -110,6 +116,11 @@ def main():
 
         HISTORICAL_DATA = load_data(symbol, timeframe, args.start_date, args.end_date)
         if HISTORICAL_DATA.empty: continue
+        
+        # *** VP EINMALIG VORBERECHNEN (statt 500x im Backtest) ***
+        print("Berechne Volume Profile für alle Kerzen (einmalig)...", end=" ", flush=True)
+        HISTORICAL_DATA_WITH_VP = add_volume_profile_features(HISTORICAL_DATA.copy(), lookback=200)
+        print("✓")
 
         print("\n--- Bewertung der Datensatz-Qualität ---")
         evaluation = evaluate_dataset(HISTORICAL_DATA.copy(), timeframe)

@@ -113,7 +113,7 @@ for symbol in $SYMBOLS; do
             echo -e "\n${BLUE}=======================================================${NC}"; echo -e "${BLUE}  Bearbeite Pipeline für: $symbol ($timeframe) - VERSUCH $i/3${NC}"; echo -e "${BLUE}  Datenzeitraum: $CURRENT_START_DATE bis $CURRENT_END_DATE${NC}"; echo -e "${BLUE}=======================================================${NC}"
 
             echo -e "\n${GREEN}>>> STUFE 1/3: Starte Modelltraining...${NC}"; TRAINER_OUTPUT=$(python3 "$TRAINER" --symbols "$symbol" --timeframes "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1); echo "$TRAINER_OUTPUT"
-            MODEL_ACCURACY=$(echo "$TRAINER_OUTPUT" | grep -oE 'Test-Genauigkeit:[[:space:]]*[0-9]+(\.[0-9]+)?' | tail -1 | awk -F':' '{print $2}' | tr -d ' %')
+            MODEL_ACCURACY=$(echo "$TRAINER_OUTPUT" | grep -oE 'Modell-Genauigkeit auf Testdaten:[[:space:]]*[0-9]+(\.[0-9]+)?' | tail -1 | awk -F':' '{print $2}' | tr -d ' %')
             CURRENT_MIN_ACCURACY=$(get_min_accuracy_for_timeframe "$timeframe")
             if [[ -z "$MODEL_ACCURACY" ]] || ! (( $(echo "$MODEL_ACCURACY >= $CURRENT_MIN_ACCURACY" | bc -l 2>/dev/null) )); then echo -e "${YELLOW}Versuch $i nicht erfolgreich (Modell-Qualität ${MODEL_ACCURACY}% < ${CURRENT_MIN_ACCURACY}% Minimum für $timeframe).${NC}"; continue; fi
             echo -e "${GREEN}✔ Qualitätscheck bestanden (${MODEL_ACCURACY}% >= ${CURRENT_MIN_ACCURACY}% für $timeframe).${NC}"

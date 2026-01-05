@@ -60,9 +60,20 @@ read -p "Enddatum (JJJJ-MM-TT) [Standard: Gestern]: " END_DATE; END_DATE=${END_D
 read -p "Startkapital in USDT [Standard: 1000]: " START_CAPITAL; START_CAPITAL=${START_CAPITAL:-1000}
 read -p "CPU-Kerne [Standard: -1 für alle]: " N_CORES; N_CORES=${N_CORES:--1}
 read -p "Anzahl Trials [Standard: 200]: " N_TRIALS; N_TRIALS=${N_TRIALS:-200}
-read -p "Mindest-Genauigkeit in % eingeben [Standard: 50]: " MIN_ACCURACY; MIN_ACCURACY=${MIN_ACCURACY:-50}
+read -p "Mindest-Genauigkeit in % eingeben [Standard: 40]: " MIN_ACCURACY; MIN_ACCURACY=${MIN_ACCURACY:-40}
 
-# --- MACD-ABFRAGE ENTFERNT ---
+# Funktion: Dynamische MIN_ACCURACY basierend auf Timeframe
+get_min_accuracy_for_timeframe() {
+    local tf=$1
+    local base_accuracy=$MIN_ACCURACY
+    case "$tf" in
+        1m|5m|15m|30m) echo "$base_accuracy" ;;      # Kurze TFs: Standard
+        1h|2h) echo $(echo "$base_accuracy - 5" | bc) ;;  # Mittlere TFs: -5%
+        4h|6h) echo $(echo "$base_accuracy - 10" | bc) ;; # Lange TFs: -10%
+        12h|1d|1w|1M) echo $(echo "$base_accuracy - 15" | bc) ;; # Sehr lange TFs: -15%
+        *) echo "$base_accuracy" ;;
+    esac
+}
 
 echo -e "\n${YELLOW}Wähle einen Optimierungs-Modus:${NC}"; echo "  1) Strenger Modus"; echo "  2) 'Finde das Beste'-Modus"
 read -p "Auswahl (1-2) [Standard: 1]: " OPTIM_MODE; OPTIM_MODE=${OPTIM_MODE:-1}
@@ -103,8 +114,9 @@ for symbol in $SYMBOLS; do
 
             echo -e "\n${GREEN}>>> STUFE 1/3: Starte Modelltraining...${NC}"; TRAINER_OUTPUT=$(python3 "$TRAINER" --symbols "$symbol" --timeframes "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE" 2>&1); echo "$TRAINER_OUTPUT"
             MODEL_ACCURACY=$(echo "$TRAINER_OUTPUT" | grep -oE 'Test-Genauigkeit:[[:space:]]*[0-9]+(\.[0-9]+)?' | tail -1 | awk -F':' '{print $2}' | tr -d ' %')
-            if [[ -z "$MODEL_ACCURACY" ]] || ! (( $(echo "$MODEL_ACCURACY >= $MIN_ACCURACY" | bc -l 2>/dev/null) )); then echo -e "${YELLOW}Versuch $i nicht erfolgreich (Modell-Qualität unzureichend).${NC}"; continue; fi
-            echo -e "${GREEN}✔ Qualitätscheck bestanden (${MODEL_ACCURACY}%).${NC}"
+            CURRENT_MIN_ACCURACY=$(get_min_accuracy_for_timeframe "$timeframe")
+            if [[ -z "$MODEL_ACCURACY" ]] || ! (( $(echo "$MODEL_ACCURACY >= $CURRENT_MIN_ACCURACY" | bc -l 2>/dev/null) )); then echo -e "${YELLOW}Versuch $i nicht erfolgreich (Modell-Qualität ${MODEL_ACCURACY}% < ${CURRENT_MIN_ACCURACY}% Minimum für $timeframe).${NC}"; continue; fi
+            echo -e "${GREEN}✔ Qualitätscheck bestanden (${MODEL_ACCURACY}% >= ${CURRENT_MIN_ACCURACY}% für $timeframe).${NC}"
 
             echo -e "\n${GREEN}>>> STUFE 2/3: Suche besten Threshold...${NC}"; THRESHOLD_OUTPUT=$(python3 "$THRESHOLD_FINDER" --symbol "$symbol" --timeframe "$timeframe" --start_date "$CURRENT_START_DATE" --end_date "$CURRENT_END_DATE"); BEST_THRESHOLD=$(echo "$THRESHOLD_OUTPUT" | tail -n 1)
             if ! [[ "$BEST_THRESHOLD" =~ ^[0-9]+\.[0-9]+$ ]]; then echo -e "${YELLOW}Versuch $i nicht erfolgreich (Kein Threshold gefunden).${NC}"; continue; fi

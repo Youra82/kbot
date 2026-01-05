@@ -16,26 +16,6 @@ def get_project_root():
     return Path(__file__).parent
 
 
-def read_configs_from_tmp(project_root: Path):
-    """Read config filenames from .optimal_configs.tmp if present."""
-    tmp_path = project_root / '.optimal_configs.tmp'
-    if not tmp_path.exists():
-        return []
-
-    configs = []
-    try:
-        with open(tmp_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                clean = line.strip().replace('\r', '')
-                if clean:
-                    configs.append(clean)
-    except Exception as e:
-        print(f"⚠️  Warnung: Konnte .optimal_configs.tmp nicht lesen: {e}")
-        return []
-
-    return configs
-
-
 def parse_config_name(filename):
     """Parse config filename to extract symbol and timeframe."""
     # Example: config_BTCUSDT_1d.json -> ('BTCUSDT', '1d')
@@ -114,6 +94,11 @@ def main():
     """Main function."""
     project_root = get_project_root()
     
+    if len(sys.argv) < 2:
+        print("❌ Fehler: Keine Config-Dateien angegeben")
+        print("Verwendung: python3 update_settings_from_optimizer.py config1.json config2.json ...")
+        sys.exit(1)
+
     # Alle Argumente einsammeln, CR/Whitespace bereinigen
     raw_args = sys.argv[1:]
     config_names = []
@@ -121,25 +106,6 @@ def main():
         clean = arg.strip().replace('\r', '')
         if clean:
             config_names.append(clean)
-
-    # Ergänze mit .optimal_configs.tmp (wie in den anderen Bots) für den Fall,
-    # dass das Bash-Script die Liste nicht vollständig übergibt.
-    config_names.extend(read_configs_from_tmp(project_root))
-
-    # Deduplizieren bei Erhalt der Reihenfolge
-    seen = set()
-    deduped = []
-    for name in config_names:
-        if name and name not in seen:
-            deduped.append(name)
-            seen.add(name)
-
-    config_names = deduped
-
-    if not config_names:
-        print("❌ Fehler: Keine Config-Dateien angegeben")
-        print("Verwendung: python3 update_settings_from_optimizer.py config1.json config2.json ...")
-        sys.exit(1)
 
     if not config_names:
         print("❌ Fehler: Keine gültigen Config-Dateien nach Bereinigung gefunden")
@@ -193,7 +159,6 @@ def main():
         settings['live_trading_settings'] = {}
 
     settings['live_trading_settings']['active_strategies'] = new_strategies
-    settings['live_trading_settings']['use_auto_optimizer_results'] = True
     
     # Save updated settings
     try:

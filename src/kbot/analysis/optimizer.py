@@ -33,13 +33,13 @@ START_CAPITAL = 1000
 OPTIM_MODE = "strict"
 
 def objective(trial, symbol):
-    # --- KORRIGIERT: Entferne initial_sl_pct, füge ATR-basierte Parameter hinzu ---
+    # --- Parameter für ANN-Strategie mit Fibonacci Bollinger Bands ---
     params = {
         'prediction_threshold': FIXED_THRESHOLD,
         'risk_reward_ratio': trial.suggest_float('risk_reward_ratio', 1.0, 5.0),
         'risk_per_trade_pct': trial.suggest_float('risk_per_trade_pct', 0.5, 2.0),
         'leverage': trial.suggest_int('leverage', 5, 25),
-        # Neue Parameter für dynamischen SL
+        # ATR-basierte Stop-Loss Parameter
         'atr_multiplier_sl': trial.suggest_float('atr_multiplier_sl', 1.0, 4.0),
         'min_sl_pct': trial.suggest_float('min_sl_pct', 0.3, 2.0),
         # Trailing Stop Parameter
@@ -49,7 +49,7 @@ def objective(trial, symbol):
         'fib_length': trial.suggest_int('fib_length', 100, 300),
         'fib_mult': trial.suggest_float('fib_mult', 2.0, 4.5)
     }
-    # --- ENDE KORRIGIERT ---
+    # --- ENDE ---
 
     result = run_ann_backtest(
         HISTORICAL_DATA.copy(),
@@ -131,6 +131,17 @@ def main():
             print(f"\n❌ Keine profitablen Parameter-Kombinationen gefunden für {symbol} ({timeframe})")
             continue
 
+        # Filtere nur Trials mit allen benötigten Parametern (für Kompatibilität mit alten Studies)
+        required_params = ['fib_length', 'fib_mult', 'risk_reward_ratio', 'risk_per_trade_pct', 
+                          'leverage', 'atr_multiplier_sl', 'min_sl_pct', 
+                          'trailing_stop_activation_rr', 'trailing_stop_callback_rate_pct']
+        valid_trials = [t for t in valid_trials if all(p in t.params for p in required_params)]
+        
+        if not valid_trials:
+            print(f"\n❌ Keine kompatiblen Trials gefunden für {symbol} ({timeframe})")
+            print("   (Alte Trials ohne fib_length/fib_mult werden übersprungen)")
+            continue
+
         best_trial = max(valid_trials, key=lambda t: t.value)
         
         # Prüfe ob der beste Trial profitabel ist
@@ -148,7 +159,7 @@ def main():
 
         behavior_config = {"use_longs": True, "use_shorts": True}
 
-        # --- Speichere Fibonacci Bollinger Bands Parameter ---
+        # --- Speichere Fibonacci Bollinger Bands + Risk Parameter ---
         config_output = {
             "market": {"symbol": symbol, "timeframe": timeframe},
             "strategy": {

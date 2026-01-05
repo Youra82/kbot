@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Farben f¸r eine schˆnere Ausgabe definieren
+# Farben f√ºr eine sch√∂nere Ausgabe definieren
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
@@ -13,8 +13,8 @@ PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 # Funktion, um den Inhalt einer Datei formatiert auszugeben
 show_file_content() {
     FILE_PATH=$1
-
-    # Bestimme eine beschreibende ‹berschrift basierend auf dem Dateinamen/Pfad
+    
+    # Bestimme eine beschreibende √úberschrift basierend auf dem Dateinamen/Pfad
     DESCRIPTION=$(basename "$FILE_PATH")
 
     if [ -f "${FILE_PATH}" ]; then
@@ -22,15 +22,15 @@ show_file_content() {
         echo -e "${YELLOW}DATEI: ${DESCRIPTION}${NC}"
         echo -e "${CYAN}Pfad: ${PROJECT_ROOT}/${FILE_PATH#./}${NC}"
         echo -e "${BLUE}----------------------------------------------------------------------${NC}"
-
-        # Spezielle Zensur-Logik nur f¸r secret.json
+        
+        # Spezielle Zensur-Logik nur f√ºr secret.json
         if [[ "$DESCRIPTION" == "secret.json" ]]; then
             echo -e "${YELLOW}HINWEIS: Sensible Daten in secret.json wurden zensiert.${NC}"
             sed -E 's/("apiKey"|"secret"|"password"|"bot_token"|"chat_id"|"sender_password"): ".*"/"\1": "[ZENSIERT]"/g' "${FILE_PATH}" | cat -n
         else
             cat -n "${FILE_PATH}"
         fi
-
+        
         echo -e "${BLUE}======================================================================${NC}"
     else
         echo -e "\n${RED}WARNUNG: Datei nicht gefunden unter ${FILE_PATH}${NC}"
@@ -39,10 +39,10 @@ show_file_content() {
 
 # --- ANZEIGE ALLER RELEVANTEN CODE-DATEIEN ---
 echo -e "${BLUE}======================================================================${NC}"
-echo "           Vollst‰ndige Code-Dokumentation des KBot"
+echo "           Vollst√§ndige Code-Dokumentation des KBot"
 echo -e "${BLUE}======================================================================${NC}"
 
-# Finde alle relevanten Dateien, ABER schlieﬂe secret.json vorerst aus.
+# Finde alle relevanten Dateien, ABER schlie√üe secret.json vorerst aus.
 # Speichere die Pfade in einem Array.
 mapfile -t FILE_LIST < <(find . -path './.venv' -prune -o -path './secret.json' -prune -o \( -name "*.py" -o -name "*.sh" -o -name "*.json" -o -name "*.txt" -o -name ".gitignore" \) -print)
 

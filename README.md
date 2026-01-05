@@ -1,13 +1,13 @@
-# 📊 KBot - Channel Pattern Trading Bot
+# 📊 KBot - Fibonacci Bollinger Bands Trading Bot
 
 <div align="center">
 
-![KBot Logo](https://img.shields.io/badge/KBot-v1.0-blue?style=for-the-badge)
+![KBot Logo](https://img.shields.io/badge/KBot-v2.0-blue?style=for-the-badge)
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=for-the-badge&logo=python)](https://www.python.org/)
 [![CCXT](https://img.shields.io/badge/CCXT-4.3.5-red?style=for-the-badge)](https://github.com/ccxt/ccxt)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
-**Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Chart-Kanal-Erkennung und automatischem Risikomanagement**
+**Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Fibonacci Bollinger Bands und automatischem Risikomanagement**
 
 [Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
 
@@ -17,54 +17,73 @@
 
 ##  Übersicht
 
-KBot ist ein spezialisierter Trading-Bot, der automatisch Chart-Kanäle (parallel, Dreieck, Keil) auf dem Kryptowährungsmarkt erkennt und eigenständig von Kanalrand zu Kanalrand handelt. Das System benötigt keine Machine-Learning-Modelle oder Trainings-Pipelines und ist optimiert für stabilen Betrieb auf Ubuntu-Servern.
+KBot ist ein spezialisierter Trading-Bot, der **Fibonacci Bollinger Bands** nutzt, um automatisch Mean-Reversion-Trades auf dem Kryptowährungsmarkt zu identifizieren und auszuführen. Das System handelt Long- und Short-Positionen an den äußeren Fibonacci-Bändern und ist optimiert für stabilen Betrieb auf Ubuntu-Servern.
 
 ### 🧭 Trading-Logik (Kurzfassung)
-- **Channel Detection**: Automatische Erkennung von parallelen, dreieckigen und keilförmigen Chart-Kanälen
-- **Signal-Engine**: Bei neuen Kanälen wird eine Telegram-Nachricht mit Typ und Koordinaten gesendet
-- **Entry-Logik**: Automatischer Trade-Eröffnung am Kanalrand (Long unten, Short oben)
-- **Risk Layer**: Fester Stop-Loss und Take-Profit basierend auf Kanal-Dimensionen
+- **Fibonacci Bollinger Bands**: VWMA-basierte Bänder mit 6 Fibonacci-Levels (0.236, 0.382, 0.5, 0.618, 0.764, 1.0)
+- **Entry-Logik**: Long bei Berührung des unteren Band 6 (lower_6), Short bei Berührung des oberen Band 6 (upper_6)
+- **Take-Profit**: Gegenüberliegendes Band 6 (Long: upper_6, Short: lower_6)
+- **Stop-Loss**: Band 1 als Stop-Loss-Level (Long: lower_1, Short: upper_1)
 - **Execution**: CCXT für Order-Platzierung mit realistischer Slippage-Simulation
 
 ### 🔍 Strategie-Visualisierung
 ```mermaid
 flowchart LR
     A["OHLCV Marktdaten"]
-    B["Channel Detection<br/>Parallel/Dreieck/Keil"]
-    C["Signal Check<br/>Preis am Rand?"]
-    D["Telegram Notify<br/>Kanal erkannt"]
-    E["Risk Engine<br/>SL/TP Setup"]
+    B["Fibonacci Bollinger Bands<br/>VWMA + 6 Fib-Levels"]
+    C["Signal Check<br/>Preis am Band 6?"]
+    D["Entry Long/Short<br/>Mean-Reversion"]
+    E["Risk Engine<br/>SL @ Band 1, TP @ Band 6"]
     F["Order Router (CCXT)"]
 
     A --> B --> C --> D
-    C --> E --> F
+    D --> E --> F
 ```
 
 ### 📈 Trade-Beispiel (Entry/SL/TP)
-- **Setup**: Paralleler Kanal erkannt; oberer Widerstand bei 45.000, untere Unterstützung bei 43.000
-- **Entry**: Long bei Touchpoint an untere Linie (43.000) mit Telegram-Alert
-- **SL**: 2% unter Entry (42.140) zur Vermeidung von Fehlausbrüchen
-- **TP**: An oberer Kanal-Linie (45.000) oder teilweise bei 44.000
-- **Management**: Nach Erreichen von TP wird Position geschlossen; Kanal wird erneut gescannt
+- **Setup**: Fibonacci Bollinger Bands berechnet; Preis fällt zum unteren Band 6 (lower_6)
+- **Entry Long**: Automatischer Long-Einstieg bei Berührung von lower_6
+- **SL**: Unter lower_1 (äußerstes Fibonacci-Level + Puffer)
+- **TP**: Bei Erreichen von upper_6 (gegenüberliegendes Band)
+- **Short-Trade**: Analog bei Berührung von upper_6 mit TP bei lower_6
 
 ---
 
 ## 🚀 Features
 
 ### Trading Features
-- ✅ Automatische Channel-Pattern-Erkennung (Parallel, Dreieck, Keil)
+- ✅ **Fibonacci Bollinger Bands** Strategie mit 6 Fibonacci-Levels
+- ✅ **VWMA-basierte** Berechnung (Volume Weighted Moving Average)
+- ✅ **Long & Short Trading** - bidirektionale Mean-Reversion
 - ✅ Unterstützt mehrere Kryptowährungspaare (BTC, ETH, SOL, DOGE, etc.)
 - ✅ Flexible Timeframe-Unterstützung (15m, 30m, 1h, 4h, 1d)
 - ✅ Automatische Positionsgröße basierend auf verfügbarem Kapital
-- ✅ Fester Stop-Loss und Take-Profit Management
-- ✅ Telegram-Benachrichtigungen bei neuen Kanälen und Trades
+- ✅ Integriertes Stop-Loss (Band 1) und Take-Profit (Band 6) Management
+- ✅ MACD-Filter Option für zusätzliche Signal-Bestätigung
 
 ### Technical Features
-- ✅ CCXT Integration für mehrere Börsen
-- ✅ Automatische Channel-Detektion mit Geometrie-Algorithmen
+- ✅ CCXT Integration für mehrere Börsen (Bitget primär)
+- ✅ Automatische Fibonacci-Band-Berechnung in Echtzeit
 - ✅ Backtesting mit realistischer Slippage-Simulation
 - ✅ Robust Error-Handling und Logging
 - ✅ Keine ML/Deep-Learning-Abhängigkeiten (leichte Installation)
+
+### Fibonacci Bollinger Bands - Details
+
+Die Strategie verwendet **6 Fibonacci-Level** auf jeder Seite der VWMA-Basislinie:
+
+| Level | Fibonacci | Verwendung |
+|-------|-----------|------------|
+| Band 1 | 0.236 | Stop-Loss Level |
+| Band 2 | 0.382 | - |
+| Band 3 | 0.500 | - |
+| Band 4 | 0.618 | - |
+| Band 5 | 0.764 | - |
+| Band 6 | 1.000 | Entry/Take-Profit Level |
+
+**Parameter:**
+- **Length**: 200 (VWMA-Periode)
+- **Multiplier**: 3.0 (Standardabweichungs-Multiplikator)
 
 ---
 
@@ -159,10 +178,64 @@ Bearbeite `settings.json` für deine gewünschten Handelspaare:
 }
 ```
 
-**Parameter-Erklärung**:
+### Parameter-Erklärung**:
 - `symbol`: Handelspaar (Format: BASE/QUOTE:SETTLE)
 - `timeframe`: Zeitrahmen (15m, 30m, 1h, 4h, 1d)
 - `active`: Strategie aktiv (true/false)
+- `use_macd_filter`: Optional - MACD-Filter für zusätzliche Signalbestätigung
+
+---
+
+## 🎯 Strategie-Logik im Detail
+
+### Fibonacci Bollinger Bands Algorithmus
+
+```python
+# 1. VWMA (Volume Weighted Moving Average) berechnen
+typical_price = (high + low + close) / 3
+vwma = sum(typical_price * volume, length) / sum(volume, length)
+
+# 2. Standardabweichung berechnen
+stdev = std(typical_price, length)
+
+# 3. Deviation mit Multiplikator
+dev = multiplier * stdev  # Standard: 3.0
+
+# 4. Fibonacci-Bänder generieren
+fib_levels = [0.236, 0.382, 0.5, 0.618, 0.764, 1.0]
+for fib in fib_levels:
+    upper_band = vwma + (fib * dev)
+    lower_band = vwma - (fib * dev)
+```
+
+### Entry/Exit Regeln
+
+| Situation | Aktion | Level |
+|-----------|--------|-------|
+| Preis ≤ lower_6 | **Long Entry** | Unterstes Band |
+| Preis ≥ upper_6 (Long) | **Long Exit (TP)** | Oberstes Band |
+| Preis < lower_1 (Long) | **Long Exit (SL)** | Stop-Loss Level |
+| Preis ≥ upper_6 | **Short Entry** | Oberstes Band |
+| Preis ≤ lower_6 (Short) | **Short Exit (TP)** | Unterstes Band |
+| Preis > upper_1 (Short) | **Short Exit (SL)** | Stop-Loss Level |
+
+### Visualisierung der Bänder
+
+```
+        upper_6 ─────────────── Entry Short / TP Long
+        upper_5 ───────────────
+        upper_4 ───────────────
+        upper_3 ───────────────
+        upper_2 ───────────────
+        upper_1 ─────────────── SL Short
+        ══════════════════════ VWMA (Basis)
+        lower_1 ─────────────── SL Long
+        lower_2 ───────────────
+        lower_3 ───────────────
+        lower_4 ───────────────
+        lower_5 ───────────────
+        lower_6 ─────────────── Entry Long / TP Short
+```
 
 ---
 
@@ -252,7 +325,7 @@ sudo systemctl status kbot
 
 ## � Interaktives Pipeline-Script
 
-Das **`run_pipeline.sh`** Script automatisiert die Parameter-Optimierung für deine Handelsstrategien. Es führt einen Grid-Search über alle Kanal-Erkennungs-Parameter durch und findet die optimalen Einstellungen für dein ausgewähltes Symbol und Timeframe.
+Das **`run_pipeline.sh`** Script automatisiert die Parameter-Optimierung für deine Handelsstrategien. Es führt einen Grid-Search über die Fibonacci Bollinger Bands Parameter durch und findet die optimalen Einstellungen für dein ausgewähltes Symbol und Timeframe.
 
 ### Features des Pipeline-Scripts
 
@@ -407,20 +480,19 @@ artifacts/optimal_configs/
   "symbol": "BTCUSDT",
   "timeframe": "1d",
   "parameters": {
-    "window": 60,
-    "min_channel_width": 0.003,
-    "slope_threshold": 0.03,
-    "entry_threshold": 0.02,
-    "exit_threshold": 0.03
+    "length": 200,
+    "multiplier": 3.0,
+    "entry_level": "lower_6",
+    "exit_level": "upper_6"
   },
   "performance": {
-    "total_return": 2.45,
-    "win_rate": 66.7,
-    "num_trades": 3,
-    "max_drawdown": -8.38,
-    "end_capital": 512.25
+    "total_return": 12.45,
+    "win_rate": 68.5,
+    "num_trades": 8,
+    "max_drawdown": -6.2,
+    "end_capital": 1124.50
   },
-  "timestamp": "2025-01-01T20:17:35.833000"
+  "timestamp": "2026-01-05T14:30:00.000000"
 }
 ```
 
@@ -439,26 +511,18 @@ Das Script lädt die optimalen Parameter und nutzt sie für die Backtests:
 
 ### Parameter-Grid
 
-Das Pipeline-Script testet folgende Parameter-Kombinationen (insgesamt **3.456 Kombinationen**):
+Das Pipeline-Script testet folgende Parameter-Kombinationen für die Fibonacci Bollinger Bands:
 
 ```
-Window (Kanal-Fenster):              [35, 40, 45, 50, 55, 60]                 (6 Werte)
-Min Channel Width (min. Breite):     [0.0005, 0.001, 0.0015, 0.002, 0.0025, 0.003]  (6 Werte)
-Slope Threshold (Steigung):          [0.005, 0.01, 0.015, 0.02, 0.025, 0.03] (6 Werte)
-Entry Threshold (Entry-Punkt):       [0.005, 0.01, 0.015, 0.02]              (4 Werte)
-Exit Threshold (Exit-Punkt):         [0.015, 0.02, 0.025, 0.03]              (4 Werte)
+Length (VWMA-Periode):               [100, 150, 200, 250, 300]               (5 Werte)
+Multiplier (Std-Dev Faktor):         [2.0, 2.5, 3.0, 3.5, 4.0]               (5 Werte)
+Entry Level (Fibonacci):             [lower_5, lower_6]                       (2 Werte)
+Exit Level (Fibonacci):              [upper_5, upper_6]                       (2 Werte)
 
-Total = 6 × 6 × 6 × 4 × 4 = 3.456 Kombinationen
+Total = 5 × 5 × 2 × 2 = 100 Kombinationen
 ```
 
-**Laufzeit**: ~30-45 Sekunden pro Symbol/Timeframe (mit tqdm Ladebalken)
-
-**Verbesserungen gegenüber vorher**:
-- ✅ Viel feinere Parameter-Granularität (von 3-5 auf 4-6 Werte pro Parameter)
-- ✅ 14x bessere Abdeckung des Suchraums
-- ✅ Noch immer schneller als Optuna-basierte Optimierung (30-45s vs. 1-2 Min)
-- ✅ Garantiert findet globales Optimum
-- ✅ Deutlich bessere Chancen für optimale Parameter-Kombinationen
+**Laufzeit**: ~15-30 Sekunden pro Symbol/Timeframe (mit tqdm Ladebalken)
 
 **Scoring**: Jede Kombination wird bewertet mit:
 - **Risk-Adjusted Return** = Total Return / |Max Drawdown|
@@ -519,6 +583,9 @@ tail -f logs/error.log
 
 # Logs einer individuellen Strategie
 tail -n 100 logs/kbot_BTCUSDTUSDT_4h.log
+
+# Nach Fibonacci-Band-Signalen suchen
+tail -f logs/cron.log | grep -i "lower_6\|upper_6\|fib"
 ```
 
 ### Performance-Metriken
@@ -668,7 +735,7 @@ export KBOT_DEBUG=1
 python master_runner.py
 
 # Nur Strategie-Logs anzeigen
-tail -f logs/cron.log | grep -i "channel\|trade\|position"
+tail -f logs/cron.log | grep -i "fib\|band\|trade\|position\|lower_6\|upper_6"
 
 # Fehler im Detail
 python -m pdb master_runner.py
@@ -683,20 +750,19 @@ kbot/
 ├── src/
 │   └── kbot/
 │       ├── strategy/          # Trading-Logik
-│       │   ├── run.py
-│       │   └── channel_detector.py
-│       ├── backtest/          # Backtesting
-│       │   └── backtester.py
+│       │   ├── run.py         # Fibonacci Bollinger Bands Strategie
+│       │   └── configs/       # Strategie-Konfigurationen
+│       ├── analysis/          # Analyse-Tools
 │       └── utils/             # Hilfsfunktionen
 │           ├── exchange.py
 │           └── telegram.py
-├── scripts/                   # Hilfsskripte
 ├── tests/                     # Unit-Tests
-├── data/                      # Marktdaten
+├── data/                      # Marktdaten & Cache
 ├── logs/                      # Log-Files
 ├── artifacts/                 # Ergebnisse
 │   ├── models/
-│   └── backtest/
+│   ├── db/
+│   └── optimal_configs/       # Optimierte Parameter
 ├── master_runner.py          # Haupt-Entry-Point
 ├── settings.json             # Konfiguration
 ├── secret.json               # API-Credentials
@@ -728,10 +794,11 @@ kbot/
 ### Performance-Tipps
 
 - 💡 Starten Sie mit 1-2 Strategien
-- 💡 Verwenden Sie längere Timeframes (4h+) für stabilere Signale
+- 💡 Verwenden Sie längere Timeframes (4h+) für stabilere Fibonacci-Signale
 - 💡 Monitoren Sie regelmäßig die Performance
-- 💡 Channel-Parameter regelmäßig überprüfen
+- 💡 VWMA-Length und Multiplier regelmäßig überprüfen
 - 💡 Position-Sizing angemessen konfigurieren
+- 💡 Aktivieren Sie den MACD-Filter für zusätzliche Signal-Bestätigung
 
 ---
 
@@ -800,6 +867,6 @@ Entwickelt mit:
 
 ⭐ Star uns auf GitHub wenn dir dieses Projekt gefällt!
 
-[🔝 Nach oben](#-kbot---channel-pattern-trading-bot)
+[🔝 Nach oben](#-kbot---fibonacci-bollinger-bands-trading-bot)
 
 </div>

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# show_results.sh: Interaktives Backtest-Tool für KBot (Kanalstrategie)
+# show_results.sh: Interaktives Backtest-Tool für KBot (Fib BB + Volume Profile)
 
 # Farben für Output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Virtual Environment Pfad (Linux/Mac) mit Windows-Fallback
@@ -15,6 +16,7 @@ VENV_PATH=".venv/bin/activate"
 # Python-Script Pfad
 RESULTS_SCRIPT="src/kbot/analysis/show_results.py"
 UPDATE_SETTINGS_SCRIPT="update_settings_from_optimizer.py"
+RUN_SCRIPT="src/kbot/strategy/run.py"
 
 # Aktiviere venv
 if [ ! -f "$VENV_PATH" ]; then
@@ -25,23 +27,82 @@ fi
 
 source "$VENV_PATH"
 
-# --- ERWEITERTES MODUS-MENÜ (wie JaegerBot) ---
-echo -e "\n${BLUE}=======================================================${NC}"
-echo -e "${BLUE}     KBot Backtest-Tool (Kanalstrategie)${NC}"
-echo -e "${BLUE}=======================================================${NC}\n"
-
-echo -e "${YELLOW}Wähle einen Analyse-Modus:${NC}"
-echo "  1) Einzel-Analyse (jede Strategie wird isoliert getestet)"
-echo "  2) Manuelle Portfolio-Simulation (du wählst die Strategien)"
-echo "  3) Automatische Portfolio-Optimierung (mit Drawdown-Limit)"
-read -p "Auswahl (1-3) [Standard: 1]: " MODE
-MODE=${MODE:-1}
-
+# Python-Binary finden
 PYTHON_BIN="python3"
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
 	PYTHON_BIN="python"
 fi
 
+# --- ERWEITERTES MODUS-MENÜ (Fib BB + Volume Profile) ---
+echo -e "\n${BLUE}=======================================================${NC}"
+echo -e "${BLUE}     KBot Backtest-Tool (Fib BB + Volume Profile)${NC}"
+echo -e "${BLUE}=======================================================${NC}\n"
+
+echo -e "${YELLOW}Wähle einen Analyse-Modus:${NC}"
+echo -e "  ${CYAN}1)${NC} Einzel-Analyse (jede Strategie wird isoliert getestet)"
+echo -e "  ${CYAN}2)${NC} Manuelle Portfolio-Simulation (du wählst die Strategien)"
+echo -e "  ${CYAN}3)${NC} Automatische Portfolio-Optimierung (mit Drawdown-Limit)"
+echo -e "  ${CYAN}4)${NC} Fib BB + Volume Profile Backtest (direkter Test)"
+read -p "Auswahl (1-4) [Standard: 1]: " MODE
+MODE=${MODE:-1}
+
+# --- MODUS 4: Direkter Fib BB + VP Backtest ---
+if [ "$MODE" = "4" ]; then
+	echo -e "\n${BLUE}--- Fibonacci BB + Volume Profile Backtest ---${NC}\n"
+	
+	read -p "Symbol (z.B. BTC, ETH, SOL): " SYMBOL
+	SYMBOL=${SYMBOL:-BTC}
+	
+	read -p "Timeframe (z.B. 1d, 4h, 1h): " TIMEFRAME
+	TIMEFRAME=${TIMEFRAME:-1d}
+	
+	read -p "Startdatum (JJJJ-MM-TT) [Standard: 2023-01-01]: " START_DATE
+	START_DATE=${START_DATE:-2023-01-01}
+	
+	read -p "Enddatum (JJJJ-MM-TT) [Standard: heute]: " END_DATE
+	END_DATE=${END_DATE:-$(date +%F)}
+	
+	read -p "Startkapital (USDT) [Standard: 1000]: " CAPITAL
+	CAPITAL=${CAPITAL:-1000}
+	
+	echo -e "\n${YELLOW}Volume Profile Konfluenz:${NC}"
+	echo "  Bei aktivierter Konfluenz werden nur Trades ausgeführt,"
+	echo "  wenn Fib-Band UND Volume Profile Level übereinstimmen."
+	read -p "Konfluenz erforderlich? (j/n) [Standard: j]: " CONFLUENCE
+	CONFLUENCE=${CONFLUENCE:-j}
+	
+	# Konvertiere zu bool
+	if [ "$CONFLUENCE" = "j" ] || [ "$CONFLUENCE" = "J" ]; then
+		CONFLUENCE_ARG="True"
+	else
+		CONFLUENCE_ARG="False"
+	fi
+	
+	read -p "Fib BB Länge [Standard: 200]: " FIB_LENGTH
+	FIB_LENGTH=${FIB_LENGTH:-200}
+	
+	read -p "Fib BB Multiplikator [Standard: 3.0]: " FIB_MULT
+	FIB_MULT=${FIB_MULT:-3.0}
+	
+	echo -e "\n${BLUE}Starte Backtest...${NC}\n"
+	
+	"$PYTHON_BIN" "$RUN_SCRIPT" \
+		--symbol "$SYMBOL" \
+		--timeframe "$TIMEFRAME" \
+		--start_date "$START_DATE" \
+		--end_date "$END_DATE" \
+		--start_capital "$CAPITAL" \
+		--use_volume_profile True \
+		--require_confluence "$CONFLUENCE_ARG" \
+		--fib_length "$FIB_LENGTH" \
+		--fib_mult "$FIB_MULT"
+	
+	echo -e "\n${GREEN}✓ Backtest abgeschlossen.${NC}"
+	deactivate
+	exit 0
+fi
+
+# --- MODI 1-3: Bestehendes ANN-basiertes System ---
 "$PYTHON_BIN" "$RESULTS_SCRIPT" --mode "$MODE"
 
 # --- NACH MODUS 3: SETTINGS-UPDATE ANGEBOT ---

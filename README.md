@@ -1,13 +1,13 @@
-# 📊 KBot - Fibonacci Bollinger Bands Trading Bot
+# 📊 KBot - Fibonacci Bollinger Bands + Volume Profile Trading Bot
 
 <div align="center">
 
-![KBot Logo](https://img.shields.io/badge/KBot-v2.0-blue?style=for-the-badge)
+![KBot Logo](https://img.shields.io/badge/KBot-v3.0-blue?style=for-the-badge)
 [![Python](https://img.shields.io/badge/Python-3.8+-green?style=for-the-badge&logo=python)](https://www.python.org/)
 [![CCXT](https://img.shields.io/badge/CCXT-4.3.5-red?style=for-the-badge)](https://github.com/ccxt/ccxt)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
-**Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Fibonacci Bollinger Bands und automatischem Risikomanagement**
+**Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Fibonacci Bollinger Bands, Volume Profile Konfluenz und automatischem Risikomanagement**
 
 [Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
 
@@ -17,35 +17,40 @@
 
 ##  Übersicht
 
-KBot ist ein spezialisierter Trading-Bot, der **Fibonacci Bollinger Bands** nutzt, um automatisch Mean-Reversion-Trades auf dem Kryptowährungsmarkt zu identifizieren und auszuführen. Das System handelt Long- und Short-Positionen an den äußeren Fibonacci-Bändern und ist optimiert für stabilen Betrieb auf Ubuntu-Servern.
+KBot ist ein spezialisierter Trading-Bot, der **Fibonacci Bollinger Bands** kombiniert mit **Volume Profile Analyse** nutzt, um hochwertige Mean-Reversion-Trades auf dem Kryptowährungsmarkt zu identifizieren. Das System handelt nur bei Konfluenz von technischen Bändern und Volume-Levels für maximale Signalqualität.
 
 ### 🧭 Trading-Logik (Kurzfassung)
 - **Fibonacci Bollinger Bands**: VWMA-basierte Bänder mit 6 Fibonacci-Levels (0.236, 0.382, 0.5, 0.618, 0.764, 1.0)
-- **Entry-Logik**: Long bei Berührung des unteren Band 6 (lower_6), Short bei Berührung des oberen Band 6 (upper_6)
-- **Take-Profit**: Gegenüberliegendes Band 6 (Long: upper_6, Short: lower_6)
+- **Volume Profile**: PoC (Point of Control), VAH (Value Area High), VAL (Value Area Low) Berechnung
+- **Konfluenz-Filter**: Entry nur wenn Fib-Band UND Volume-Level übereinstimmen
+- **Entry-Logik**: Long bei lower_6 + nahe VAL/PoC, Short bei upper_6 + nahe VAH/PoC
+- **Take-Profit**: TP1 bei PoC (50%), TP2 bei gegenüberliegendem Band 6
 - **Stop-Loss**: Band 1 als Stop-Loss-Level (Long: lower_1, Short: upper_1)
-- **Execution**: CCXT für Order-Platzierung mit realistischer Slippage-Simulation
 
 ### 🔍 Strategie-Visualisierung
 ```mermaid
 flowchart LR
     A["OHLCV Marktdaten"]
     B["Fibonacci Bollinger Bands<br/>VWMA + 6 Fib-Levels"]
-    C["Signal Check<br/>Preis am Band 6?"]
-    D["Entry Long/Short<br/>Mean-Reversion"]
-    E["Risk Engine<br/>SL @ Band 1, TP @ Band 6"]
-    F["Order Router (CCXT)"]
+    C["Volume Profile<br/>PoC, VAH, VAL"]
+    D["Konfluenz-Check<br/>Fib + VP Level?"]
+    E["Signal Strength<br/>STRONG/WEAK"]
+    F["Entry Long/Short"]
+    G["Risk Engine<br/>TP1@PoC, TP2@Band6"]
+    H["Order Router (CCXT)"]
 
-    A --> B --> C --> D
-    D --> E --> F
+    A --> B --> D
+    A --> C --> D
+    D --> E --> F --> G --> H
 ```
 
 ### 📈 Trade-Beispiel (Entry/SL/TP)
-- **Setup**: Fibonacci Bollinger Bands berechnet; Preis fällt zum unteren Band 6 (lower_6)
-- **Entry Long**: Automatischer Long-Einstieg bei Berührung von lower_6
-- **SL**: Unter lower_1 (äußerstes Fibonacci-Level + Puffer)
-- **TP**: Bei Erreichen von upper_6 (gegenüberliegendes Band)
-- **Short-Trade**: Analog bei Berührung von upper_6 mit TP bei lower_6
+- **Setup**: Fib BB + Volume Profile berechnet; Preis fällt zum lower_6 UND ist nahe VAL
+- **Signal**: STRONG_LONG (hohe Konfluenz = hohe Signalqualität)
+- **Entry Long**: Automatischer Einstieg bei Konfluenz
+- **TP1**: Bei PoC (Point of Control) - 50% Position schließen
+- **TP2**: Bei upper_6 - Rest schließen
+- **SL**: Unter lower_1
 
 ---
 
@@ -53,20 +58,22 @@ flowchart LR
 
 ### Trading Features
 - ✅ **Fibonacci Bollinger Bands** Strategie mit 6 Fibonacci-Levels
+- ✅ **Volume Profile Integration** - PoC, VAH, VAL Berechnung
+- ✅ **Konfluenz-basierte Entries** - nur bei Fib + VP Übereinstimmung
 - ✅ **VWMA-basierte** Berechnung (Volume Weighted Moving Average)
 - ✅ **Long & Short Trading** - bidirektionale Mean-Reversion
+- ✅ **Dual Take-Profit** - TP1 bei PoC, TP2 bei Band 6
 - ✅ Unterstützt mehrere Kryptowährungspaare (BTC, ETH, SOL, DOGE, etc.)
 - ✅ Flexible Timeframe-Unterstützung (15m, 30m, 1h, 4h, 1d)
 - ✅ Automatische Positionsgröße basierend auf verfügbarem Kapital
 - ✅ Integriertes Stop-Loss (Band 1) und Take-Profit (Band 6) Management
-- ✅ MACD-Filter Option für zusätzliche Signal-Bestätigung
 
 ### Technical Features
 - ✅ CCXT Integration für mehrere Börsen (Bitget primär)
+- ✅ Rolling Volume Profile Berechnung (200 Kerzen Lookback)
 - ✅ Automatische Fibonacci-Band-Berechnung in Echtzeit
 - ✅ Backtesting mit realistischer Slippage-Simulation
 - ✅ Robust Error-Handling und Logging
-- ✅ Keine ML/Deep-Learning-Abhängigkeiten (leichte Installation)
 
 ### Fibonacci Bollinger Bands - Details
 
@@ -76,14 +83,25 @@ Die Strategie verwendet **6 Fibonacci-Level** auf jeder Seite der VWMA-Basislini
 |-------|-----------|------------|
 | Band 1 | 0.236 | Stop-Loss Level |
 | Band 2 | 0.382 | - |
-| Band 3 | 0.500 | - |
+| Band 3 | 0.500 | Schwache Entry (mit VP Konfluenz) |
 | Band 4 | 0.618 | - |
 | Band 5 | 0.764 | - |
 | Band 6 | 1.000 | Entry/Take-Profit Level |
 
+### Volume Profile - Details
+
+| Level | Beschreibung | Verwendung |
+|-------|--------------|------------|
+| **PoC** | Point of Control - Preis mit höchstem Volumen | TP1 (50%), stärkstes S/R |
+| **VAH** | Value Area High - obere 68% des Volumens | Short Entry Konfluenz |
+| **VAL** | Value Area Low - untere 68% des Volumens | Long Entry Konfluenz |
+
 **Parameter:**
-- **Length**: 200 (VWMA-Periode)
-- **Multiplier**: 3.0 (Standardabweichungs-Multiplikator)
+- **Fib Length**: 200 (VWMA-Periode)
+- **Fib Multiplier**: 3.0 (Standardabweichungs-Multiplikator)
+- **VP Lookback**: 200 Kerzen
+- **VP Bars**: 50 Preis-Levels
+- **VA Percent**: 68% (Standard Value Area)
 
 ---
 

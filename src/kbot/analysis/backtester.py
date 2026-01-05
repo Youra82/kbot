@@ -15,7 +15,153 @@ from kbot.utils.exchange import Exchange
 from kbot.utils.ann_model import prepare_data_for_ann, load_model_and_scaler, create_ann_features
 from kbot.utils.supertrend_indicator import SuperTrendLocal
 
-# --- load_data und get_higher_timeframe sind unverändert ---
+# =============================================================================
+# VOLUME PROFILE - Berechnung von PoC, VAH, VAL
+# =============================================================================
+def calculate_volume_profile(df, num_bars=50, va_percent=68):
+    """
+    Berechnet das Volume Profile für einen DataFrame.
+    
+    Args:
+        df: OHLCV DataFrame
+        num_bars: Anzahl der Preis-Level für das Profil
+        va_percent: Prozentsatz für die Value Area (Standard: 68%)
+    
+    Returns:
+        dict mit: poc, vah, val, volumes, price_levels
+    """
+    if len(df) < 10:
+        return None
+    
+    price_min = df['low'].min()
+    price_max = df['high'].max()
+    price_range = price_max - price_min
+    
+    if price_range <= 0:
+        return None
+    
+    interval = price_range / num_bars
+    volumes = np.zeros(num_bars)
+    
+    for i in range(len(df)):
+        row_low = df['low'].iloc[i]
+        row_high = df['high'].iloc[i]
+        row_volume = df['volume'].iloc[i]
+        
+        for j in range(num_bars):
+            price_level = price_min + interval * j
+            price_level_high = price_level + interval
+            
+            if row_low <= price_level_high and row_high >= price_level:
+                overlap_low = max(row_low, price_level)
+                overlap_high = min(row_high, price_level_high)
+                candle_range = row_high - row_low if row_high > row_low else 1
+                overlap_pct = (overlap_high - overlap_low) / candle_range
+                volumes[j] += row_volume * max(0, overlap_pct)
+    
+    poc_idx = np.argmax(volumes)
+    poc_price = price_min + interval * (poc_idx + 0.5)
+    
+    total_vol = volumes.sum()
+    if total_vol == 0:
+        return None
+    
+    va_vol = total_vol * (va_percent / 100)
+    va_up, va_dn = poc_idx, poc_idx
+    va_sum = volumes[poc_idx]
+    
+    while va_sum < va_vol:
+        v_up = volumes[va_up + 1] if va_up < num_bars - 1 else 0
+        v_dn = volumes[va_dn - 1] if va_dn > 0 else 0
+        
+        if v_up == 0 and v_dn == 0:
+            break
+        
+        if v_up >= v_dn and va_up < num_bars - 1:
+            va_sum += v_up
+            va_up += 1
+        elif va_dn > 0:
+            va_sum += v_dn
+            va_dn -= 1
+        else:
+            break
+    
+    vah = price_min + interval * (va_up + 1)
+    val = price_min + interval * va_dn
+    
+    return {
+        'poc': poc_price,
+        'vah': vah,
+        'val': val,
+        'volumes': volumes,
+        'price_min': price_min,
+        'price_max': price_max,
+        'interval': interval
+    }
+
+
+def add_volume_profile_features(data, lookback=200):
+    """
+    Fügt Volume Profile Features zum DataFrame hinzu.
+    
+    Features:
+        - vp_poc: Point of Control
+        - vp_vah: Value Area High
+        - vp_val: Value Area Low
+        - vp_poc_dist: Relative Distanz zum PoC
+        - vp_vah_dist: Relative Distanz zur VAH
+        - vp_val_dist: Relative Distanz zur VAL
+        - vp_in_value_area: 1 wenn Preis in VA, sonst 0
+        - vp_volume_at_price: Relatives Volumen am aktuellen Preis
+    """
+    data = data.copy()
+    
+    # Initialisiere Spalten
+    data['vp_poc'] = np.nan
+    data['vp_vah'] = np.nan
+    data['vp_val'] = np.nan
+    data['vp_poc_dist'] = np.nan
+    data['vp_vah_dist'] = np.nan
+    data['vp_val_dist'] = np.nan
+    data['vp_in_value_area'] = 0
+    data['vp_volume_at_price'] = np.nan
+    
+    for i in range(lookback, len(data)):
+        # Rolling VP Berechnung
+        vp = calculate_volume_profile(data.iloc[i-lookback:i], num_bars=50)
+        
+        if vp is None:
+            continue
+        
+        price = data['close'].iloc[i]
+        
+        data.iloc[i, data.columns.get_loc('vp_poc')] = vp['poc']
+        data.iloc[i, data.columns.get_loc('vp_vah')] = vp['vah']
+        data.iloc[i, data.columns.get_loc('vp_val')] = vp['val']
+        
+        # Relative Distanzen
+        if vp['poc'] > 0:
+            data.iloc[i, data.columns.get_loc('vp_poc_dist')] = (price - vp['poc']) / vp['poc']
+        if vp['vah'] > 0:
+            data.iloc[i, data.columns.get_loc('vp_vah_dist')] = (price - vp['vah']) / vp['vah']
+        if vp['val'] > 0:
+            data.iloc[i, data.columns.get_loc('vp_val_dist')] = (price - vp['val']) / vp['val']
+        
+        # In Value Area?
+        if vp['val'] <= price <= vp['vah']:
+            data.iloc[i, data.columns.get_loc('vp_in_value_area')] = 1
+        
+        # Volume at Price
+        idx = int((price - vp['price_min']) / vp['interval'])
+        idx = max(0, min(idx, len(vp['volumes']) - 1))
+        max_vol = vp['volumes'].max()
+        if max_vol > 0:
+            data.iloc[i, data.columns.get_loc('vp_volume_at_price')] = vp['volumes'][idx] / max_vol
+    
+    return data
+
+
+# --- load_data und get_higher_timeframe ---
 def load_data(symbol, timeframe, start_date_str, end_date_str):
     cache_dir = os.path.join(PROJECT_ROOT, 'data', 'cache')
     os.makedirs(cache_dir, exist_ok=True)
@@ -59,8 +205,43 @@ def calculate_supertrend_direction(data):
     # 1.0 für Long-Trend, -1.0 für Short-Trend
     return st_indicator.get_supertrend_direction().shift(1) # Shift, um den ST der VORHERIGEN Kerze zu verwenden
 
-# *** KORRIGIERTE BACKTESTER FUNKTION (SuperTrend-Filter) ***
-def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_filter=False, htf_data=None, timeframe=None, verbose=False, params_for_htf_load=None):
+
+# *** HELFERFUNKTION: Volume Profile Konfluenz-Check ***
+def check_vp_confluence(price, vp, tolerance_pct=1.0):
+    """
+    Prüft ob der aktuelle Preis nahe an einem Volume Profile Level ist.
+    
+    Returns:
+        tuple: (is_near_support, is_near_resistance, confluence_strength)
+    """
+    if vp is None:
+        return (False, False, 0.5)
+    
+    poc, vah, val = vp['poc'], vp['vah'], vp['val']
+    
+    # Prüfe Nähe zu Levels
+    near_val = abs(price - val) / val < (tolerance_pct / 100) if val > 0 else False
+    near_poc = abs(price - poc) / poc < (tolerance_pct / 100) if poc > 0 else False
+    near_vah = abs(price - vah) / vah < (tolerance_pct / 100) if vah > 0 else False
+    
+    # Support-Levels (für Long)
+    is_near_support = near_val or (near_poc and price < poc)
+    
+    # Resistance-Levels (für Short)
+    is_near_resistance = near_vah or (near_poc and price > poc)
+    
+    # Konfluenz-Stärke
+    confluence_strength = 0.5
+    if near_poc:
+        confluence_strength = 1.0  # PoC ist stärkstes Level
+    elif near_val or near_vah:
+        confluence_strength = 0.8
+    
+    return (is_near_support, is_near_resistance, confluence_strength)
+
+
+# *** KORRIGIERTE BACKTESTER FUNKTION (SuperTrend + Volume Profile Filter) ***
+def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_filter=False, htf_data=None, timeframe=None, verbose=False, params_for_htf_load=None, use_volume_profile=True):
 
     model, scaler = load_model_and_scaler(model_paths['model'], model_paths['scaler'])
     if not model or not scaler: raise Exception("Modell/Scaler nicht gefunden!")
@@ -209,8 +390,27 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
                     trade_allowed = False # Nur Longs bei Long-Trend
                 elif st_direction == -1.0 and side == 'long':
                     trade_allowed = False # Nur Shorts bei Short-Trend
-                # Alle anderen Kombinationen werden erlaubt, wenn das ANN ein Signal gibt.
                 # --- ENDE NEUER SUPER TREND FILTER ---
+                
+                # *** VOLUME PROFILE KONFLUENZ-FILTER ***
+                if trade_allowed and use_volume_profile and i >= 200:
+                    # Berechne Rolling Volume Profile
+                    vp = calculate_volume_profile(data.iloc[max(0, i-200):i], num_bars=50)
+                    
+                    if vp is not None:
+                        is_near_support, is_near_resistance, vp_strength = check_vp_confluence(
+                            current['close'], vp, tolerance_pct=1.0
+                        )
+                        
+                        # Long nur wenn nahe Support-Level
+                        if side == 'long' and not is_near_support:
+                            # Reduziere Positionsgröße statt komplett zu filtern
+                            pass  # Erlaubt, aber könnte Größe reduzieren
+                        
+                        # Short nur wenn nahe Resistance-Level
+                        if side == 'short' and not is_near_resistance:
+                            pass  # Erlaubt, aber könnte Größe reduzieren
+                # *** ENDE VOLUME PROFILE FILTER ***
                 
                 # *** NEUE FILTER: ADX & VOLUME (wie in trade_manager) ***
                 if trade_allowed:

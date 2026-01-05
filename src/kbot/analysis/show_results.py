@@ -1,4 +1,4 @@
-# src/jaegerbot/analysis/show_results.py (Final Version 9 - Fix für Modus 2)
+# src/jaegerbot/analysis/show_results.py (Final Version 10 - Volume Profile Integration)
 import os
 import sys
 import json
@@ -14,11 +14,47 @@ logging.getLogger('absl').setLevel(logging.ERROR)
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from kbot.analysis.backtester import load_data
+from kbot.analysis.backtester import load_data, calculate_volume_profile
 from kbot.utils.ann_model import load_model_and_scaler
 from kbot.analysis.portfolio_simulator import run_portfolio_simulation
 from kbot.analysis.portfolio_optimizer import run_portfolio_optimizer
 from kbot.utils.telegram import send_document
+
+
+def show_volume_profile_summary(symbol, timeframe, data):
+    """Zeigt eine Zusammenfassung des Volume Profiles."""
+    if len(data) < 200:
+        print(f"  ⓘ Nicht genug Daten für Volume Profile ({len(data)} < 200)")
+        return None
+    
+    vp = calculate_volume_profile(data.tail(200), num_bars=50)
+    
+    if vp is None:
+        print(f"  ⓘ Volume Profile konnte nicht berechnet werden")
+        return None
+    
+    current_price = data['close'].iloc[-1]
+    
+    # Bestimme Position relativ zu VP Levels
+    if current_price < vp['val']:
+        position = "UNTER Value Area (überverkauft)"
+        signal_hint = "🟢 Long-Bias"
+    elif current_price > vp['vah']:
+        position = "ÜBER Value Area (überkauft)"
+        signal_hint = "🔴 Short-Bias"
+    else:
+        position = "IN Value Area (neutral)"
+        signal_hint = "⚪ Abwarten"
+    
+    print(f"\n  📊 Volume Profile für {symbol} ({timeframe}):")
+    print(f"     PoC (Point of Control):  {vp['poc']:.2f}")
+    print(f"     VAH (Value Area High):   {vp['vah']:.2f}")
+    print(f"     VAL (Value Area Low):    {vp['val']:.2f}")
+    print(f"     Aktueller Preis:         {current_price:.2f}")
+    print(f"     Position:                {position}")
+    print(f"     Signal-Tendenz:          {signal_hint}")
+    
+    return vp
 
 # --- Helper-Funktion für die Einzelanalyse (Modus 1) ---
 def run_single_analysis_via_simulator(start_date, end_date, start_capital):
@@ -55,6 +91,9 @@ def run_single_analysis_via_simulator(start_date, end_date, start_capital):
         data = load_data(symbol, timeframe, start_date, end_date)
         if data.empty:
             print(f"--> WARNUNG: Konnte keine Daten laden. Überspringe."); continue
+
+        # Volume Profile Zusammenfassung anzeigen
+        show_volume_profile_summary(symbol, timeframe, data)
 
         # Nur eine Strategie in das Dict laden; Schlüssel eindeutig pro Config
         strategy_key = filename

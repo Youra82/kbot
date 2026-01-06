@@ -128,9 +128,9 @@ def main():
         print(f"Symbol:     {args.symbol}")
         print(f"Timeframe:  {args.timeframe}")
 
-        # Projekt-Root bestimmen
-        SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        PROJECT_ROOT = SCRIPT_DIR
+        # Projekt-Root bestimmen (ein Verzeichnis oberhalb von `src`)
+        # `SRC_ROOT` ist oben als .../project/src gesetzt, also ist PROJECT_ROOT dessen Parent
+        PROJECT_ROOT = os.path.abspath(os.path.join(SRC_ROOT, '..'))
 
         def create_safe_filename(symbol, timeframe):
             return f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"

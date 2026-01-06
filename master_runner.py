@@ -126,10 +126,7 @@ def main():
                 continue
 
             print(f"\n--- Starte Bot für: {symbol} ({timeframe}) ---")
-            print(f"    - MACD-Filter-Version: {'JA' if use_macd else 'NEIN'}")
-            
-            # --- HIER IST DIE FINALE KORREKTUR ---
-            # Der --use_macd Parameter wird jetzt korrekt an den Befehl übergeben
+            # Starte run.py ohne MACD-Flag (wird nicht unterstützt)
             command = [
                 python_executable,
                 bot_runner_script,
@@ -137,7 +134,6 @@ def main():
                 "--timeframe", timeframe,
                 "--start_date", default_start_date,
                 "--end_date", default_end_date,
-                "--use_macd", str(use_macd)
             ]
             
             subprocess.Popen(command)

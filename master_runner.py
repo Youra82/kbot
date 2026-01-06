@@ -4,6 +4,7 @@ import subprocess
 import sys
 import os
 import time
+from datetime import datetime, timedelta
 
 # Pfad anpassen, damit die utils importiert werden können
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -55,12 +56,38 @@ def main():
         strategy_list = []
         if use_autopilot:
             print("Modus: Autopilot. Lese Strategien aus den Optimierungs-Ergebnissen...")
-            with open(optimization_results_file, 'r') as f:
-                strategy_config = json.load(f)
-            strategy_list = strategy_config.get('optimal_portfolio', [])
+            # Versuche zuerst, die Optimizer-Ergebnisse zu laden.
+            if os.path.exists(optimization_results_file):
+                try:
+                    with open(optimization_results_file, 'r') as f:
+                        strategy_config = json.load(f)
+                    strategy_list = strategy_config.get('optimal_portfolio', [])
+                except Exception as e:
+                    print(f"Warnung: Fehler beim Lesen der Optimizer-Datei ({optimization_results_file}): {e}.")
+                    strategy_list = []
+            else:
+                # Wenn die Datei fehlt, versuche, alle Config-Dateien aus dem Config-Ordner zu verwenden.
+                configs_dir = os.path.join(SCRIPT_DIR, 'src', 'kbot', 'strategy', 'configs')
+                if os.path.exists(configs_dir):
+                    cfg_files = [f for f in os.listdir(configs_dir) if f.endswith('.json')]
+                    if cfg_files:
+                        print(f"Keine Optimizer-Datei gefunden. Nutze {len(cfg_files)} Konfigurationsdateien aus {configs_dir} als Autopilot-Input.")
+                        # Master Runner erwartet für Autopilot eine Liste von Dateinamen
+                        strategy_list = cfg_files
+                    else:
+                        print(f"Warnung: Kein Config-File in {configs_dir} gefunden.")
+                        strategy_list = []
+                else:
+                    print(f"Warnung: Config-Ordner {configs_dir} nicht gefunden.")
+                    strategy_list = []
         else:
             print("Modus: Manuell. Lese Strategien aus den manuellen Einstellungen...")
             strategy_list = live_settings.get('active_strategies', [])
+
+        # Berechne Standard-Start/End-Daten falls nicht ausdrücklich angegeben
+        today = datetime.utcnow().date()
+        default_end_date = today.strftime('%Y-%m-%d')
+        default_start_date = (today - timedelta(days=365)).strftime('%Y-%m-%d')
 
         if not strategy_list:
             print("Keine aktiven Strategien zum Ausführen gefunden.")
@@ -108,7 +135,9 @@ def main():
                 bot_runner_script,
                 "--symbol", symbol,
                 "--timeframe", timeframe,
-                "--use_macd", str(use_macd) 
+                "--start_date", default_start_date,
+                "--end_date", default_end_date,
+                "--use_macd", str(use_macd)
             ]
             
             subprocess.Popen(command)

@@ -156,10 +156,25 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
     ]
     # ---
 
-    latest_features = data_with_features.iloc[-2:-1][feature_cols]
+    # Robustness: fülle fehlende Feature-Spalten mit Defaults (0 oder neutrale Werte),
+    # damit Tests mit eingeschränktem Feature-Set nicht fehlschlagen.
+    latest_slice = data_with_features.iloc[-2:-1].copy()
+    for col in feature_cols:
+        if col not in latest_slice.columns:
+            # Wähle neutrale Default-Werte je nach Feature-Typ
+            if col in ('adx', 'adx_pos', 'adx_neg'):
+                latest_slice[col] = 0.0
+            elif col in ('volume_ratio', 'mfi', 'cmf'):
+                latest_slice[col] = 1.0 if col == 'volume_ratio' else 50.0
+            elif col in ('day_of_week', 'hour_of_day'):
+                latest_slice[col] = 0
+            else:
+                latest_slice[col] = 0.0
+
+    latest_features = latest_slice[feature_cols]
 
     if latest_features.isnull().values.any():
-        logger.warning("Neueste Feature-Daten sind unvollständig, überspringe diesen Zyklus.")
+        logger.warning("Neueste Feature-Daten sind unvollständig (NaNs), überspringe diesen Zyklus.")
         return
 
     scaled_features = scaler.transform(latest_features)

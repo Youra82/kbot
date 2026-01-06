@@ -3,6 +3,27 @@
     "use_auto_optimizer_results": true,
     "active_strategies": [
       {
+        "symbol": "ETH/USDT:USDT",
+        "timeframe": "6h",
+        "use_macd_filter": false,
+        "active": true,
+        "comment": "Automatisch optimiert (ETHUSDTUSDT 6h)"
+      },
+      {
+        "symbol": "ADA/USDT:USDT",
+        "timeframe": "6h",
+        "use_macd_filter": false,
+        "active": true,
+        "comment": "Automatisch optimiert (ADAUSDTUSDT 6h)"
+      },
+      {
+        "symbol": "AAVE/USDT:USDT",
+        "timeframe": "6h",
+        "use_macd_filter": false,
+        "active": true,
+        "comment": "Automatisch optimiert (AAVEUSDTUSDT 6h)"
+      },
+      {
         "symbol": "DOGE/USDT:USDT",
         "timeframe": "6h",
         "use_macd_filter": false,
@@ -10,11 +31,18 @@
         "comment": "Automatisch optimiert (DOGEUSDTUSDT 6h)"
       },
       {
-        "symbol": "ADA/USDT:USDT",
-        "timeframe": "4h",
+        "symbol": "SOL/USDT:USDT",
+        "timeframe": "6h",
         "use_macd_filter": false,
         "active": true,
-        "comment": "Automatisch optimiert (ADAUSDTUSDT 4h)"
+        "comment": "Automatisch optimiert (SOLUSDTUSDT 6h)"
+      },
+      {
+        "symbol": "XRP/USDT:USDT",
+        "timeframe": "1d",
+        "use_macd_filter": false,
+        "active": true,
+        "comment": "Automatisch optimiert (XRPUSDTUSDT 1d)"
       }
     ]
   }

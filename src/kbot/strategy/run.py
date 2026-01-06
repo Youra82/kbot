@@ -55,199 +55,45 @@ def load_ohlcv(symbol, start, end, timeframe):
 # --- Fibonacci Bollinger Bands ---
 def fibonacci_bollinger_bands(df, length=200, mult=3.0):
     """
-    if args.live:
-        import os
-        import json
-        import logging
-        from kbot.utils.ann_model import load_model_and_scaler
-        from kbot.utils.trade_manager import full_trade_cycle
-        from kbot.utils.exchange import Exchange
+    Fibonacci Bollinger Bands Strategy:
+    - VWMA als Basis
+    - 6 Fibonacci-Level oben und unten (0.236, 0.382, 0.5, 0.618, 0.764, 1.0)
 
-        print("\nKBot Live Mode")
-        print("---------------")
-        print(f"Symbol:     {args.symbol}")
-        print(f"Timeframe:  {args.timeframe}")
+    Args:
+        df: OHLC DataFrame
+        length: VWMA-Periode (Standard: 200)
+        mult: Standardabweichungs-Multiplikator (Standard: 3.0)
 
-        # Projekt-Root bestimmen
-        SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        PROJECT_ROOT = SCRIPT_DIR
+    Returns:
+        DataFrame mit Bändern: upper_1-6, lower_1-6, basis
+    """
+    # Berechne VWMA (Volume Weighted Moving Average)
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    vwma = (typical_price * df['volume']).rolling(window=length).sum() / df['volume'].rolling(window=length).sum()
 
-        # Erzeuge sicheren Dateinamen wie im Optimizer
-        def create_safe_filename(symbol, timeframe):
-            return f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
+    # Berechne Standardabweichung
+    src = (df['high'] + df['low'] + df['close']) / 3  # hlc3
+    stdev = src.rolling(window=length).std()
 
-        safe_name = create_safe_filename(args.symbol, args.timeframe)
-        config_path = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs', f'config_{safe_name}.json')
-        model_path = os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_predictor_{safe_name}.h5')
-        scaler_path = os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_scaler_{safe_name}.joblib')
+    # Basis und Deviation
+    basis = vwma
+    dev = mult * stdev
 
-        if not os.path.exists(config_path):
-            print(f"Fehler: Strategy-Config nicht gefunden: {config_path}")
-            return
+    # Fibonacci-Level
+    fib_levels = [0.236, 0.382, 0.5, 0.618, 0.764, 1.0]
 
-        with open(config_path, 'r') as f:
-            params = json.load(f)
+    bands = pd.DataFrame(index=df.index)
+    bands['basis'] = basis
+    bands['dev'] = dev
 
-        # Lade Modell & Scaler
-        model, scaler = load_model_and_scaler(model_path, scaler_path)
-        if model is None or scaler is None:
-            print(f"Fehler: Modell/Scaler nicht gefunden oder konnte nicht geladen werden: {model_path}, {scaler_path}")
-            return
+    for i, fib in enumerate(fib_levels, start=1):
+        bands[f'upper_{i}'] = basis + (fib * dev)
+        bands[f'lower_{i}'] = basis - (fib * dev)
 
-        # Lade Secrets für Exchange + Telegram
-        secret_file = os.path.join(PROJECT_ROOT, 'secret.json')
-        try:
-            with open(secret_file, 'r') as f:
-                secrets = json.load(f)
-            account_config = secrets.get('kbot', [])[0]
-            telegram_config = secrets.get('telegram', {})
-        except Exception as e:
-            print(f"Warnung: secret.json konnte nicht geladen werden: {e}")
-            account_config = {}
-            telegram_config = {}
+    bands['type'] = 'fibonacci'
 
-        # Logger
-        logger = logging.getLogger('kbot_live')
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
-
-        # Exchange initialisieren
-        try:
-            exchange = Exchange(account_config)
-        except Exception as e:
-            print(f"Fehler beim Initialisieren der Exchange: {e}")
-            return
-
-        # Sleep mapping für Timeframes (Fallbacks)
-        tf_map_seconds = {'1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '6h':21600, '12h':43200, '1d':86400}
-        sleep_seconds = tf_map_seconds.get(args.timeframe, 3600)
-
-        print(f"Starte Live-Loop für {args.symbol} ({args.timeframe}). Intervall ≈ {sleep_seconds}s")
-        try:
-            while True:
-                try:
-                    full_trade_cycle(exchange, model, scaler, params, telegram_config, logger)
-                except Exception as e:
-                    logger.error(f"Fehler im Handelszyklus: {e}", exc_info=True)
-                # Warte bis zur nächsten Kerze
-                time.sleep(sleep_seconds)
-        except KeyboardInterrupt:
-            print('\nLive-Run durch Benutzer gestoppt.')
-        return
-                'type': 'SELL',
-                'side': 'long',
-                'date': date,
-                'price': price,
-                'pnl': pnl,
-                'capital': capital,
-                'level': 'upper_6'
-            })
-            equity_curve.append(capital)
-            position = 0
-        
-        # STOP LOSS LONG: Price fällt unter lower_1
-        elif position == 1 and price < bands['lower_1'].iloc[i]:
-            pnl = (price - entry_price) / entry_price * capital
-            capital += pnl
-            trades.append({
-                'type': 'SELL (SL)',
-                'side': 'long',
-                'date': date,
-                'price': price,
-                'pnl': pnl,
-                'capital': capital,
-                'level': 'lower_1'
-            })
-            equity_curve.append(capital)
-            position = 0
-        
-        # --- SHORT TRADES ---
-        # EINSTIEG SHORT: Preis berührt upper_6 (oberste Fib-Linie)
-        elif position == 0 and price >= bands['upper_6'].iloc[i]:
-            position = -1
-            entry_price = price
-            entry_idx = i
-            trades.append({
-                'type': 'SELL',
-                'side': 'short',
-                'date': date,
-                'price': price,
-                'level': 'upper_6'
-            })
-        
-        # AUSSTIEG SHORT: Preis erreicht lower_6
-        elif position == -1 and price <= bands['lower_6'].iloc[i]:
-            pnl = (entry_price - price) / entry_price * capital
-            capital += pnl
-            trades.append({
-                'type': 'BUY',
-                'side': 'short',
-                'date': date,
-                'price': price,
-                'pnl': pnl,
-                'capital': capital,
-                'level': 'lower_6'
-            })
-            equity_curve.append(capital)
-            position = 0
-        
-        # STOP LOSS SHORT: Price steigt über upper_1
-        elif position == -1 and price > bands['upper_1'].iloc[i]:
-            pnl = (entry_price - price) / entry_price * capital
-            capital += pnl
-            trades.append({
-                'type': 'BUY (SL)',
-                'side': 'short',
-                'date': date,
-                'price': price,
-                'pnl': pnl,
-                'capital': capital,
-                'level': 'upper_1'
-            })
-            equity_curve.append(capital)
-            position = 0
-    
-    # Offene Position am Ende schließen
-    if position == 1 and len(bands_idx) > 0:
-        price = df.loc[bands_idx[-1], 'close']
-        date = bands_idx[-1]
-        pnl = (price - entry_price) / entry_price * capital
-        capital += pnl
-        trades.append({
-            'type': 'SELL (End)',
-            'side': 'long',
-            'date': date,
-            'price': price,
-            'pnl': pnl,
-            'capital': capital
-        })
-        equity_curve.append(capital)
-    elif position == -1 and len(bands_idx) > 0:
-        price = df.loc[bands_idx[-1], 'close']
-        date = bands_idx[-1]
-        pnl = (entry_price - price) / entry_price * capital
-        capital += pnl
-        trades.append({
-            'type': 'BUY (End)',
-            'side': 'short',
-            'date': date,
-            'price': price,
-            'pnl': pnl,
-            'capital': capital
-        })
-        equity_curve.append(capital)
-    
-    total_return = (capital - start_capital) / start_capital * 100
-    num_trades = len([t for t in trades if t['type'].startswith(('SELL', 'BUY'))])
-    win_trades = [t for t in trades if t.get('pnl',0)>0]
-    win_rate = len(win_trades) / num_trades * 100 if num_trades else 0
-    
-    # Maximaler Drawdown berechnen
-    eq = np.array(equity_curve)
-    running_max = np.maximum.accumulate(eq)
-    drawdown = (eq - running_max) / running_max * 100
-    max_drawdown = np.min(drawdown) if len(drawdown) > 0 else 0.0
-    
-    return capital, total_return, num_trades, win_rate, trades, abs(max_drawdown)
+    return bands[['basis', 'dev', 'upper_1', 'upper_2', 'upper_3', 'upper_4', 'upper_5', 'upper_6',
+                  'lower_1', 'lower_2', 'lower_3', 'lower_4', 'lower_5', 'lower_6', 'type']]
 
 
 

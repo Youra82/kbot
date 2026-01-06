@@ -328,8 +328,35 @@ def main():
         print('  Gründe:')
         for r in reasons:
             print(f'   - {r}')
+        # Zusätzliche Debug-Informationen
+        print('\nLetzte 10 Kerzen (Timestamp, Close):')
+        for t, close in df['close'].tail(10).items():
+            print(f'  {t}  {close:.6f}')
 
-        print('\nHinweis: Dies ist ein Dry-Run. Es werden keine Orders gesendet. Wenn Sie möchten, kann ich weitere Debug-Informationen (z.B. letzte 10 Kerzen, Bänderwerte) ausgeben.')
+        # Band-Werte der letzten Kerze
+        last_bands = bands.iloc[-1]
+        print('\nBandwerte (letzte Kerze):')
+        try:
+            print(f"  basis: {last_bands['basis']:.6f}  dev: {last_bands['dev']:.6f}")
+            for i in range(1,7):
+                print(f"  upper_{i}: {last_bands[f'upper_{i}']:.6f}  lower_{i}: {last_bands[f'lower_{i}']:.6f}")
+        except Exception:
+            print('  (Bandwerte nicht vollständig vorhanden)')
+
+        # Prozentuale Abstände zu Entry-Levels
+        try:
+            lower6 = last_bands['lower_6']
+            upper6 = last_bands['upper_6']
+            if pd.notna(lower6):
+                pct_to_lower = (latest_price - lower6) / lower6 * 100
+                print(f"\nAbstand zum lower_6: {pct_to_lower:.3f}% (negativ = unterhalb)")
+            if pd.notna(upper6):
+                pct_to_upper = (upper6 - latest_price) / upper6 * 100
+                print(f"Abstand zum upper_6: {pct_to_upper:.3f}% (negativ = oberhalb)")
+        except Exception:
+            pass
+
+        print('\nHinweis: Dies ist ein Dry-Run. Es werden keine Orders gesendet.')
         return
 
     print("\nKBot Backtest (Kanalstrategie)")

@@ -12,7 +12,6 @@ from kbot.utils.telegram import send_message
 from kbot.utils.ann_model import create_ann_features
 from kbot.utils.exchange import Exchange
 from kbot.utils.supertrend_indicator import SuperTrendLocal
-from kbot.utils.circuit_breaker import is_trading_allowed, update_circuit_breaker
 
 # Pfade für die Lock-Datei definieren
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -101,24 +100,7 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
     strategy_id = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
     account_name = exchange.account.get('name', 'Standard-Account')
     
-    # *** CIRCUIT BREAKER CHECK ***
-    if not is_trading_allowed():
-        logger.critical("🚨 CIRCUIT BREAKER AKTIV - Trading gestoppt!")
-        return
-    
-    # Update Circuit Breaker mit aktuellem Equity
-    current_balance = exchange.fetch_balance_usdt()
-    circuit_status = update_circuit_breaker(current_balance)
-    
-    if circuit_status == 'STOP_ALL_TRADING':
-        logger.critical("🚨 CIRCUIT BREAKER AUSGELÖST - 10% Drawdown erreicht!")
-        send_message(telegram_config.get('bot_token'), telegram_config.get('chat_id'), f"🚨 CIRCUIT BREAKER AUSGELÖST\n\nTrading wurde automatisch gestoppt!\nDrawdown: >10%\nBalance: {current_balance:.2f} USDT")
-        return
-    elif circuit_status == 'REDUCE_SIZE':
-        logger.warning("⚠️  Drawdown Warning: Position Size wird reduziert")
-        # Reduziere Risk per Trade um 50%
-        params['risk']['risk_per_trade_pct'] = params['risk']['risk_per_trade_pct'] * 0.5
-    # *** ENDE CIRCUIT BREAKER CHECK ***
+    # Circuit breaker removed per user request.
 
     logger.info("Suche nach neuen Signalen...")
     data = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=500)

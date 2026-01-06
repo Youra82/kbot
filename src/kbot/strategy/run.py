@@ -10,6 +10,13 @@ import pandas as pd
 import numpy as np
 import datetime
 import ccxt
+import os
+
+# Ensure local `src` is on sys.path so `import kbot.*` works when run.py
+# is executed as a subprocess from the project root.
+SRC_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if SRC_ROOT not in sys.path:
+    sys.path.insert(0, SRC_ROOT)
 
 # --- Hilfsfunktion: Kursdaten laden (Bitget via ccxt) ---
 def load_ohlcv(symbol, start, end, timeframe):

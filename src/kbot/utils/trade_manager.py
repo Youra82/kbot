@@ -270,6 +270,47 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
         notional_value = risk_amount_usd / (sl_distance / entry_price)
         amount = notional_value / entry_price
 
+        # --- Ensure amount meets exchange market minimums and precision ---
+        try:
+            market_info = exchange.markets.get(symbol) if getattr(exchange, 'markets', None) else None
+        except Exception:
+            market_info = None
+
+        min_amount = None
+        min_notional = None
+        if market_info:
+            limits = market_info.get('limits', {})
+            amt_lim = limits.get('amount') or {}
+            cost_lim = limits.get('cost') or {}
+            min_amount = amt_lim.get('min')
+            min_notional = cost_lim.get('min')
+
+        # If notional-based minimum exists, enforce it (min cost in quote currency)
+        if min_notional and (amount * entry_price) < float(min_notional):
+            needed_amount = float(min_notional) / entry_price
+            logger.info(f"Erhöhe Ordermenge auf Mindestnotional {min_notional} USDT -> setze amount {needed_amount:.8f} (vor Rundung)")
+            amount = needed_amount
+
+        # If amount minimum exists, enforce it
+        if min_amount and amount < float(min_amount):
+            logger.info(f"Erhöhe Ordermenge auf Mindestmenge {min_amount} -> setze amount {float(min_amount):.8f} (vor Rundung)")
+            amount = float(min_amount)
+
+        # Round amount to exchange precision using wrapper
+        try:
+            amount = float(exchange.exchange.amount_to_precision(symbol, amount))
+        except Exception:
+            # best-effort rounding fallback
+            amount = float(round(amount, 8))
+
+        # Final check: if after rounding amount is below min_amount or notional below min_notional, abort
+        if min_amount and amount < float(min_amount):
+            logger.error(f"FEHLER: Berechneter Betrag {amount} liegt unter dem Mindestbetrag {min_amount}. Abbruch.")
+            return
+        if min_notional and (amount * entry_price) < float(min_notional):
+            logger.error(f"FEHLER: Berechneter Notional {amount*entry_price:.4f} USDT liegt unter Mindestnotional {min_notional}. Abbruch.")
+            return
+
         # Berechnung der Trigger-Preise
         stop_loss_price = entry_price - sl_distance if side == 'buy' else entry_price + sl_distance
         activation_price = entry_price + sl_distance * activation_rr if side == 'buy' else entry_price - sl_distance * activation_rr

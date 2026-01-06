@@ -152,8 +152,27 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
                 latest_slice[col] = 0
             else:
                 latest_slice[col] = 0.0
+    # Start with all available columns from the latest slice (we'll reindex to the scaler's
+    # expected features below). This preserves any extra engineered features present.
+    latest_features = latest_slice.copy()
 
-    latest_features = latest_slice[feature_cols]
+    # If the scaler was fitted with feature names, ensure the DataFrame matches that order
+    # and fill any missing columns with neutral defaults (0.0).
+    required_features = []
+    try:
+        required_features = list(getattr(scaler, 'feature_names_in_', []))
+    except Exception:
+        required_features = []
+
+    if required_features:
+        missing = [f for f in required_features if f not in latest_features.columns]
+        if missing:
+            for col in missing:
+                # Use 0.0 as a safe neutral default for unknown numeric features
+                latest_features[col] = 0.0
+            logger.info(f"Ergänzte fehlende Features für Scaler: {', '.join(missing)}")
+        # Reorder columns to match the scaler's expected input
+        latest_features = latest_features.reindex(columns=required_features)
 
     if latest_features.isnull().values.any():
         logger.warning("Neueste Feature-Daten sind unvollständig (NaNs), überspringe diesen Zyklus.")

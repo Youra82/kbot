@@ -108,91 +108,78 @@ def main():
     args = parser.parse_args()
 
     if args.live:
+        import os
+        import json
+        import logging
+        import time
+        from kbot.utils.ann_model import load_model_and_scaler
+        from kbot.utils.trade_manager import full_trade_cycle
+        from kbot.utils.exchange import Exchange
+
         print("\nKBot Live Mode")
         print("---------------")
         print(f"Symbol:     {args.symbol}")
         print(f"Timeframe:  {args.timeframe}")
-        print("Starte Live-Modus (Diagnostik / dry-run). Evaluieren, ob ein Trade möglich wäre (keine Orders werden gesendet).")
 
-        # Versuche, ausreichend historische Daten zu laden (1 Jahr als Default)
-        today = datetime.datetime.utcnow().date()
-        end_date = today.strftime('%Y-%m-%d')
-        start_date = (today - datetime.timedelta(days=365)).strftime('%Y-%m-%d')
+        # Projekt-Root bestimmen
+        SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        PROJECT_ROOT = SCRIPT_DIR
 
+        def create_safe_filename(symbol, timeframe):
+            return f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
+
+        safe_name = create_safe_filename(args.symbol, args.timeframe)
+        config_path = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs', f'config_{safe_name}.json')
+        model_path = os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_predictor_{safe_name}.h5')
+        scaler_path = os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_scaler_{safe_name}.joblib')
+
+        if not os.path.exists(config_path):
+            print(f"Fehler: Strategy-Config nicht gefunden: {config_path}")
+            return
+
+        with open(config_path, 'r') as f:
+            params = json.load(f)
+
+        model, scaler = load_model_and_scaler(model_path, scaler_path)
+        if model is None or scaler is None:
+            print(f"Fehler: Modell/Scaler nicht gefunden oder konnte nicht geladen werden: {model_path}, {scaler_path}")
+            return
+
+        # Lade Secrets für Exchange + Telegram
+        secret_file = os.path.join(PROJECT_ROOT, 'secret.json')
         try:
-            df = load_ohlcv(args.symbol, start_date, end_date, args.timeframe)
+            with open(secret_file, 'r') as f:
+                secrets = json.load(f)
+            account_config = secrets.get('kbot', [])[0]
+            telegram_config = secrets.get('telegram', {})
         except Exception as e:
-            print(f"Fehler beim Laden der Kursdaten für Diagnostik: {e}")
+            print(f"Warnung: secret.json konnte nicht geladen werden: {e}")
+            account_config = {}
+            telegram_config = {}
+
+        # Logger
+        logger = logging.getLogger('kbot_live')
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+
+        try:
+            exchange = Exchange(account_config)
+        except Exception as e:
+            print(f"Fehler beim Initialisieren der Exchange: {e}")
             return
 
-        if df.empty or len(df) < 60:
-            print("Nicht genügend Kursdaten für Diagnostik/backtest.")
-            return
+        tf_map_seconds = {'1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '6h':21600, '12h':43200, '1d':86400}
+        sleep_seconds = tf_map_seconds.get(args.timeframe, 3600)
 
-        # Berechne Bänder und bewerte aktuelle Situation
-        bands = fibonacci_bollinger_bands(df, length=200, mult=3.0)
-        latest_price = df['close'].iloc[-1]
-        latest_time = df.index[-1]
-
-        print(f"Letzter Kerzenzeitpunkt: {latest_time}  Preis: {latest_price:.6f}")
-
-        reasons = []
-        action = 'NO ENTRY'
-
-        if pd.isna(bands['basis'].iloc[-1]):
-            reasons.append('Basis/Indikatoren nicht berechnet (NaN)')
-        else:
-            lower6 = bands['lower_6'].iloc[-1]
-            upper6 = bands['upper_6'].iloc[-1]
-            if pd.notna(lower6) and latest_price <= lower6:
-                action = 'BUY (would enter LONG)'
-                reasons.append(f'Preis {latest_price:.6f} <= lower_6 {lower6:.6f} -> Long-Entry')
-            elif pd.notna(upper6) and latest_price >= upper6:
-                action = 'SELL (would enter SHORT)'
-                reasons.append(f'Preis {latest_price:.6f} >= upper_6 {upper6:.6f} -> Short-Entry')
-            else:
-                # zusätzliche Hinweise, warum kein Entry
-                dist_lower = (latest_price - lower6) if pd.notna(lower6) else None
-                dist_upper = (upper6 - latest_price) if pd.notna(upper6) else None
-                if dist_lower is not None and dist_upper is not None:
-                    reasons.append(f'Preis liegt zwischen entry-Leveln: dist to lower_6 = {dist_lower:.6f}, dist to upper_6 = {dist_upper:.6f}')
-                else:
-                    reasons.append('Preis nicht an Entry-Levels oder fehlende Level-Daten')
-
-        print('\nDiagnostik-Ergebnis:')
-        print(f'  Aktion: {action}')
-        print('  Gründe:')
-        for r in reasons:
-            print(f'   - {r}')
-        # Zusätzliche Debug-Informationen
-        print('\nLetzte 10 Kerzen (Timestamp, Close):')
-        for t, close in df['close'].tail(10).items():
-            print(f'  {t}  {close:.6f}')
-
-        # Band-Werte der letzten Kerze
-        last_bands = bands.iloc[-1]
-        print('\nBandwerte (letzte Kerze):')
+        print(f"Starte Live-Loop für {args.symbol} ({args.timeframe}). Intervall ≈ {sleep_seconds}s")
         try:
-            print(f"  basis: {last_bands['basis']:.6f}  dev: {last_bands['dev']:.6f}")
-            for i in range(1,7):
-                print(f"  upper_{i}: {last_bands[f'upper_{i}']:.6f}  lower_{i}: {last_bands[f'lower_{i}']:.6f}")
-        except Exception:
-            print('  (Bandwerte nicht vollständig vorhanden)')
-
-        # Prozentuale Abstände zu Entry-Levels
-        try:
-            lower6 = last_bands['lower_6']
-            upper6 = last_bands['upper_6']
-            if pd.notna(lower6):
-                pct_to_lower = (latest_price - lower6) / lower6 * 100
-                print(f"\nAbstand zum lower_6: {pct_to_lower:.3f}% (negativ = unterhalb)")
-            if pd.notna(upper6):
-                pct_to_upper = (upper6 - latest_price) / upper6 * 100
-                print(f"Abstand zum upper_6: {pct_to_upper:.3f}% (negativ = oberhalb)")
-        except Exception:
-            pass
-
-        print('\nHinweis: Dies ist ein Dry-Run. Es werden keine Orders gesendet.')
+            while True:
+                try:
+                    full_trade_cycle(exchange, model, scaler, params, telegram_config, logger)
+                except Exception as e:
+                    logger.error(f"Fehler im Handelszyklus: {e}", exc_info=True)
+                time.sleep(sleep_seconds)
+        except KeyboardInterrupt:
+            print('\nLive-Run durch Benutzer gestoppt.')
         return
 
     print("\nKBot Backtest (Kanalstrategie)")

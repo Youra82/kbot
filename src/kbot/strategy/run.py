@@ -276,8 +276,60 @@ def main():
         print("---------------")
         print(f"Symbol:     {args.symbol}")
         print(f"Timeframe:  {args.timeframe}")
-        print("Starte Live-Modus (keine Backtests). Implementiere hier die Live-Execution-Logik oder runne den Bot-Loop.")
-        # TODO: Implement live trading loop here. For now, exit to avoid running backtest.
+        print("Starte Live-Modus (Diagnostik / dry-run). Evaluieren, ob ein Trade möglich wäre (keine Orders werden gesendet).")
+
+        # Versuche, ausreichend historische Daten zu laden (1 Jahr als Default)
+        today = datetime.datetime.utcnow().date()
+        end_date = today.strftime('%Y-%m-%d')
+        start_date = (today - datetime.timedelta(days=365)).strftime('%Y-%m-%d')
+
+        try:
+            df = load_ohlcv(args.symbol, start_date, end_date, args.timeframe)
+        except Exception as e:
+            print(f"Fehler beim Laden der Kursdaten für Diagnostik: {e}")
+            return
+
+        if df.empty or len(df) < 60:
+            print("Nicht genügend Kursdaten für Diagnostik/backtest.")
+            return
+
+        # Berechne Bänder und bewerte aktuelle Situation
+        bands = fibonacci_bollinger_bands(df, length=200, mult=3.0)
+        latest_price = df['close'].iloc[-1]
+        latest_time = df.index[-1]
+
+        print(f"Letzter Kerzenzeitpunkt: {latest_time}  Preis: {latest_price:.6f}")
+
+        reasons = []
+        action = 'NO ENTRY'
+
+        if pd.isna(bands['basis'].iloc[-1]):
+            reasons.append('Basis/Indikatoren nicht berechnet (NaN)')
+        else:
+            lower6 = bands['lower_6'].iloc[-1]
+            upper6 = bands['upper_6'].iloc[-1]
+            if pd.notna(lower6) and latest_price <= lower6:
+                action = 'BUY (would enter LONG)'
+                reasons.append(f'Preis {latest_price:.6f} <= lower_6 {lower6:.6f} -> Long-Entry')
+            elif pd.notna(upper6) and latest_price >= upper6:
+                action = 'SELL (would enter SHORT)'
+                reasons.append(f'Preis {latest_price:.6f} >= upper_6 {upper6:.6f} -> Short-Entry')
+            else:
+                # zusätzliche Hinweise, warum kein Entry
+                dist_lower = (latest_price - lower6) if pd.notna(lower6) else None
+                dist_upper = (upper6 - latest_price) if pd.notna(upper6) else None
+                if dist_lower is not None and dist_upper is not None:
+                    reasons.append(f'Preis liegt zwischen entry-Leveln: dist to lower_6 = {dist_lower:.6f}, dist to upper_6 = {dist_upper:.6f}')
+                else:
+                    reasons.append('Preis nicht an Entry-Levels oder fehlende Level-Daten')
+
+        print('\nDiagnostik-Ergebnis:')
+        print(f'  Aktion: {action}')
+        print('  Gründe:')
+        for r in reasons:
+            print(f'   - {r}')
+
+        print('\nHinweis: Dies ist ein Dry-Run. Es werden keine Orders gesendet. Wenn Sie möchten, kann ich weitere Debug-Informationen (z.B. letzte 10 Kerzen, Bänderwerte) ausgeben.')
         return
 
     print("\nKBot Backtest (Kanalstrategie)")

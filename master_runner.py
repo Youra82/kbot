@@ -126,15 +126,25 @@ def main():
                 continue
 
             print(f"\n--- Starte Bot für: {symbol} ({timeframe}) ---")
-            # Starte run.py ohne MACD-Flag (wird nicht unterstützt)
-            command = [
-                python_executable,
-                bot_runner_script,
-                "--symbol", symbol,
-                "--timeframe", timeframe,
-                "--start_date", default_start_date,
-                "--end_date", default_end_date,
-            ]
+            # Wenn Autopilot (Backtest) aktiv ist, übergebe Start/End-Daten.
+            # Im manuellen/live Modus starten wir ohne Datumsangaben und verwenden --live.
+            if use_autopilot:
+                command = [
+                    python_executable,
+                    bot_runner_script,
+                    "--symbol", symbol,
+                    "--timeframe", timeframe,
+                    "--start_date", default_start_date,
+                    "--end_date", default_end_date,
+                ]
+            else:
+                command = [
+                    python_executable,
+                    bot_runner_script,
+                    "--symbol", symbol,
+                    "--timeframe", timeframe,
+                    "--live"
+                ]
             
             subprocess.Popen(command)
             time.sleep(2)

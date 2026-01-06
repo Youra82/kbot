@@ -60,18 +60,23 @@ def update_circuit_breaker(current_equity, peak_equity=None):
     status['last_update'] = datetime.now().isoformat()
     
     result = 'OK'
-    
-    # LEVEL 1: 5% Drawdown - Warnung
-    if drawdown_pct > 0.05:
+
+    # LEVEL 1: 5% Drawdown - Warnung (logge nur einmal pro Überschreiten)
+    if drawdown_pct > 0.05 and not status.get('warned_5pct', False):
         logger.warning(f"⚠️  WARNUNG: 5% Drawdown erreicht! ({drawdown_pct*100:.2f}%)")
+        status['warned_5pct'] = True
         result = 'REDUCE_SIZE'
-    
-    # LEVEL 2: 10% Drawdown - Circuit Breaker
-    if drawdown_pct > 0.10:
+    elif drawdown_pct > 0.05:
+        result = 'REDUCE_SIZE'
+
+    # LEVEL 2: 10% Drawdown - Circuit Breaker (trigger nur einmal)
+    if drawdown_pct > 0.10 and not status.get('tripped', False):
         logger.critical(f"🚨 CIRCUIT BREAKER AKTIVIERT: 10% Drawdown erreicht! ({drawdown_pct*100:.2f}%)")
         status['tripped'] = True
         status['tripped_at'] = datetime.now().isoformat()
         status['trip_reason'] = f'Drawdown: {drawdown_pct*100:.2f}%'
+        result = 'STOP_ALL_TRADING'
+    elif drawdown_pct > 0.10:
         result = 'STOP_ALL_TRADING'
     
     # Speichere Status

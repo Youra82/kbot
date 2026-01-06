@@ -55,94 +55,84 @@ def load_ohlcv(symbol, start, end, timeframe):
 # --- Fibonacci Bollinger Bands ---
 def fibonacci_bollinger_bands(df, length=200, mult=3.0):
     """
-    Fibonacci Bollinger Bands Strategy:
-    - VWMA als Basis
-    - 6 Fibonacci-Level oben und unten (0.236, 0.382, 0.5, 0.618, 0.764, 1.0)
-    
-    Args:
-        df: OHLC DataFrame
-        length: VWMA-Periode (Standard: 200)
-        mult: Standardabweichungs-Multiplikator (Standard: 3.0)
-    
-    Returns:
-        DataFrame mit Bändern: upper_1-6, lower_1-6, basis
-    """
-    # Berechne VWMA (Volume Weighted Moving Average)
-    typical_price = (df['high'] + df['low'] + df['close']) / 3
-    vwma = (typical_price * df['volume']).rolling(window=length).sum() / df['volume'].rolling(window=length).sum()
-    
-    # Berechne Standardabweichung
-    src = (df['high'] + df['low'] + df['close']) / 3  # hlc3
-    stdev = src.rolling(window=length).std()
-    
-    # Basis und Deviation
-    basis = vwma
-    dev = mult * stdev
-    
-    # Fibonacci-Level
-    fib_levels = [0.236, 0.382, 0.5, 0.618, 0.764, 1.0]
-    
-    bands = pd.DataFrame(index=df.index)
-    bands['basis'] = basis
-    bands['dev'] = dev
-    
-    for i, fib in enumerate(fib_levels, start=1):
-        bands[f'upper_{i}'] = basis + (fib * dev)
-        bands[f'lower_{i}'] = basis - (fib * dev)
-    
-    bands['type'] = 'fibonacci'
-    
-    return bands[['basis', 'dev', 'upper_1', 'upper_2', 'upper_3', 'upper_4', 'upper_5', 'upper_6',
-                  'lower_1', 'lower_2', 'lower_3', 'lower_4', 'lower_5', 'lower_6', 'type']]
+    if args.live:
+        import os
+        import json
+        import logging
+        from kbot.utils.ann_model import load_model_and_scaler
+        from kbot.utils.trade_manager import full_trade_cycle
+        from kbot.utils.exchange import Exchange
 
-# --- Fibonacci Bollinger Bands Backtest ---
+        print("\nKBot Live Mode")
+        print("---------------")
+        print(f"Symbol:     {args.symbol}")
+        print(f"Timeframe:  {args.timeframe}")
 
-def fib_backtest(df, bands, start_capital=1000, entry_level='lower_6', exit_level='upper_6'):
-    """
-    Fibonacci Bollinger Bands Backtest mit Long & Short Trading.
-    
-    Args:
-        df: OHLC DataFrame
-        bands: Fibonacci Bands von fibonacci_bollinger_bands()
-        start_capital: Startkapital
-        entry_level: Level für Entry (z.B. 'lower_6' für Long, 'upper_6' für Short)
-        exit_level: Level für Exit
-    """
-    capital = start_capital
-    position = 0  # 0: keine Position, 1: long, -1: short
-    entry_price = 0
-    entry_idx = 0
-    trades = []
-    bands_idx = bands.index
-    equity_curve = [capital]
-    
-    for i in range(1, len(bands)):
-        price = df.loc[bands_idx[i], 'close']
-        basis = bands['basis'].iloc[i]
-        date = bands_idx[i]
-        
-        if pd.isna(basis):
-            continue
-        
-        # --- LONG TRADES ---
-        # EINSTIEG LONG: Preis berührt lower_6 (unterste Fib-Linie)
-        if position == 0 and price <= bands['lower_6'].iloc[i]:
-            position = 1
-            entry_price = price
-            entry_idx = i
-            trades.append({
-                'type': 'BUY',
-                'side': 'long',
-                'date': date,
-                'price': price,
-                'level': 'lower_6'
-            })
-        
-        # AUSSTIEG LONG: Preis erreicht upper_6
-        elif position == 1 and price >= bands['upper_6'].iloc[i]:
-            pnl = (price - entry_price) / entry_price * capital
-            capital += pnl
-            trades.append({
+        # Projekt-Root bestimmen
+        SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        PROJECT_ROOT = SCRIPT_DIR
+
+        # Erzeuge sicheren Dateinamen wie im Optimizer
+        def create_safe_filename(symbol, timeframe):
+            return f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
+
+        safe_name = create_safe_filename(args.symbol, args.timeframe)
+        config_path = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs', f'config_{safe_name}.json')
+        model_path = os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_predictor_{safe_name}.h5')
+        scaler_path = os.path.join(PROJECT_ROOT, 'artifacts', 'models', f'ann_scaler_{safe_name}.joblib')
+
+        if not os.path.exists(config_path):
+            print(f"Fehler: Strategy-Config nicht gefunden: {config_path}")
+            return
+
+        with open(config_path, 'r') as f:
+            params = json.load(f)
+
+        # Lade Modell & Scaler
+        model, scaler = load_model_and_scaler(model_path, scaler_path)
+        if model is None or scaler is None:
+            print(f"Fehler: Modell/Scaler nicht gefunden oder konnte nicht geladen werden: {model_path}, {scaler_path}")
+            return
+
+        # Lade Secrets für Exchange + Telegram
+        secret_file = os.path.join(PROJECT_ROOT, 'secret.json')
+        try:
+            with open(secret_file, 'r') as f:
+                secrets = json.load(f)
+            account_config = secrets.get('kbot', [])[0]
+            telegram_config = secrets.get('telegram', {})
+        except Exception as e:
+            print(f"Warnung: secret.json konnte nicht geladen werden: {e}")
+            account_config = {}
+            telegram_config = {}
+
+        # Logger
+        logger = logging.getLogger('kbot_live')
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+
+        # Exchange initialisieren
+        try:
+            exchange = Exchange(account_config)
+        except Exception as e:
+            print(f"Fehler beim Initialisieren der Exchange: {e}")
+            return
+
+        # Sleep mapping für Timeframes (Fallbacks)
+        tf_map_seconds = {'1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '6h':21600, '12h':43200, '1d':86400}
+        sleep_seconds = tf_map_seconds.get(args.timeframe, 3600)
+
+        print(f"Starte Live-Loop für {args.symbol} ({args.timeframe}). Intervall ≈ {sleep_seconds}s")
+        try:
+            while True:
+                try:
+                    full_trade_cycle(exchange, model, scaler, params, telegram_config, logger)
+                except Exception as e:
+                    logger.error(f"Fehler im Handelszyklus: {e}", exc_info=True)
+                # Warte bis zur nächsten Kerze
+                time.sleep(sleep_seconds)
+        except KeyboardInterrupt:
+            print('\nLive-Run durch Benutzer gestoppt.')
+        return
                 'type': 'SELL',
                 'side': 'long',
                 'date': date,

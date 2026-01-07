@@ -254,6 +254,20 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
     except Exception:
         logger.info(f"DecisionSummary: prediction={prediction:.3f}, side={side}, allowed={trade_allowed}")
 
+    # Optional: sende DecisionSummary per Telegram, wenn in den Strategy-Params aktiviert
+    try:
+        if params.get('notifications', {}).get('decision_summary', False):
+            filters_text = ', '.join(decision_debug.get('filters', [])) or 'keine'
+            human_msg = (
+                f"Decision: {decision_debug.get('final_action', 'unknown').upper()}\n"
+                f"Prediction: {decision_debug.get('prediction'):.3f} (thr {decision_debug.get('threshold'):.3f})\n"
+                f"Side: {decision_debug.get('candidate_side')} | ST: {decision_debug.get('st_direction')}\n"
+                f"Filters: {filters_text}"
+            )
+            send_message(telegram_config.get('bot_token'), telegram_config.get('chat_id'), human_msg)
+    except Exception:
+        logger.debug('Telegram DecisionSummary konnte nicht gesendet werden.', exc_info=True)
+
 
     if side and trade_allowed:
         logger.info(f"Gültiges Signal '{side.upper()}' für Kerze {last_candle_timestamp} erkannt (ST Trend). Beginne Trade-Eröffnung.")

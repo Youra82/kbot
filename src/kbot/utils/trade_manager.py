@@ -185,11 +185,21 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
     pred_threshold = params['strategy']['prediction_threshold']
     side = None
 
+    # Sammle Entscheidungsinformationen für bessere Nachvollziehbarkeit
+    decision_debug = {
+        'prediction': float(prediction),
+        'threshold': float(pred_threshold),
+        'candidate_side': None,
+        'st_direction': float(st_direction) if not pd.isna(st_direction) else None,
+        'filters': []
+    }
+
     # --- Zuerst ANN-Signal prüfen ---
     if prediction >= pred_threshold and params.get('behavior', {}).get('use_longs', True):
         side = 'buy'
     elif prediction <= (1 - pred_threshold) and params.get('behavior', {}).get('use_shorts', True):
         side = 'sell'
+    decision_debug['candidate_side'] = side
 
     # --- SUPER TREND FILTER: Trendbestätigung und Richtung erzwingen ---
     trade_allowed = True
@@ -197,10 +207,12 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
         if st_direction != 1.0:
             trade_allowed = False
             logger.info("Signal (Long) abgelehnt: Kein Long-Trend (SuperTrend).")
+            decision_debug['filters'].append('supertrend_not_long')
     elif side == 'sell':
         if st_direction != -1.0:
             trade_allowed = False
             logger.info("Signal (Short) abgelehnt: Kein Short-Trend (SuperTrend).")
+            decision_debug['filters'].append('supertrend_not_short')
     # --- ENDE SUPER TREND FILTER ---
     
     # *** NEUE FILTER: ADX & VOLUME ***
@@ -212,6 +224,7 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
         if current_adx < 20:
             trade_allowed = False
             logger.info(f"Signal abgelehnt: ADX zu niedrig ({current_adx:.1f} < 20). Kein klarer Trend.")
+            decision_debug['filters'].append(f'adx_too_low:{current_adx:.1f}')
         
         # Volume-Filter: Mindestens 80% des Average Volume
         if 'volume' in data_with_features.columns:
@@ -220,6 +233,7 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
             if current_volume < avg_volume * 0.8:
                 trade_allowed = False
                 logger.info(f"Signal abgelehnt: Volume zu niedrig ({current_volume:.0f} < {avg_volume*0.8:.0f}).")
+                decision_debug['filters'].append(f'volume_too_low:{int(current_volume)}')
         
         # Volatilitäts-Filter: Keine extremen Spikes
         current_atr_norm = last_candle.get('atr_normalized', 0)
@@ -227,7 +241,18 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
         if current_atr_norm > avg_atr_norm * 2.0:
             trade_allowed = False
             logger.info(f"Signal abgelehnt: Extreme Volatilität erkannt (ATR {current_atr_norm:.2f}% > {avg_atr_norm*2:.2f}%).")
+            decision_debug['filters'].append(f'atr_spike:{current_atr_norm:.2f}')
     # *** ENDE NEUE FILTER ***
+
+    # Abschließende Entscheidungsübersicht (wird geloggt, bevor evtl. ein Trade geöffnet wird)
+    if side is None:
+        decision_debug['final_action'] = 'no_signal'
+    else:
+        decision_debug['final_action'] = 'allowed' if trade_allowed else 'rejected'
+    try:
+        logger.info(f"DecisionSummary: {json.dumps(decision_debug, ensure_ascii=False)}")
+    except Exception:
+        logger.info(f"DecisionSummary: prediction={prediction:.3f}, side={side}, allowed={trade_allowed}")
 
 
     if side and trade_allowed:

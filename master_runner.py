@@ -23,6 +23,7 @@ def main():
     settings_file = os.path.join(SCRIPT_DIR, 'settings.json')
     optimization_results_file = os.path.join(SCRIPT_DIR, 'artifacts', 'results', 'optimization_results.json')
     bot_runner_script = os.path.join(SCRIPT_DIR, 'src', 'kbot', 'strategy', 'run.py')
+    bot_runner_module = 'kbot.strategy.run'
     secret_file = os.path.join(SCRIPT_DIR, 'secret.json')
 
     # Finde den exakten Pfad zum Python-Interpreter in der virtuellen Umgebung
@@ -128,10 +129,14 @@ def main():
             print(f"\n--- Starte Bot für: {symbol} ({timeframe}) ---")
             # Wenn Autopilot (Backtest) aktiv ist, übergebe Start/End-Daten.
             # Im manuellen/live Modus starten wir ohne Datumsangaben und verwenden --live.
+            # Setze PYTHONPATH, damit der 'kbot' Package-Import in run.py funktioniert
+            env = os.environ.copy()
+            env['PYTHONPATH'] = os.path.join(PROJECT_ROOT, 'src')
+
             if use_autopilot:
                 command = [
                     python_executable,
-                    bot_runner_script,
+                    '-m', bot_runner_module,
                     "--symbol", symbol,
                     "--timeframe", timeframe,
                     "--start_date", default_start_date,
@@ -140,13 +145,13 @@ def main():
             else:
                 command = [
                     python_executable,
-                    bot_runner_script,
+                    '-m', bot_runner_module,
                     "--symbol", symbol,
                     "--timeframe", timeframe,
                     "--live"
                 ]
-            
-            subprocess.Popen(command)
+
+            subprocess.Popen(command, env=env)
             time.sleep(2)
 
     except FileNotFoundError as e:

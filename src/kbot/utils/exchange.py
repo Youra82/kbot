@@ -24,8 +24,21 @@ class Exchange:
             'enableRateLimit': True, # Neu hinzugefügt
         })
         try:
-            self.markets = self.exchange.load_markets()
-            logger.info("Bitget Märkte erfolgreich geladen.")
+            # Versuche, Märkte mit mehreren Wiederholungen zu laden (gegen Rate-Limits)
+            attempts = 0
+            self.markets = None
+            while attempts < 5:
+                try:
+                    self.markets = self.exchange.load_markets()
+                    logger.info("Bitget Märkte erfolgreich geladen.")
+                    break
+                except Exception as e:
+                    attempts += 1
+                    if attempts >= 5:
+                        raise
+                    sleep_time = 0.5 * (2 ** (attempts - 1))
+                    logger.warning(f"WARNUNG: Fehler beim Laden der Märkte (attempt {attempts}/5): {e}. Retry in {sleep_time:.2f}s")
+                    time.sleep(sleep_time)
         except ccxt.AuthenticationError as e:
             logger.critical(f"FATAL: Bitget Authentifizierungsfehler: {e}. Bitte API-Schlüssel prüfen.")
             self.markets = None

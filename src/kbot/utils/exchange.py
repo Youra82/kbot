@@ -55,6 +55,27 @@ class Exchange:
             logger.error(f"Fehler bei fetch_recent_ohlcv für {symbol}: {e}")
             return pd.DataFrame()
 
+    def _with_rate_limit_retry(self, func, *args, max_retries=5, base_sleep=0.5, **kwargs):
+        """Call `func` with exponential backoff on rate-limit / DDoSProtection errors."""
+        attempt = 0
+        while True:
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                attempt += 1
+                is_rate = False
+                try:
+                    is_rate = isinstance(e, ccxt.DDoSProtection) or '429' in str(e)
+                except Exception:
+                    is_rate = '429' in str(e)
+
+                if attempt > max_retries or not is_rate:
+                    raise
+
+                sleep_time = base_sleep * (2 ** (attempt - 1))
+                logger.warning(f"Rate limit / DDoSProtection detected (attempt {attempt}/{max_retries}). Retrying in {sleep_time:.2f}s...")
+                time.sleep(sleep_time)
+
     def fetch_historical_ohlcv(self, symbol, timeframe, start_date_str, end_date_str):
         # ... (Unveränderter Code von Zeile 52 bis 109)
         start_ts = int(self.exchange.parse8601(start_date_str + 'T00:00:00Z'))
@@ -77,7 +98,7 @@ class Exchange:
         return df[~df.index.duplicated(keep='first')].sort_index()
 
     def fetch_ticker(self, symbol):
-        return self.exchange.fetch_ticker(symbol)
+        return self._with_rate_limit_retry(self.exchange.fetch_ticker, symbol)
 
     def set_margin_mode(self, symbol, mode='isolated'):
         try:
@@ -103,7 +124,7 @@ class Exchange:
 
     def create_market_order(self, symbol, side, amount, params={}):
         rounded_amount = float(self.exchange.amount_to_precision(symbol, amount))
-        return self.exchange.create_order(symbol, 'market', side, rounded_amount, params=params)
+        return self._with_rate_limit_retry(self.exchange.create_order, symbol, 'market', side, rounded_amount, params=params)
 
     def place_trigger_market_order(self, symbol, side, amount, trigger_price, params={}):
         rounded_price = float(self.exchange.price_to_precision(symbol, trigger_price))
@@ -113,10 +134,10 @@ class Exchange:
             'reduceOnly': params.get('reduceOnly', False)
         }
         order_params.update(params)
-        return self.exchange.create_order(symbol, 'market', side, rounded_amount, params=order_params)
+        return self._with_rate_limit_retry(self.exchange.create_order, symbol, 'market', side, rounded_amount, params=order_params)
 
     def fetch_open_positions(self, symbol):
-        positions = self.exchange.fetch_positions([symbol])
+        positions = self._with_rate_limit_retry(self.exchange.fetch_positions, [symbol])
         open_positions = [p for p in positions if p.get('contracts', 0.0) > 0.0]
         return open_positions
 
@@ -126,7 +147,7 @@ class Exchange:
     def fetch_balance_usdt(self):
         # ... (Unveränderter Code von Zeile 219 bis 242)
         try:
-            balance = self.exchange.fetch_balance()
+            balance = self._with_rate_limit_retry(self.exchange.fetch_balance)
             if 'USDT' in balance:
                 if 'free' in balance['USDT'] and balance['USDT']['free'] is not None:
                     return float(balance['USDT']['free'])

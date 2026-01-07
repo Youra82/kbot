@@ -303,12 +303,32 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
             # best-effort rounding fallback
             amount = float(round(amount, 8))
 
-        # Final check: if after rounding amount is below min_amount or notional below min_notional, abort
+        # If rounding caused the notional to fall slightly under the min_notional, try to increase
+        # the amount by one precision step until the notional meets the minimum (or until a safety cap).
+        try:
+            precision_step = 1e-8
+            if market_info and market_info.get('precision') and market_info['precision'].get('amount') is not None:
+                amt_prec = market_info['precision']['amount']
+                precision_step = 10 ** (-int(amt_prec))
+        except Exception:
+            precision_step = 1e-8
+
+        if min_notional:
+            target_notional = float(min_notional)
+            iter_cnt = 0
+            while (amount * entry_price) < target_notional and iter_cnt < 50:
+                amount += precision_step
+                try:
+                    amount = float(exchange.exchange.amount_to_precision(symbol, amount))
+                except Exception:
+                    amount = float(round(amount, 8))
+                iter_cnt += 1
+            if (amount * entry_price) < target_notional:
+                logger.error(f"FEHLER: Berechneter Notional {amount*entry_price:.4f} USDT liegt unter Mindestnotional {min_notional} nach Anpassung. Abbruch.")
+                return
+
         if min_amount and amount < float(min_amount):
             logger.error(f"FEHLER: Berechneter Betrag {amount} liegt unter dem Mindestbetrag {min_amount}. Abbruch.")
-            return
-        if min_notional and (amount * entry_price) < float(min_notional):
-            logger.error(f"FEHLER: Berechneter Notional {amount*entry_price:.4f} USDT liegt unter Mindestnotional {min_notional}. Abbruch.")
             return
 
         # Berechnung der Trigger-Preise

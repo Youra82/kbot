@@ -477,16 +477,6 @@ tail -n 100 logs/kbot_BTCUSDTUSDT_4h.log
 tail -f logs/cron.log | grep -i "lower_6\|upper_6\|fib"
 ```
 
-### Performance-Metriken
-
-```bash
-# Trade-Analyse
-python analyze_real_trades_detailed.py
-
-# Vergleich Backtest vs. Live
-python compare_real_vs_backtest.py
-```
-
 ---
 
 ## 🛠️ Wartung & Pflege

@@ -9,7 +9,7 @@
 
 **Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Fibonacci Bollinger Bands, Volume Profile Konfluenz und automatischem Risikomanagement**
 
-[Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
+[📊 **Interaktive Illustration öffnen**](kbot_illustration.html) • [Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
 
 </div>
 

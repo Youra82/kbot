@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KBot - Long & Short Position Illustration</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            position: relative;
+            height: 500px;
+        }
+        
+        .chart-container h2 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 1.3em;
+        }
+        
+        .chart-container canvas {
+            max-height: 420px;
+        }
+        
+        .diagram-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .diagram-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .band-diagram {
+            position: relative;
+            height: 500px;
+            background: linear-gradient(90deg, #f5f7fa 0%, #ffffff 100%);
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        .band-level {
+            position: absolute;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            padding: 0 20px;
+            z-index: 2;
+        }
+        
+        .band-line {
+            flex: 1;
+            height: 2px;
+            margin: 0 10px;
+        }
+        
+        .band-label {
+            min-width: 120px;
+            font-size: 0.9em;
+        }
+        
+        /* Upper Bands */
+        .upper_6 {
+            top: 10%;
+            color: #d32f2f;
+        }
+        
+        .upper_6 .band-line {
+            background-color: #d32f2f;
+            box-shadow: 0 0 8px rgba(211,47,47,0.4);
+        }
+        
+        .upper_5 {
+            top: 20%;
+            color: #e57373;
+        }
+        
+        .upper_5 .band-line {
+            background-color: #e57373;
+        }
+        
+        .upper_4 {
+            top: 30%;
+            color: #ef9a9a;
+        }
+        
+        .upper_4 .band-line {
+            background-color: #ef9a9a;
+        }
+        
+        .upper_3 {
+            top: 40%;
+            color: #f48fb1;
+        }
+        
+        .upper_3 .band-line {
+            background-color: #f48fb1;
+        }
+        
+        .upper_2 {
+            top: 45%;
+            color: #fce4ec;
+        }
+        
+        .upper_2 .band-line {
+            background-color: #fce4ec;
+        }
+        
+        .upper_1 {
+            top: 48%;
+            color: #ff6b6b;
+        }
+        
+        .upper_1 .band-line {
+            background-color: #ff6b6b;
+            box-shadow: 0 0 6px rgba(255,107,107,0.4);
+        }
+        
+        /* VWMA */
+        .vwma {
+            top: 50%;
+            color: #2196F3;
+        }
+        
+        .vwma .band-line {
+            background-color: #2196F3;
+            height: 3px;
+            box-shadow: 0 0 10px rgba(33,150,243,0.5);
+        }
+        
+        /* Lower Bands */
+        .lower_1 {
+            top: 52%;
+            color: #4caf50;
+        }
+        
+        .lower_1 .band-line {
+            background-color: #4caf50;
+            box-shadow: 0 0 6px rgba(76,175,80,0.4);
+        }
+        
+        .lower_2 {
+            top: 55%;
+            color: #c8e6c9;
+        }
+        
+        .lower_2 .band-line {
+            background-color: #c8e6c9;
+        }
+        
+        .lower_3 {
+            top: 60%;
+            color: #81c784;
+        }
+        
+        .lower_3 .band-line {
+            background-color: #81c784;
+        }
+        
+        .lower_4 {
+            top: 70%;
+            color: #66bb6a;
+        }
+        
+        .lower_4 .band-line {
+            background-color: #66bb6a;
+        }
+        
+        .lower_5 {
+            top: 80%;
+            color: #4caf50;
+        }
+        
+        .lower_5 .band-line {
+            background-color: #4caf50;
+        }
+        
+        .lower_6 {
+            top: 90%;
+            color: #2e7d32;
+        }
+        
+        .lower_6 .band-line {
+            background-color: #2e7d32;
+            box-shadow: 0 0 8px rgba(46,125,50,0.4);
+        }
+        
+        /* Volume Profile Zones */
+        .vp-zone {
+            position: absolute;
+            width: 100%;
+            opacity: 0.15;
+            z-index: 1;
+        }
+        
+        .vp-zone.vah {
+            background-color: #d32f2f;
+            top: 30%;
+            height: 20%;
+        }
+        
+        .vp-zone.val {
+            background-color: #4caf50;
+            top: 70%;
+            height: 20%;
+        }
+        
+        .vp-zone.poc {
+            background-color: #2196F3;
+            top: 48%;
+            height: 4%;
+        }
+        
+        .annotation {
+            position: absolute;
+            right: 20px;
+            font-size: 0.85em;
+            background: rgba(255,255,255,0.9);
+            padding: 8px 12px;
+            border-radius: 4px;
+            border-left: 4px solid;
+        }
+        
+        .annotation.long {
+            border-left-color: #4caf50;
+            color: #2e7d32;
+            top: 90%;
+        }
+        
+        .annotation.short {
+            border-left-color: #d32f2f;
+            color: #b71c1c;
+            top: 10%;
+        }
+        
+        .annotation.sl-long {
+            border-left-color: #ff6b6b;
+            color: #c62828;
+            top: 52%;
+        }
+        
+        .annotation.sl-short {
+            border-left-color: #ff6b6b;
+            color: #c62828;
+            top: 48%;
+        }
+        
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: #f5f5f5;
+            border-radius: 6px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+        }
+        
+        .legend-item strong {
+            color: #333;
+        }
+        
+        .legend-item p {
+            margin: 0;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .info-box {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 5px solid;
+        }
+        
+        .info-box.long {
+            border-left-color: #4caf50;
+        }
+        
+        .info-box.short {
+            border-left-color: #d32f2f;
+        }
+        
+        .info-box h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .info-box ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .info-box li {
+            padding: 5px 0;
+            color: #555;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            font-size: 0.95em;
+        }
+        
+        .info-box li:last-child {
+            border-bottom: none;
+        }
+        
+        @media (max-width: 1024px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .confluence-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            color: #333;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.85em;
+            margin: 10px 0;
+            box-shadow: 0 4px 15px rgba(255,215,0,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 KBot Trading System</h1>
+            <p>Fibonacci Bollinger Bands + Volume Profile Strategie</p>
+        </div>
+        
+        <div class="diagram-section">
+            <h2>📊 Zwei Szenarien: LONG vs SHORT</h2>
+            
+            <div class="charts-grid" style="margin-bottom: 30px;">
+                <div style="background: #e8f5e9; padding: 25px; border-radius: 12px; border: 3px solid #4caf50;">
+                    <h3 style="color: #2e7d32; margin-bottom: 5px;">📉 LONG Szenario</h3>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">Preis fällt nach unten → Kaufen</p>
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="longScenarioChart"></canvas>
+                    </div>
+                </div>
+                
+                <div style="background: #ffebee; padding: 25px; border-radius: 12px; border: 3px solid #d32f2f;">
+                    <h3 style="color: #b71c1c; margin-bottom: 5px;">📈 SHORT Szenario</h3>
+                    <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">Preis steigt nach oben → Verkaufen</p>
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="shortScenarioChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; border-left: 5px solid #2196F3; margin-bottom: 20px;">
+                <p style="margin: 0; color: #333; font-size: 0.95em;">
+                    <strong>💡 Kernprinzip:</strong> Der Bot wartet auf <strong>Konfluenz</strong> - wenn Preis an Fibonacci-Band UND Volume-Level zusammentreffen. 
+                    Dann nur noch abwarten bis TP1 (50%) oder TP2 (Rest) oder SL wird getroffen.
+                </p>
+            </div>
+        </div>
+        
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h2>📈 LONG Position Ablauf</h2>
+                <canvas id="longChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h2>📉 SHORT Position Ablauf</h2>
+                <canvas id="shortChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="diagram-section">
+            <h2>🔄 Konfluenz-Prinzip (die Kernstärke)</h2>
+            
+            <div class="confluence-badge">
+                ⚡ Nur handeln wenn Fibonacci-Band UND Volume-Level übereinstimmen!
+            </div>
+            
+            <div class="info-grid">
+                <div class="info-box long">
+                    <h3>✅ LONG Position</h3>
+                    <ul>
+                        <li><strong>Entry:</strong> Preis ≤ Lower 6 UND nahe VAL/PoC</li>
+                        <li><strong>Signal Stärke:</strong> STRONG (1.0) / WEAK (0.4-0.6)</li>
+                        <li><strong>TP1:</strong> Bei PoC → 50% Position</li>
+                        <li><strong>TP2:</strong> Bei Upper 6 → Rest schließen</li>
+                        <li><strong>SL:</strong> Unter Lower 1 → Liquidierung</li>
+                        <li><strong>Strategie:</strong> Mean-Reversion (Preis sollte wieder hochgehen)</li>
+                    </ul>
+                </div>
+                
+                <div class="info-box short">
+                    <h3>✅ SHORT Position</h3>
+                    <ul>
+                        <li><strong>Entry:</strong> Preis ≥ Upper 6 UND nahe VAH/PoC</li>
+                        <li><strong>Signal Stärke:</strong> STRONG (1.0) / WEAK (0.4-0.6)</li>
+                        <li><strong>TP1:</strong> Bei PoC → 50% Position</li>
+                        <li><strong>TP2:</strong> Bei Lower 6 → Rest schließen</li>
+                        <li><strong>SL:</strong> Über Upper 1 → Liquidierung</li>
+                        <li><strong>Strategie:</strong> Mean-Reversion (Preis sollte wieder runtergehen)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="diagram-section">
+            <h2>💡 Praktische Beispiele</h2>
+            
+            <div class="info-grid">
+                <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; border-left: 5px solid #4caf50;">
+                    <h3 style="color: #2e7d32; margin-bottom: 10px;">📊 LONG Beispiel</h3>
+                    <p style="margin: 10px 0; color: #333;"><strong>Szenario:</strong> BTC/USDT fällt auf Lower 6 und ist gleichzeitig nahe VAL</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>Signal:</strong> ✅ STRONG_LONG (Konfluenz erkannt)</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>Bot handelt:</strong> 10 BTC kaufen @ 40.000 USDT</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>TP1:</strong> @ PoC 40.500 → 5 BTC verkaufen (Gewinn sichern)</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>TP2:</strong> @ Upper 6 41.000 → 5 BTC verkaufen (Rest)</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>SL:</strong> Falls Preis unter Lower 1 fällt → Alle 10 BTC verkaufen (Verlust begrenzen)</p>
+                </div>
+                
+                <div style="background: #ffebee; padding: 20px; border-radius: 8px; border-left: 5px solid #d32f2f;">
+                    <h3 style="color: #b71c1c; margin-bottom: 10px;">📊 SHORT Beispiel</h3>
+                    <p style="margin: 10px 0; color: #333;"><strong>Szenario:</strong> ETH/USDT steigt auf Upper 6 und ist gleichzeitig nahe VAH</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>Signal:</strong> ✅ STRONG_SHORT (Konfluenz erkannt)</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>Bot handelt:</strong> 100 ETH shorten @ 2.500 USDT</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>TP1:</strong> @ PoC 2.450 → 50 ETH schließen (Gewinn sichern)</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>TP2:</strong> @ Lower 6 2.400 → 50 ETH schließen (Rest)</p>
+                    <p style="margin: 10px 0; color: #333;"><strong>SL:</strong> Falls Preis über Upper 1 steigt → Alle 100 ETH schließen (Verlust begrenzen)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // === LONG SCENARIO ===
+        function createLongScenarioChart() {
+            const longCtx = document.getElementById('longScenarioChart').getContext('2d');
+            
+            // Simulate price falling to lower_6, then bouncing back up
+            const labels = ['Start', '', '', '', '', 'Entry\n(Lower 6)', '', '', 'TP1\n(PoC)', '', 'TP2\n(Upper 6)'];
+            const priceData = [41000, 40800, 40600, 40400, 40200, 40000, 40200, 40400, 40600, 40800, 41000];
+            const lower6 = [40000, 40000, 40000, 40000, 40000, 40000, 40000, 40000, 40000, 40000, 40000];
+            const lower3 = [39500, 39500, 39500, 39500, 39500, 39500, 39500, 39500, 39500, 39500, 39500];
+            const lower1 = [39000, 39000, 39000, 39000, 39000, 39000, 39000, 39000, 39000, 39000, 39000];
+            const val = [40100, 40100, 40100, 40100, 40100, 40100, 40100, 40100, 40100, 40100, 40100];
+            
+            new Chart(longCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Preis',
+                            data: priceData,
+                            borderColor: '#2e7d32',
+                            backgroundColor: 'rgba(76, 175, 80, 0.15)',
+                            borderWidth: 4,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 5,
+                            pointBackgroundColor: '#2e7d32',
+                            pointBorderWidth: 0
+                        },
+                        {
+                            label: 'Lower 6 (STRONG Entry)',
+                            data: lower6,
+                            borderColor: '#2e7d32',
+                            borderWidth: 2.5,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        },
+                        {
+                            label: 'Lower 3 (WEAK Entry)',
+                            data: lower3,
+                            borderColor: '#81c784',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        },
+                        {
+                            label: 'Lower 1 (Stop Loss)',
+                            data: lower1,
+                            borderColor: '#ff6b6b',
+                            borderWidth: 2.5,
+                            borderDash: [3, 3],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        },
+                        {
+                            label: 'VAL (Konfluenz)',
+                            data: val,
+                            borderColor: '#c8e6c9',
+                            borderWidth: 1.5,
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                font: { size: 10 },
+                                padding: 10,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.dataset.label) {
+                                        return context.dataset.label + ': $' + context.parsed.y.toFixed(0);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: 38500,
+                            max: 41500,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + (value / 1000).toFixed(1) + 'k';
+                                },
+                                font: { size: 10 }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 9 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // === SHORT SCENARIO ===
+        function createShortScenarioChart() {
+            const shortCtx = document.getElementById('shortScenarioChart').getContext('2d');
+            
+            // Simulate price rising to upper_6, then falling back down
+            const labels = ['Start', '', '', '', '', 'Entry\n(Upper 6)', '', '', 'TP1\n(PoC)', '', 'TP2\n(Lower 6)'];
+            const priceData = [2400, 2450, 2500, 2550, 2600, 2650, 2600, 2550, 2500, 2450, 2400];
+            const upper6 = [2650, 2650, 2650, 2650, 2650, 2650, 2650, 2650, 2650, 2650, 2650];
+            const upper3 = [2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700, 2700];
+            const upper1 = [2750, 2750, 2750, 2750, 2750, 2750, 2750, 2750, 2750, 2750, 2750];
+            const vah = [2640, 2640, 2640, 2640, 2640, 2640, 2640, 2640, 2640, 2640, 2640];
+            
+            new Chart(shortCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Preis',
+                            data: priceData,
+                            borderColor: '#b71c1c',
+                            backgroundColor: 'rgba(211, 47, 47, 0.15)',
+                            borderWidth: 4,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 5,
+                            pointBackgroundColor: '#b71c1c',
+                            pointBorderWidth: 0
+                        },
+                        {
+                            label: 'Upper 6 (STRONG Entry)',
+                            data: upper6,
+                            borderColor: '#b71c1c',
+                            borderWidth: 2.5,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        },
+                        {
+                            label: 'Upper 3 (WEAK Entry)',
+                            data: upper3,
+                            borderColor: '#ef9a9a',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        },
+                        {
+                            label: 'Upper 1 (Stop Loss)',
+                            data: upper1,
+                            borderColor: '#ff6b6b',
+                            borderWidth: 2.5,
+                            borderDash: [3, 3],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        },
+                        {
+                            label: 'VAH (Konfluenz)',
+                            data: vah,
+                            borderColor: '#ffcccc',
+                            borderWidth: 1.5,
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                font: { size: 10 },
+                                padding: 10,
+                                usePointStyle: true
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.dataset.label) {
+                                        return context.dataset.label + ': $' + context.parsed.y.toFixed(0);
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: 2300,
+                            max: 2800,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(0);
+                                },
+                                font: { size: 10 }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 9 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize charts
+        createLongScenarioChart();
+        createShortScenarioChart();
+        
+        // LONG Position Chart (old)
+        const longCtx = document.getElementById('longChart').getContext('2d');
+        new Chart(longCtx, {
+            type: 'line',
+            data: {
+                labels: ['Entry', 'TP1\n(50%)', 'TP2\n(Rest)', 'Profit'],
+                datasets: [
+                    {
+                        label: 'Preis',
+                        data: [40.0, 40.5, 41.0, 41.0],
+                        borderColor: '#4caf50',
+                        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 8,
+                        pointBackgroundColor: '#4caf50',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    },
+                    {
+                        label: 'Lower 6 (Entry)',
+                        data: [40.0, 40.0, 40.0, 40.0],
+                        borderColor: '#2e7d32',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        fill: false,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Lower 1 (SL)',
+                        data: [39.0, 39.0, 39.0, 39.0],
+                        borderColor: '#ff6b6b',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        fill: false,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            font: { size: 12 },
+                            padding: 15
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        min: 38,
+                        max: 42,
+                        title: {
+                            display: true,
+                            text: 'Price (USDT)'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // SHORT Position Chart (old)
+        const shortCtx = document.getElementById('shortChart').getContext('2d');
+        new Chart(shortCtx, {
+            type: 'line',
+            data: {
+                labels: ['Entry', 'TP1\n(50%)', 'TP2\n(Rest)', 'Profit'],
+                datasets: [
+                    {
+                        label: 'Preis',
+                        data: [2500, 2450, 2400, 2400],
+                        borderColor: '#d32f2f',
+                        backgroundColor: 'rgba(211, 47, 47, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 8,
+                        pointBackgroundColor: '#d32f2f',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    },
+                    {
+                        label: 'Upper 6 (Entry)',
+                        data: [2500, 2500, 2500, 2500],
+                        borderColor: '#b71c1c',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        fill: false,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Upper 1 (SL)',
+                        data: [2600, 2600, 2600, 2600],
+                        borderColor: '#ff6b6b',
+                        borderDash: [5, 5],
+                        borderWidth: 2,
+                        fill: false,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            font: { size: 12 },
+                            padding: 15
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        min: 2300,
+                        max: 2700,
+                        title: {
+                            display: true,
+                            text: 'Price (USDT)'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

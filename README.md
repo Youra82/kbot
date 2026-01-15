@@ -237,23 +237,17 @@ for fib in fib_levels:
 | Preis ≤ lower_6 (Short) | **Short Exit (TP)** | Unterstes Band |
 | Preis > upper_1 (Short) | **Short Exit (SL)** | Stop-Loss Level |
 
-### Visualisierung der Bänder
+### Interaktive Visualisierung der Strategie
 
-```
-        upper_6 ─────────────── Entry Short / TP Long
-        upper_5 ───────────────
-        upper_4 ───────────────
-        upper_3 ───────────────
-        upper_2 ───────────────
-        upper_1 ─────────────── SL Short
-        ══════════════════════ VWMA (Basis)
-        lower_1 ─────────────── SL Long
-        lower_2 ───────────────
-        lower_3 ───────────────
-        lower_4 ───────────────
-        lower_5 ───────────────
-        lower_6 ─────────────── Entry Long / TP Short
-```
+Öffne die **[KBot Trading System Illustration](kbot_illustration.html)** für eine interaktive, visuelle Erklärung:
+
+- 📊 **LONG Szenario** - Preis fällt, Entry bei Lower 6, TP bei PoC & Upper 6
+- 📊 **SHORT Szenario** - Preis steigt, Entry bei Upper 6, TP bei PoC & Lower 6
+- 📈 **Live Charts** - Zeigt realistische Preisbewegungen und Konfluenz-Level
+- 📋 **Detaillierte Regeln** - Entry-Signale, Take-Profit, Stop-Loss Erklärungen
+- 💡 **Praktische Beispiele** - BTC/ETH Szenarien mit konkreten Zahlen
+
+**Hinweis:** Speichere `kbot_illustration.html` lokal und öffne die Datei im Browser für die beste Erfahrung.
 
 ---
 

@@ -205,53 +205,6 @@ Bearbeite `settings.json` für deine gewünschten Handelspaare:
 
 ---
 
-## 🎯 Strategie-Logik im Detail
-
-### Fibonacci Bollinger Bands Algorithmus
-
-```python
-# 1. VWMA (Volume Weighted Moving Average) berechnen
-typical_price = (high + low + close) / 3
-vwma = sum(typical_price * volume, length) / sum(volume, length)
-
-# 2. Standardabweichung berechnen
-stdev = std(typical_price, length)
-
-# 3. Deviation mit Multiplikator
-dev = multiplier * stdev  # Standard: 3.0
-
-# 4. Fibonacci-Bänder generieren
-fib_levels = [0.236, 0.382, 0.5, 0.618, 0.764, 1.0]
-for fib in fib_levels:
-    upper_band = vwma + (fib * dev)
-    lower_band = vwma - (fib * dev)
-```
-
-### Entry/Exit Regeln
-
-| Situation | Aktion | Level |
-|-----------|--------|-------|
-| Preis ≤ lower_6 | **Long Entry** | Unterstes Band |
-| Preis ≥ upper_6 (Long) | **Long Exit (TP)** | Oberstes Band |
-| Preis < lower_1 (Long) | **Long Exit (SL)** | Stop-Loss Level |
-| Preis ≥ upper_6 | **Short Entry** | Oberstes Band |
-| Preis ≤ lower_6 (Short) | **Short Exit (TP)** | Unterstes Band |
-| Preis > upper_1 (Short) | **Short Exit (SL)** | Stop-Loss Level |
-
-### Interaktive Visualisierung der Strategie
-
-Öffne die **[KBot Trading System Illustration](kbot_illustration.html)** für eine interaktive, visuelle Erklärung:
-
-- 📊 **LONG Szenario** - Preis fällt, Entry bei Lower 6, TP bei PoC & Upper 6
-- 📊 **SHORT Szenario** - Preis steigt, Entry bei Upper 6, TP bei PoC & Lower 6
-- 📈 **Live Charts** - Zeigt realistische Preisbewegungen und Konfluenz-Level
-- 📋 **Detaillierte Regeln** - Entry-Signale, Take-Profit, Stop-Loss Erklärungen
-- 💡 **Praktische Beispiele** - BTC/ETH Szenarien mit konkreten Zahlen
-
-**Hinweis:** Speichere `kbot_illustration.html` lokal und öffne die Datei im Browser für die beste Erfahrung.
-
----
-
 ## 🔴 Live Trading
 
 ### Start des Live-Trading
@@ -298,43 +251,6 @@ Logverzeichnis anlegen:
 ```bash
 mkdir -p /home/ubuntu/kbot/logs
 ```
-
-### Als Systemd Service (Linux)
-
-Für 24/7 Betrieb:
-
-```bash
-# Service-Datei erstellen
-sudo nano /etc/systemd/system/kbot.service
-```
-
-```ini
-[Unit]
-Description=KBot Trading System
-After=network.target
-
-[Service]
-Type=simple
-User=your-user
-WorkingDirectory=/path/to/kbot
-ExecStart=/path/to/kbot/.venv/bin/python master_runner.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-# Service aktivieren
-sudo systemctl enable kbot
-sudo systemctl start kbot
-
-# Status prüfen
-sudo systemctl status kbot
-```
-
----
 
 ## � Interaktives Pipeline-Script
 
@@ -522,46 +438,6 @@ Das Script lädt die optimalen Parameter und nutzt sie für die Backtests:
 - ✅ Konsistente Strategie-Ausführung
 - ✅ Einfaches A/B-Testing von Parametern
 
-### Parameter-Grid
-
-Das Pipeline-Script testet folgende Parameter-Kombinationen für die Fibonacci Bollinger Bands:
-
-```
-Length (VWMA-Periode):               [100, 150, 200, 250, 300]               (5 Werte)
-Multiplier (Std-Dev Faktor):         [2.0, 2.5, 3.0, 3.5, 4.0]               (5 Werte)
-Entry Level (Fibonacci):             [lower_5, lower_6]                       (2 Werte)
-Exit Level (Fibonacci):              [upper_5, upper_6]                       (2 Werte)
-
-Total = 5 × 5 × 2 × 2 = 100 Kombinationen
-```
-
-**Laufzeit**: ~15-30 Sekunden pro Symbol/Timeframe (mit tqdm Ladebalken)
-
-**Scoring**: Jede Kombination wird bewertet mit:
-- **Risk-Adjusted Return** = Total Return / |Max Drawdown|
-- **Final Score** = Risk-Adjusted Return + (Win Rate × 0.5)
-
-Die beste Kombination wird automatisch gespeichert.
-
-### Troubleshooting
-
-**Problem**: Script funktioniert nicht  
-**Lösung**: Mache das Script ausführbar
-```bash
-chmod +x run_pipeline.sh
-```
-
-**Problem**: `command not found: date`  
-**Lösung**: Unter Windows verwende WSL oder bash-kompatible Shell
-
-**Problem**: Optimierung dauert sehr lange  
-**Lösung**: Verwende weniger Symbol/Timeframe-Kombinationen oder weniger Daten
-
-**Problem**: Keine Konfigurationen gefunden  
-**Lösung**: Überprüfe Logs mit `tail -f logs/cron.log`
-
----
-
 ## �📊 Monitoring & Status
 
 ### Status-Dashboard
@@ -660,101 +536,6 @@ chmod +x update.sh
 # Update ausführen
 bash ./update.sh
 ```
-
-### Log-Rotation
-
-```bash
-# Alte Logs archivieren (älter als 30 Tage)
-find logs/ -name "*.log" -type f -mtime +30 -exec gzip {} \;
-
-# Archivierte Logs löschen (älter als 90 Tage)
-find logs/ -name "*.log.gz" -type f -mtime +90 -delete
-```
-
-### Datenbank-Cleanup
-
-```bash
-# Alte Backtesting-Daten löschen
-rm -rf data/backtest_cache/*
-
-# Trade-History archivieren
-mv logs/trades_*.csv logs/archive/
-```
-
-### Tests ausführen
-
-```bash
-# Alle Tests
-./run_tests.sh
-
-# Spezifische Tests
-pytest tests/test_strategy.py
-pytest tests/test_exchange.py -v
-
-# Mit Coverage
-pytest --cov=src tests/
-```
-
----
-
-## 🔧 Nützliche Befehle
-
-### Konfiguration
-
-```bash
-# Settings validieren
-python -c "import json; print(json.load(open('settings.json')))"
-
-# Backup erstellen
-cp settings.json settings.json.backup.$(date +%Y%m%d)
-
-# Diff zwischen Versionen
-diff settings.json settings.json.backup
-```
-
-### Prozess-Management
-
-```bash
-# Alle Python-Prozesse anzeigen
-ps aux | grep python | grep kbot
-
-# Master Runner Process-ID finden
-pgrep -f master_runner.py
-
-# Prozess sauber beenden
-pkill -f master_runner.py
-
-# Erzwungenes Beenden (Notfall)
-pkill -9 -f master_runner.py
-```
-
-### Exchange-Verbindung
-
-```bash
-# API-Verbindung testen
-python -c "from src.kbot.utils.exchange import Exchange; \
-    e = Exchange('bitget'); print(e.fetch_balance())"
-
-# Marktdaten abrufen
-python -c "from src.kbot.utils.exchange import Exchange; \
-    e = Exchange('bitget'); print(e.fetch_ohlcv('BTC/USDT:USDT', '1h'))"
-```
-
-### Debugging
-
-```bash
-# Verbose-Modus aktivieren
-export KBOT_DEBUG=1
-python master_runner.py
-
-# Nur Strategie-Logs anzeigen
-tail -f logs/cron.log | grep -i "fib\|band\|trade\|position\|lower_6\|upper_6"
-
-# Fehler im Detail
-python -m pdb master_runner.py
-```
-
----
 
 ## 📂 Projekt-Struktur
 

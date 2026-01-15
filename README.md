@@ -11,8 +11,6 @@
 
 [📊 **Interaktive Illustration öffnen**](kbot_illustration.html) • [🚀 Live Preview (interaktiv auf GitHub Pages)](https://youra82.github.io/kbot/) • [Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
 
-![KBot Illustration Vorschau](artifacts/kbot_illustration_preview.gif)
-
 </div>
 
 ---
@@ -47,6 +45,7 @@ flowchart LR
 ```
 
 ### 📈 Trade-Beispiel (Entry/SL/TP)
+![KBot Illustration Vorschau](artifacts/kbot_illustration_preview.gif)
 - **Setup**: Fib BB + Volume Profile berechnet; Preis fällt zum lower_6 UND ist nahe VAL
 - **Signal**: STRONG_LONG (hohe Konfluenz = hohe Signalqualität)
 - **Entry Long**: Automatischer Einstieg bei Konfluenz

@@ -4,12 +4,25 @@ import subprocess
 import sys
 import os
 import time
-from datetime import datetime, timedelta
+import logging
 
 # Pfad anpassen, damit die utils importiert werden können
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = SCRIPT_DIR
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
+
+# Configure logging
+LOG_DIR = os.path.join(SCRIPT_DIR, 'logs')
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    handlers=[
+        logging.FileHandler(os.path.join(LOG_DIR, 'cron.log')),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 from kbot.utils.exchange import Exchange
 
@@ -23,7 +36,6 @@ def main():
     settings_file = os.path.join(SCRIPT_DIR, 'settings.json')
     optimization_results_file = os.path.join(SCRIPT_DIR, 'artifacts', 'results', 'optimization_results.json')
     bot_runner_script = os.path.join(SCRIPT_DIR, 'src', 'kbot', 'strategy', 'run.py')
-    bot_runner_module = 'kbot.strategy.run'
     secret_file = os.path.join(SCRIPT_DIR, 'secret.json')
 
     # Finde den exakten Pfad zum Python-Interpreter in der virtuellen Umgebung
@@ -36,6 +48,10 @@ def main():
     print("KBot Master Runner v3.3 (final)")
     print("=======================================================")
 
+    logger.info("=======================================================")
+    logger.info("KBot Master Runner v3.3 (final)")
+    logger.info("=======================================================")
+
     try:
         with open(settings_file, 'r') as f:
             settings = json.load(f)
@@ -45,11 +61,12 @@ def main():
         
         if not secrets.get('kbot'):
             print("Fehler: Kein 'kbot'-Account in secret.json gefunden.")
+            logger.error("Fehler: Kein 'kbot'-Account in secret.json gefunden.")
             return
         main_account_config = secrets['kbot'][0]
 
         print(f"Frage Kontostand für Account '{main_account_config.get('name', 'Standard')}' ab...")
-        # (Kapitalabfrage wird hier nicht mehr benötigt, da sie in run.py stattfindet)
+        logger.info(f"Frage Kontostand für Account '{main_account_config.get('name', 'Standard')}' ab...")
         
         live_settings = settings.get('live_trading_settings', {})
         use_autopilot = live_settings.get('use_auto_optimizer_results', False)
@@ -57,41 +74,18 @@ def main():
         strategy_list = []
         if use_autopilot:
             print("Modus: Autopilot. Lese Strategien aus den Optimierungs-Ergebnissen...")
-            # Versuche zuerst, die Optimizer-Ergebnisse zu laden.
-            if os.path.exists(optimization_results_file):
-                try:
-                    with open(optimization_results_file, 'r') as f:
-                        strategy_config = json.load(f)
-                    strategy_list = strategy_config.get('optimal_portfolio', [])
-                except Exception as e:
-                    print(f"Warnung: Fehler beim Lesen der Optimizer-Datei ({optimization_results_file}): {e}.")
-                    strategy_list = []
-            else:
-                # Wenn die Datei fehlt, versuche, alle Config-Dateien aus dem Config-Ordner zu verwenden.
-                configs_dir = os.path.join(SCRIPT_DIR, 'src', 'kbot', 'strategy', 'configs')
-                if os.path.exists(configs_dir):
-                    cfg_files = [f for f in os.listdir(configs_dir) if f.endswith('.json')]
-                    if cfg_files:
-                        print(f"Keine Optimizer-Datei gefunden. Nutze {len(cfg_files)} Konfigurationsdateien aus {configs_dir} als Autopilot-Input.")
-                        # Master Runner erwartet für Autopilot eine Liste von Dateinamen
-                        strategy_list = cfg_files
-                    else:
-                        print(f"Warnung: Kein Config-File in {configs_dir} gefunden.")
-                        strategy_list = []
-                else:
-                    print(f"Warnung: Config-Ordner {configs_dir} nicht gefunden.")
-                    strategy_list = []
+            logger.info("Modus: Autopilot. Lese Strategien aus den Optimierungs-Ergebnissen...")
+            with open(optimization_results_file, 'r') as f:
+                strategy_config = json.load(f)
+            strategy_list = strategy_config.get('optimal_portfolio', [])
         else:
             print("Modus: Manuell. Lese Strategien aus den manuellen Einstellungen...")
+            logger.info("Modus: Manuell. Lese Strategien aus den manuellen Einstellungen...")
             strategy_list = live_settings.get('active_strategies', [])
-
-        # Berechne Standard-Start/End-Daten falls nicht ausdrücklich angegeben
-        today = datetime.utcnow().date()
-        default_end_date = today.strftime('%Y-%m-%d')
-        default_start_date = (today - timedelta(days=365)).strftime('%Y-%m-%d')
 
         if not strategy_list:
             print("Keine aktiven Strategien zum Ausführen gefunden.")
+            logger.warning("Keine aktiven Strategien zum Ausführen gefunden.")
             return
             
         print("=======================================================")
@@ -101,6 +95,7 @@ def main():
                 symbol = strategy_info.get('symbol', 'N/A')
                 timeframe = strategy_info.get('timeframe', 'N/A')
                 print(f"\n--- Überspringe inaktive Strategie: {symbol} ({timeframe}) ---")
+                logger.info(f"--- Überspringe inaktive Strategie: {symbol} ({timeframe}) ---")
                 continue
 
             symbol, timeframe, use_macd = None, None, None
@@ -115,6 +110,7 @@ def main():
                     symbol = f"{symbol_base}/USDT:USDT"
                 except Exception as e:
                     print(f"Warnung: Konnte Autopilot-Strategie '{strategy_info}' nicht verarbeiten. Fehler: {e}")
+                    logger.warning(f"Warnung: Konnte Autopilot-Strategie '{strategy_info}' nicht verarbeiten. Fehler: {e}")
                     continue
             
             elif isinstance(strategy_info, dict):
@@ -124,40 +120,48 @@ def main():
             
             if not all([symbol, timeframe, use_macd is not None]):
                 print(f"Warnung: Unvollständige Strategie-Info: {strategy_info}. Überspringe.")
+                logger.warning(f"Warnung: Unvollständige Strategie-Info: {strategy_info}. Überspringe.")
                 continue
 
             print(f"\n--- Starte Bot für: {symbol} ({timeframe}) ---")
-            # Wenn Autopilot (Backtest) aktiv ist, übergebe Start/End-Daten.
-            # Im manuellen/live Modus starten wir ohne Datumsangaben und verwenden --live.
-            # Setze PYTHONPATH, damit der 'kbot' Package-Import in run.py funktioniert
-            env = os.environ.copy()
-            env['PYTHONPATH'] = os.path.join(PROJECT_ROOT, 'src')
-
-            if use_autopilot:
-                command = [
-                    python_executable,
-                    '-m', bot_runner_module,
-                    "--symbol", symbol,
-                    "--timeframe", timeframe,
-                    "--start_date", default_start_date,
-                    "--end_date", default_end_date,
-                ]
-            else:
-                command = [
-                    python_executable,
-                    '-m', bot_runner_module,
-                    "--symbol", symbol,
-                    "--timeframe", timeframe,
-                    "--live"
-                ]
-
-            subprocess.Popen(command, env=env)
+            print(f"    - MACD-Filter-Version: {'JA' if use_macd else 'NEIN'}")
+            logger.info(f"--- Starte Bot für: {symbol} ({timeframe}) ---")
+            logger.info(f"    - MACD-Filter-Version: {'JA' if use_macd else 'NEIN'}")
+            
+            # --- Log-Datei pro Bot erstellen ---
+            bot_log_file = os.path.join(LOG_DIR, f"bot_{symbol.replace('/', '_').replace(':', '')}_{timeframe}.log")
+            
+            # --- HIER IST DIE FINALE KORREKTUR ---
+            # Der --use_macd Parameter wird jetzt korrekt an den Befehl übergeben
+            # UND stdout/stderr werden zur Log-Datei umgeleitet
+            command = [
+                python_executable,
+                bot_runner_script,
+                "--symbol", symbol,
+                "--timeframe", timeframe,
+                "--use_macd", str(use_macd) 
+            ]
+            
+            try:
+                with open(bot_log_file, 'a') as log_file:
+                    subprocess.Popen(
+                        command,
+                        stdout=log_file,
+                        stderr=subprocess.STDOUT,
+                        text=True
+                    )
+                logger.info(f"Bot-Prozess gestartet - Logs: {bot_log_file}")
+            except Exception as e:
+                logger.error(f"Fehler beim Starten des Bot für {symbol}: {e}")
+            
             time.sleep(2)
 
     except FileNotFoundError as e:
         print(f"Fehler: Eine wichtige Datei wurde nicht gefunden: {e}")
+        logger.error(f"Fehler: Eine wichtige Datei wurde nicht gefunden: {e}")
     except Exception as e:
         print(f"Ein unerwarteter Fehler im Master Runner ist aufgetreten: {e}")
+        logger.error(f"Ein unerwarteter Fehler im Master Runner ist aufgetreten: {e}")
 
 if __name__ == "__main__":
     main()

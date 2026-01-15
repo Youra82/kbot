@@ -610,17 +610,6 @@ Bei Problemen oder Fragen:
    - System-Informationen
    - Schritte zur Reproduktion
 
-### Updates erhalten
-
-```bash
-# Regelmäßig Updates prüfen
-git fetch origin
-git status
-
-# Updates installieren
-./update.sh
-```
-
 ### Optimierte Konfigurationen auf Repo hochladen
 
 Nach erfolgreicher Parameter-Optimierung können die Konfigurationsdateien auf das Repository hochgeladen werden:

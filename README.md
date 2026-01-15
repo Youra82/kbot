@@ -11,6 +11,8 @@
 
 [📊 **Interaktive Illustration öffnen**](kbot_illustration.html) • [Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
 
+![KBot Illustration Vorschau](artifacts/kbot_illustration_preview.gif)
+
 </div>
 
 ---

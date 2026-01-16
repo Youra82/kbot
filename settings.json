@@ -1,48 +1,42 @@
 {
   "live_trading_settings": {
-      "use_auto_optimizer_results": false,
+    "use_auto_optimizer_results": false,
     "active_strategies": [
       {
         "symbol": "ETH/USDT:USDT",
         "timeframe": "6h",
         "use_macd_filter": false,
-        "active": true,
-        "comment": "Automatisch optimiert (ETHUSDTUSDT 6h)"
+        "active": true
       },
       {
         "symbol": "ADA/USDT:USDT",
         "timeframe": "6h",
         "use_macd_filter": false,
-        "active": true,
-        "comment": "Automatisch optimiert (ADAUSDTUSDT 6h)"
+        "active": true
       },
       {
         "symbol": "AAVE/USDT:USDT",
         "timeframe": "6h",
         "use_macd_filter": false,
-        "active": true,
-        "comment": "Automatisch optimiert (AAVEUSDTUSDT 6h)"
+        "active": true
       },
       {
         "symbol": "DOGE/USDT:USDT",
         "timeframe": "6h",
         "use_macd_filter": false,
-        "active": true,
-        "comment": "Automatisch optimiert (DOGEUSDTUSDT 6h)"
+        "active": true
       },
       {
         "symbol": "SOL/USDT:USDT",
         "timeframe": "6h",
         "use_macd_filter": false,
-        "active": true,
-        "comment": "Automatisch optimiert (SOLUSDTUSDT 6h)"
+        "active": true
       },
       {
         "symbol": "XRP/USDT:USDT",
         "timeframe": "1d",
         "use_macd_filter": false,
-        "active": true,
-        "comment": "Automatisch optimiert (XRPUSDTUSDT 1d)"
+        "active": true
       }
     ]
   }

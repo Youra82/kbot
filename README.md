@@ -1,53 +1,59 @@
-# 📊 KBot - Fibonacci Bollinger Bands + Volume Profile Trading Bot
+# 📊 KBot - Volume Channel Flow Trading Bot
 
 <div align="center">
 
-![KBot Logo](https://img.shields.io/badge/KBot-v3.0-blue?style=for-the-badge)
-[![Python](https://img.shields.io/badge/Python-3.8+-green?style=for-the-badge&logo=python)](https://www.python.org/)
+![KBot Logo](https://img.shields.io/badge/KBot-v4.0-blue?style=for-the-badge)
+[![Python](https://img.shields.io/badge/Python-3.10+-green?style=for-the-badge&logo=python)](https://www.python.org/)
 [![CCXT](https://img.shields.io/badge/CCXT-4.3.5-red?style=for-the-badge)](https://github.com/ccxt/ccxt)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
-**Ein vollautomatisierter Trading-Bot für Krypto-Futures mit Fibonacci Bollinger Bands, Volume Profile Konfluenz und automatischem Risikomanagement**
+**Ein vollautomatisierter Trading-Bot für Krypto-Futures mit ATR-basierten dynamischen Kanälen, Volume Profile und Breakout-Strategie**
 
-[📊 **Interaktive Illustration öffnen**](kbot_illustration.html) • [🚀 Live Preview (interaktiv auf GitHub Pages)](https://youra82.github.io/kbot/) • [Features](#-features) • [Installation](#-installation) • [Konfiguration](#-konfiguration) • [Live-Trading](#-live-trading) • [Pipeline](#-interaktives-pipeline-script) • [Monitoring](#-monitoring--status) • [Wartung](#-wartung)
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Pipeline](#-pipeline--parameter-optimierung) • [Backtesting](#-backtesting) • [Wartung](#-wartung)
 
 </div>
 
 ---
 
-##  Übersicht
+## 📊 Übersicht
 
-KBot ist ein spezialisierter Trading-Bot, der **Fibonacci Bollinger Bands** kombiniert mit **Volume Profile Analyse** nutzt, um hochwertige Mean-Reversion-Trades auf dem Kryptowährungsmarkt zu identifizieren. Das System handelt nur bei Konfluenz von technischen Bändern und Volume-Levels für maximale Signalqualität.
+KBot ist ein Trend-Following Breakout-System, das **Volume Channel Flow** nutzt. Der Bot berechnet dynamische Kanäle basierend auf ATR und analysiert das Volume-Profil sowie Volume-Delta für robuste Einstiege. Die Strategie funktioniert auf allen Timeframes und handelt Long/Short bei Ausbrüchen aus dem Kanal.
 
 ### 🧭 Trading-Logik (Kurzfassung)
-- **Fibonacci Bollinger Bands**: VWMA-basierte Bänder mit 6 Fibonacci-Levels (0.236, 0.382, 0.5, 0.618, 0.764, 1.0)
-- **Volume Profile**: PoC (Point of Control), VAH (Value Area High), VAL (Value Area Low) Berechnung
-- **Konfluenz-Filter**: Entry nur wenn Fib-Band UND Volume-Level übereinstimmen
-- **Entry-Logik**: Long bei lower_6 + nahe VAL/PoC, Short bei upper_6 + nahe VAH/PoC
-- **Take-Profit**: TP1 bei PoC (50%), TP2 bei gegenüberliegendem Band 6
-- **Stop-Loss**: Band 1 als Stop-Loss-Level (Long: lower_1, Short: upper_1)
+- **ATR-Kanal**: Dynamische obere/untere Grenzen (ATR × Channel_Width um HL2 = Typical Price)
+- **Volume Profile**: Integration in 30 Kerzen-Segmente (POC = Point of Control, Value Area)
+- **Volume Delta**: Akkumulation/Distribution für Confirmation (bullish/bearish Volume)
+- **Entry Long**: Close > Channel Top + (optional) positive Volume Delta
+- **Entry Short**: Close < Channel Bottom + (optional) negative Volume Delta
+- **Stop-Loss**: Gegenüberliegende Kanal-Grenze
+- **Take-Profit**: Entry + (SL-Distance × Risk-Reward-Ratio)
 
 ### 🔍 Strategie-Visualisierung
 ```mermaid
 flowchart LR
     A["OHLCV Marktdaten"]
-    B["Fibonacci Bollinger Bands<br/>VWMA + 6 Fib-Levels"]
-    C["Volume Profile<br/>PoC, VAH, VAL"]
-    D["Konfluenz-Check<br/>Fib + VP Level?"]
-    E["Signal Strength<br/>STRONG/WEAK"]
-    F["Entry Long/Short"]
-    G["Risk Engine<br/>TP1@PoC, TP2@Band6"]
+    B["ATR Berechnung<br/>(Period=200)"]
+    C["Channel Grenzen<br/>Top/Bottom"]
+    D["Volume Profile<br/>POC, Value Area"]
+    E["Volume Delta<br/>Confirmation"]
+    F["Breakout Signal<br/>Long/Short"]
+    G["Risk Engine<br/>SL/TP"]
     H["Order Router (CCXT)"]
 
-    A --> B --> D
-    A --> C --> D
-    D --> E --> F --> G --> H
+    A --> B --> C
+    A --> D --> E
+    C --> F
+    E --> F
+    F --> G --> H
 ```
 
 ### 📈 Trade-Beispiel (Entry/SL/TP)
-![KBot Illustration Vorschau](artifacts/kbot_illustration_preview.gif)
-- **Setup**: Fib BB + Volume Profile berechnet; Preis fällt zum lower_6 UND ist nahe VAL
-- **Signal**: STRONG_LONG (hohe Konfluenz = hohe Signalqualität)
+- **Channel**: ATR(200) berechnet; Channel Top = 50000, Bottom = 48000
+- **Breakout**: Price steigt über 50000 mit positivem Volume Delta → Long Signal
+- **Entry**: Automatischer Einstieg bei Channel Top Durchbruch
+- **SL**: Bei 48000 (Channel Bottom)
+- **TP**: Entry + (2000 × 2.0 RR) = 54000
+- **Trend**: Klare Richtungsbias durch Channel Position
 - **Entry Long**: Automatischer Einstieg bei Konfluenz
 - **TP1**: Bei PoC (Point of Control) - 50% Position schließen
 - **TP2**: Bei upper_6 - Rest schließen
@@ -58,51 +64,190 @@ flowchart LR
 ## 🚀 Features
 
 ### Trading Features
-- ✅ **Fibonacci Bollinger Bands** Strategie mit 6 Fibonacci-Levels
-- ✅ **Volume Profile Integration** - PoC, VAH, VAL Berechnung
-- ✅ **Konfluenz-basierte Entries** - nur bei Fib + VP Übereinstimmung
-- ✅ **VWMA-basierte** Berechnung (Volume Weighted Moving Average)
-- ✅ **Long & Short Trading** - bidirektionale Mean-Reversion
-- ✅ **Dual Take-Profit** - TP1 bei PoC, TP2 bei Band 6
-- ✅ Unterstützt mehrere Kryptowährungspaare (BTC, ETH, SOL, DOGE, etc.)
-- ✅ Flexible Timeframe-Unterstützung (15m, 30m, 1h, 4h, 1d)
-- ✅ Automatische Positionsgröße basierend auf verfügbarem Kapital
-- ✅ Integriertes Stop-Loss (Band 1) und Take-Profit (Band 6) Management
+- ✅ **Volume Channel Flow** Strategie - ATR-basierte dynamische Kanäle
+- ✅ **Volume Profile Integration** - POC (Point of Control), Value Area
+- ✅ **Volume Delta Confirmation** - Bullish/Bearish Volumen-Akkumulation
+- ✅ **Breakout-Trading** - Long bei Kanal-Ausbruch nach oben, Short nach unten
+- ✅ **Long & Short Trading** - Bidirektionales Trend-Following
+- ✅ Unterstützt mehrere Kryptowährungspaare (BTC, ETH, SOL, ADA, DOGE, XRP, etc.)
+- ✅ Flexible Timeframe-Unterstützung (15m, 30m, 1h, 4h, 6h, 1d, 1w)
+- ✅ Automatische Positionsgröße basierend auf verfügbarem Kapital und Leverage
+- ✅ ATR-basiertes Stop-Loss und Take-Profit Management
+- ✅ Optuna-basierte Parameter-Optimierung
 
 ### Technical Features
-- ✅ CCXT Integration für mehrere Börsen (Bitget primär)
-- ✅ Rolling Volume Profile Berechnung (200 Kerzen Lookback)
-- ✅ Automatische Fibonacci-Band-Berechnung in Echtzeit
-- ✅ Backtesting mit realistischer Slippage-Simulation
+- ✅ CCXT Integration (Bitget, Binance, Kraken, etc.)
+- ✅ ATR-Berechnung mit anpassbarer Periode (default: 200)
+- ✅ Volume Profile Analyse pro Kerzen-Segment
+- ✅ Live Backtesting mit realistischer Slippage-Simulation
+- ✅ Optuna Parameter-Optimierung (Hyperparameter Tuning)
 - ✅ Robust Error-Handling und Logging
+- ✅ Pipeline-Automation mit fortlaufender Optimierung
 
-### Fibonacci Bollinger Bands - Details
+### Volume Channel Flow - Parameter
 
-Die Strategie verwendet **6 Fibonacci-Level** auf jeder Seite der VWMA-Basislinie:
+| Parameter | Beschreibung | Default | Bereich |
+|-----------|-------------|---------|---------|
+| **atr_period** | ATR Berechnung Periode | 200 | 100-300 |
+| **channel_width** | ATR Multiplikator für Kanal-Breite | 3.0 | 2.0-5.0 |
+| **min_channel_length** | Minimum Kerzen für Kanal-Bildung | 10 | 5-20 |
+| **volume_bins** | Preis-Level für Volume Profile | 30 | 15-50 |
+| **use_volume_confirmation** | Volume Delta als Filter nutzen | true | - |
+| **risk_reward_ratio** | TP zu SL Verhältnis | 2.0 | 1.5-4.0 |
+| **risk_per_trade_pct** | Risiko pro Trade in % | 1.0 | 0.5-2.0 |
+| **leverage** | Hebel für Positionen | 5 | 3-20 |
 
-| Level | Fibonacci | Verwendung |
-|-------|-----------|------------|
-| Band 1 | 0.236 | Stop-Loss Level |
-| Band 2 | 0.382 | - |
-| Band 3 | 0.500 | Schwache Entry (mit VP Konfluenz) |
-| Band 4 | 0.618 | - |
-| Band 5 | 0.764 | - |
-| Band 6 | 1.000 | Entry/Take-Profit Level |
+---
 
-### Volume Profile - Details
+## ⚡ Quick Start
 
-| Level | Beschreibung | Verwendung |
-|-------|--------------|------------|
-| **PoC** | Point of Control - Preis mit höchstem Volumen | TP1 (50%), stärkstes S/R |
-| **VAH** | Value Area High - obere 68% des Volumens | Short Entry Konfluenz |
-| **VAL** | Value Area Low - untere 68% des Volumens | Long Entry Konfluenz |
+### 1. Installation (erste Einrichtung)
 
-**Parameter:**
-- **Fib Length**: 200 (VWMA-Periode)
-- **Fib Multiplier**: 3.0 (Standardabweichungs-Multiplikator)
-- **VP Lookback**: 200 Kerzen
-- **VP Bars**: 50 Preis-Levels
-- **VA Percent**: 68% (Standard Value Area)
+```bash
+git clone https://github.com/Youra82/kbot.git
+cd kbot
+./install.sh              # Linux/macOS
+# oder Windows:
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### 2. API-Credentials konfigurieren
+
+Erstelle `secret.json`:
+```bash
+cp secret.json.template secret.json
+# Bearbeite secret.json mit API-Keys
+nano secret.json  # oder dein Lieblings-Editor
+```
+
+### 3. Parameter-Optimierung durchführen
+
+```bash
+bash ./run_pipeline.sh
+# Folge den Prompts:
+# - Handelspaare eingeben (z.B. BTC ETH)
+# - Timeframes eingeben (z.B. 4h 1d)
+# - Startdatum (optional, 'a' für Automatik)
+# - Trials eingeben (z.B. 100)
+```
+
+Dies erstellt optimierte Konfigurationen in `src/kbot/strategy/configs/config_*.json`
+
+### 4. Ergebnisse analysieren & Live-Trading starten
+
+```bash
+# Backtests anschauen
+./show_results.sh
+# Wähle Modus 1 (Einzel-Analyse) und antworte auf Fragen
+
+# Bot starten
+python master_runner.py
+```
+
+### 5. Alte Konfigurationen löschen (Neustart)
+
+Wenn du eine komplett neue Optimierung starten möchtest:
+
+```bash
+# Alle Konfigurationsdateien löschen
+rm -f src/kbot/strategy/configs/config_*.json
+
+# Oder über die Pipeline:
+bash ./run_pipeline.sh
+# Bei der ersten Abfrage "Möchtest du alle alten Konfigurationen löschen?" -> j
+```
+
+---
+
+## 📊 Pipeline & Backtesting
+
+### Parameter-Optimierung (run_pipeline.sh)
+
+Die Pipeline optimiert die Volume Channel Flow Parameter automatisch:
+
+```bash
+bash ./run_pipeline.sh
+
+# Interaktive Abfragen:
+# 1. Alte Configs löschen? (j/n)
+# 2. Handelspaare (z.B. BTC ETH SOL)
+# 3. Timeframes (z.B. 1h 4h 1d)
+# 4. Startdatum (YYYY-MM-DD oder 'a' für Automatik)
+# 5. Enddatum (YYYY-MM-DD)
+# 6. Startkapital (USDT)
+# 7. Anzahl Trials (z.B. 100)
+# 8. Modus: Streng oder Best-Profit
+# 9. Max Drawdown %
+```
+
+**Parameter die optimiert werden:**
+- `atr_period`: 100-300 (Schritte: 20)
+- `channel_width`: 2.0-5.0 (Schritte: 0.25)
+- `min_channel_length`: 5-20
+- `volume_bins`: 15-50 (Schritte: 5)
+- `use_volume_confirmation`: true/false
+- `risk_reward_ratio`: 1.5-4.0 (Schritte: 0.25)
+- `risk_per_trade_pct`: 0.5-2.0 (Schritte: 0.25)
+- `leverage`: 3-20
+
+### Backtesting (show_results.sh)
+
+```bash
+./show_results.sh
+
+# Modus-Auswahl:
+# 1) Einzel-Analyse - Testet alle Strategien einzeln
+# 2) Portfolio-Simulation - Wähle Strategien manuell aus
+# 3) Portfolio-Optimierung - Bot wählt beste Kombination
+# 4) Interaktive Charts (noch in Entwicklung)
+
+# Dann: Startdatum, Enddatum, Startkapital eingeben
+```
+
+**Output Modus 1 (Einzel-Analyse):**
+```
+Strategie              Trades  Win-Rate  PnL %  Max DD  PF    Endkapital
+BTC/USDT:USDT (1d)    45      56.7%     12.45 15.23   1.32  1124.50
+ETH/USDT:USDT (4h)    23      52.2%     -1.23 18.50   0.95  987.70
+```
+
+---
+
+## 🟢 Live-Trading starten
+
+### Master Runner
+
+```bash
+# Bot mit allen aktivierten Strategien starten
+python master_runner.py
+
+# Output:
+# INFO: Starte 5 Handelspaare
+# INFO: BTC/USDT:USDT (1d): Channel Top=50100, Bot=48900
+# INFO: ETH/USDT:USDT (4h): Bearish Trend - Abwarten
+# ...
+```
+
+### Status prüfen
+
+```bash
+./show_status.sh          # Quick Status
+tail -f logs/kbot_*.log   # Live Logs anschauen
+```
+
+### Trade-Events filtern
+
+```bash
+grep 'LONG\|SHORT' logs/*.log     # Nur Entry-Signale
+grep 'Closed' logs/*.log          # Nur Closes
+grep 'ERROR' logs/*.log           # Fehler prüfen
+```
+
+---
+
+## ⚙️ Konfiguration
 
 ---
 

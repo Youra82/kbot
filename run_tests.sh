@@ -11,18 +11,18 @@ fi
 # Aktiviere die virtuelle Umgebung
 source .venv/bin/activate
 
-# Führe pytest aus (nur tests/ Ordner)
-echo "Führe Pytest aus..."
+# Führe pytest aus
+echo "Führe Pytest aus (Volume Channel Flow Tests)..."
 if python3 -m pytest tests/ -v -s; then
-    echo "✅ Pytest erfolgreich - Alle Tests bestanden."
+    echo "Pytest erfolgreich durchgelaufen. Alle Tests bestanden."
     EXIT_CODE=0
 else
     PYTEST_EXIT_CODE=$?
     if [ $PYTEST_EXIT_CODE -eq 5 ]; then
-        echo "⚠️ Pytest: Keine Tests zum Ausführen gefunden."
+        echo "Pytest beendet: Keine Tests zum Ausführen gefunden."
         EXIT_CODE=0
     else
-        echo "❌ Pytest fehlgeschlagen (Exit Code: $PYTEST_EXIT_CODE)."
+        echo "Pytest fehlgeschlagen (Exit Code: $PYTEST_EXIT_CODE)."
         EXIT_CODE=$PYTEST_EXIT_CODE
     fi
 fi

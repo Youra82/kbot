@@ -1,19 +1,19 @@
-# src/jaegerbot/analysis/backtester.py
+# src/kbot/analysis/backtester.py
+# =============================================================================
+# KBot Backtester: Fibonacci Bollinger Bands + Volume Profile Strategy
+# =============================================================================
+
 import os
 import pandas as pd
 import numpy as np
 from datetime import timedelta
 import json
 import sys
-import ta # Import für ATR/ADX benötigt
-import math # Import für math.ceil
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from kbot.utils.exchange import Exchange
-from kbot.utils.ann_model import prepare_data_for_ann, load_model_and_scaler, create_ann_features
-from kbot.utils.supertrend_indicator import SuperTrendLocal
 
 # =============================================================================
 # VOLUME PROFILE - Berechnung von PoC, VAH, VAL
@@ -199,20 +199,60 @@ def load_data(symbol, timeframe, start_date_str, end_date_str):
 
 def get_higher_timeframe(tf):
     """Wählt einen passenden höheren Zeitrahmen für den Filter."""
-    # --- KORREKTUR: ADX/HTF-Logik entfernt, Funktion bleibt nur als Platzhalter
     if 'm' in tf: return '1h'
     if tf == '1h': return '4h'
     if tf in ['2h', '4h', '6h']: return '1d'
     if tf == '1d': return None
     return '1d'
-    # ---
 
-# *** NEUE HELFERFUNKTION: SuperTrend-Richtung berechnen ***
-def calculate_supertrend_direction(data):
-    """Berechnet die SuperTrend-Richtung für den Trendfilter."""
-    st_indicator = SuperTrendLocal(data['high'], data['low'], data['close'], window=10, multiplier=3.0)
-    # 1.0 für Long-Trend, -1.0 für Short-Trend
-    return st_indicator.get_supertrend_direction().shift(1) # Shift, um den ST der VORHERIGEN Kerze zu verwenden
+
+# =============================================================================
+# FIBONACCI BOLLINGER BANDS
+# =============================================================================
+def calculate_fibonacci_bollinger_bands(df: pd.DataFrame, length: int = 200, mult: float = 3.0) -> pd.DataFrame:
+    """
+    Berechnet Fibonacci Bollinger Bands basierend auf VWMA.
+    
+    Args:
+        df: OHLCV DataFrame
+        length: VWMA-Periode (Standard: 200)
+        mult: Standardabweichungs-Multiplikator (Standard: 3.0)
+    
+    Returns:
+        DataFrame mit allen Fibonacci-Bändern
+    """
+    # HLC3 (Typical Price)
+    hlc3 = (df['high'] + df['low'] + df['close']) / 3
+    
+    # VWMA (Volume Weighted Moving Average)
+    vwma = (hlc3 * df['volume']).rolling(window=length).sum() / df['volume'].rolling(window=length).sum()
+    
+    # Standardabweichung
+    stdev = hlc3.rolling(window=length).std()
+    
+    # Basis und Deviation
+    basis = vwma
+    dev = mult * stdev
+    
+    # Fibonacci-Levels
+    fib_levels = {
+        1: 0.236,
+        2: 0.382,
+        3: 0.5,
+        4: 0.618,
+        5: 0.764,
+        6: 1.0
+    }
+    
+    bands = pd.DataFrame(index=df.index)
+    bands['basis'] = basis
+    bands['dev'] = dev
+    
+    for level, fib in fib_levels.items():
+        bands[f'upper_{level}'] = basis + (fib * dev)
+        bands[f'lower_{level}'] = basis - (fib * dev)
+    
+    return bands
 
 
 # *** HELFERFUNKTION: Volume Profile Konfluenz-Check ***
@@ -249,275 +289,259 @@ def check_vp_confluence(price, vp, tolerance_pct=1.0):
     return (is_near_support, is_near_resistance, confluence_strength)
 
 
-# *** KORRIGIERTE BACKTESTER FUNKTION (SuperTrend + Volume Profile Filter) ***
-def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_filter=False, htf_data=None, timeframe=None, verbose=False, params_for_htf_load=None, use_volume_profile=True, vp_precomputed=False, return_equity=False):
-
-    model, scaler = load_model_and_scaler(model_paths['model'], model_paths['scaler'])
-    if not model or not scaler: raise Exception("Modell/Scaler nicht gefunden!")
-
-    if not timeframe:
-        raise ValueError("Backtester benötigt ein 'timeframe' Argument für die Daten-Vorbereitung!")
-
-    # Speichere VP-Spalten wenn vorberechnet
-    vp_columns = ['vp_poc', 'vp_vah', 'vp_val', 'vp_poc_dist', 'vp_vah_dist', 'vp_val_dist', 'vp_in_value_area', 'vp_volume_at_price']
-    vp_data = None
-    if vp_precomputed and any(col in data.columns for col in vp_columns):
-        vp_data = data[vp_columns].copy()
-
-    data_with_features = create_ann_features(data.copy())
-    data_with_features.dropna(inplace=True)
+# *** KORRIGIERTE BACKTESTER FUNKTION (Fibonacci BB + Volume Profile) ***
+def run_fib_vp_backtest(data, params, start_capital=1000, verbose=False, return_equity=False):
+    """
+    Führt einen Backtest der Fibonacci BB + Volume Profile Strategie durch.
     
-    # Füge VP-Spalten wieder hinzu wenn vorberechnet
-    if vp_data is not None:
-        for col in vp_columns:
-            if col in vp_data.columns:
-                data_with_features[col] = vp_data[col]
+    Args:
+        data: OHLCV DataFrame
+        params: Strategy-Parameter Dictionary
+        start_capital: Startkapital
+        verbose: Detaillierte Ausgabe
+        return_equity: Ob die Equity-Curve zurückgegeben werden soll
     
-    # --- NEU: SuperTrend Richtung hinzufügen (ST-Richtung der VORHERIGEN Kerze) ---
-    data_with_features['supertrend_direction'] = calculate_supertrend_direction(data_with_features)
-    data_with_features.dropna(inplace=True)
-    # ---
-
-    if data_with_features.empty:
-        empty_result = {"total_pnl_pct": 0, "trades_count": 0, "win_rate": 0, "max_drawdown_pct": 1.0, "end_capital": start_capital, "trades": []}
-        if return_equity:
-            return empty_result, []
-        return empty_result
-
-    # *** ERWEITERTE FEATURE-LISTE FÜR BACKTEST ***
-    # Muss exakt mit ann_model.py übereinstimmen (Scaler-Feature-Reihenfolge!)
-    feature_cols = [
-        # Basis-Features
-        'bb_width', 'bb_pband', 'obv', 'rsi', 'macd_diff', 'macd',
-        'atr_normalized', 'adx', 'adx_pos', 'adx_neg',
-
-        # Volume-Features
-        'volume_ratio', 'mfi', 'cmf',
-
-        # Trend-Features
-        'price_to_ema20', 'price_to_ema50',
-
-        # Momentum-Features
-        'stoch_k', 'stoch_d', 'williams_r', 'roc', 'cci',
-
-        # Support/Resistance
-        'price_to_resistance', 'price_to_support',
-
-        # Price Action
-        'high_low_range', 'close_to_high', 'close_to_low',
-
-        # Zeitliche Features
-        'day_of_week', 'hour_of_day',
-
-        # Returns & Volatilität
-        'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility',
-
-        # Adaptive Trend Finder
-        'atf_pearson_r', 'atf_trend_strength', 'atf_slope',
-        'atf_std_dev', 'atf_upper_channel_dist', 'atf_lower_channel_dist',
-        'atf_price_to_trend'
-    ]
-    # ---
+    Returns:
+        Dictionary mit Backtest-Ergebnissen (und optional Equity-Curve)
+    """
+    # Parameter extrahieren
+    fib_length = params.get('strategy', {}).get('fib_length', 200)
+    fib_mult = params.get('strategy', {}).get('fib_mult', 3.0)
+    vp_lookback = params.get('volume_profile', {}).get('lookback', 200)
+    band_tolerance_pct = params.get('strategy', {}).get('band_tolerance_pct', 0.5) / 100
+    vp_tolerance_pct = params.get('strategy', {}).get('vp_tolerance_pct', 1.0) / 100
+    risk_pct = params.get('risk', {}).get('risk_per_trade_pct', 1.0) / 100
+    leverage = params.get('risk', {}).get('leverage', 5)
+    use_longs = params.get('behavior', {}).get('use_longs', True)
+    use_shorts = params.get('behavior', {}).get('use_shorts', True)
     
-    missing_cols = [col for col in feature_cols if col not in data_with_features.columns]
-    if missing_cols:
-        raise ValueError(f"Fehlende Spalten in data_with_features: {missing_cols}")
-
-    data_for_scaling = data_with_features[feature_cols]
-
-    features_scaled = scaler.transform(data_for_scaling)
-    predictions = model.predict(features_scaled, verbose=0).flatten()
-    data_with_features['prediction'] = pd.Series(predictions, index=data_with_features.index)
-
-    pred_threshold = params.get('prediction_threshold', 0.6)
-    risk_reward_ratio = params.get('risk_reward_ratio', 1.5)
-    risk_per_trade_pct = params.get('risk_per_trade_pct', 1.0) / 100
-
-    # TSL-Parameter aus Configs
-    activation_rr = params.get('trailing_stop_activation_rr', 2.0)
-    callback_rate = params.get('trailing_stop_callback_rate_pct', 1.0) / 100
-
-    initial_sl_pct = params.get('initial_sl_pct', 1.0) / 100.0 # Der initiale SL ist noch prozentbasiert
-    leverage = params.get('leverage', 10)
-    fee_pct = 0.05 / 100
-
-    current_capital, trades_count, wins_count = start_capital, 0, 0
+    fee_pct = 0.05 / 100  # 0.05% Gebühr pro Trade
     
-    # *** VP EINMALIG VORBERECHNEN für Effizienz (überspringen wenn bereits vorberechnet) ***
-    if use_volume_profile and not vp_precomputed:
-        if verbose:
-            print("  → Berechne Volume Profile (einmalig)...", end=" ", flush=True)
-        data_with_features = add_volume_profile_features(data_with_features, lookback=200)
-        if verbose:
-            print("✓")
-    # *** ENDE VP VORBERECHNUNG ***
-    peak_capital, max_drawdown_pct = start_capital, 0.0
+    # Fibonacci Bollinger Bands berechnen
+    bands = calculate_fibonacci_bollinger_bands(data, length=fib_length, mult=fib_mult)
+    
+    # Backtest-Variablen
+    capital = start_capital
     position = None
-    trades_list = []  # Für Chart-Visualisierung
-    equity_snapshots = []  # Für Equity Curve
-
-    # --- KORREKTUR: ADX / HTF-Filter-Initialisierung entfernt ---
-    # Entferne die Lade-Logik für HTF-Daten, da der ADX-Filter entfernt wurde
-    # ---
-
-    for i in range(len(data_with_features)):
-        current = data_with_features.iloc[i]
-        timestamp = current.name  # Für Equity Curve
+    trades = []
+    trades_list = []
+    equity_snapshots = []
+    peak_capital = start_capital
+    max_drawdown_pct = 0.0
+    wins_count = 0
+    
+    # Mindestens fib_length + vp_lookback Kerzen für valide Berechnung
+    start_idx = max(fib_length, vp_lookback) + 10
+    
+    for i in range(start_idx, len(data)):
+        current = data.iloc[i]
+        band = bands.iloc[i]
+        timestamp = current.name
         
-        # Equity Snapshot bei jeder Kerze
-        equity_snapshots.append({'timestamp': timestamp, 'equity': current_capital})
-
+        # Equity Snapshot
+        equity_snapshots.append({'timestamp': timestamp, 'equity': capital})
+        
+        current_close = current['close']
+        current_high = current['high']
+        current_low = current['low']
+        
+        upper_6 = band['upper_6']
+        lower_6 = band['lower_6']
+        upper_1 = band['upper_1']
+        lower_1 = band['lower_1']
+        basis = band['basis']
+        
+        # Volume Profile berechnen
+        vp_data = data.iloc[max(0, i-vp_lookback):i]
+        vp = calculate_volume_profile(vp_data)
+        
+        if vp is None:
+            continue
+        
+        poc = vp['poc']
+        vah = vp['vah']
+        val = vp['val']
+        
+        # Position-Management
         if position:
-            exit_price, reason = None, None
-
-            # *** TSL-Logik (unverändert) ***
+            exit_price = None
+            
             if position['side'] == 'long':
-                if not position['trailing_active'] and current['high'] >= position['activation_price']:
-                    position['trailing_active'] = True
-                if position['trailing_active']:
-                    position['peak_price'] = max(position['peak_price'], current['high'])
-                    trailing_sl = position['peak_price'] * (1 - callback_rate)
-                    position['stop_loss'] = max(position['stop_loss'], trailing_sl)
-                if current['low'] <= position['stop_loss']: exit_price = position['stop_loss']
-                elif not position['trailing_active'] and current['high'] >= position['take_profit']: exit_price = position['take_profit']
-
-            elif position['side'] == 'short':
-                if not position['trailing_active'] and current['low'] <= position['activation_price']:
-                    position['trailing_active'] = True
-                if position['trailing_active']:
-                    position['peak_price'] = min(position['peak_price'], current['low'])
-                    trailing_sl = position['peak_price'] * (1 + callback_rate)
-                    position['stop_loss'] = min(position['stop_loss'], trailing_sl)
-                if current['high'] >= position['stop_loss']: exit_price = position['stop_loss']
-                elif not position['trailing_active'] and current['low'] <= position['take_profit']: exit_price = position['take_profit']
-            # *** Ende TSL-Logik ***
-
-            if exit_price:
-                pnl_pct = (exit_price / position['entry_price'] - 1) if position['side'] == 'long' else (1 - exit_price / position['entry_price'])
-                notional_value = position['margin_used'] * leverage
-                pnl_usd = notional_value * pnl_pct
-                total_fees = notional_value * fee_pct * 2
-                
-                # Begrenze Verlust auf den riskierten Betrag (Fix gegen Overflow)
-                risk_amount_usd = start_capital * risk_per_trade_pct
-                
-                net_pnl = pnl_usd - total_fees
-                
-                if net_pnl < -risk_amount_usd:
-                    net_pnl = -risk_amount_usd
+                # Check SL
+                if current_low <= position['sl']:
+                    exit_price = position['sl']
+                # Check TP
+                elif current_high >= position['tp']:
+                    exit_price = position['tp']
                     
-                current_capital += net_pnl
-                
-                if net_pnl > 0: wins_count += 1
-                trades_count += 1
-                
-                # Trade für Visualisierung speichern
-                entry_time = position.get('entry_time')
-                entry_time_str = entry_time.isoformat() if hasattr(entry_time, 'isoformat') else str(entry_time)
-                exit_time_str = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
-                trade_record = {
-                    f"entry_{position['side']}": {'time': entry_time_str, 'price': position['entry_price']},
-                    f"exit_{position['side']}": {'time': exit_time_str, 'price': exit_price}
-                }
-                trades_list.append(trade_record)
-                
-                position = None
-                peak_capital = max(peak_capital, current_capital)
-                if peak_capital > 0:
-                    drawdown = (peak_capital - current_capital) / peak_capital
-                    max_drawdown_pct = max(max_drawdown_pct, drawdown)
-                if current_capital <= 0: break
-
+                if exit_price:
+                    pnl_pct = (exit_price - position['entry']) / position['entry']
+                    notional_value = position['margin_used'] * leverage
+                    pnl_usd = notional_value * pnl_pct
+                    total_fees = notional_value * fee_pct * 2
+                    net_pnl = pnl_usd - total_fees
+                    
+                    capital += net_pnl
+                    if net_pnl > 0:
+                        wins_count += 1
+                    
+                    trades.append({
+                        'side': 'long',
+                        'entry': position['entry'],
+                        'exit': exit_price,
+                        'pnl_pct': pnl_pct * 100,
+                        'result': 'TP' if exit_price >= position['tp'] else 'SL'
+                    })
+                    
+                    entry_time_str = str(position.get('entry_time', ''))
+                    exit_time_str = str(timestamp)
+                    trades_list.append({
+                        'entry_long': {'time': entry_time_str, 'price': position['entry']},
+                        'exit_long': {'time': exit_time_str, 'price': exit_price}
+                    })
+                    position = None
+            
+            else:  # short
+                # Check SL
+                if current_high >= position['sl']:
+                    exit_price = position['sl']
+                # Check TP
+                elif current_low <= position['tp']:
+                    exit_price = position['tp']
+                    
+                if exit_price:
+                    pnl_pct = (position['entry'] - exit_price) / position['entry']
+                    notional_value = position['margin_used'] * leverage
+                    pnl_usd = notional_value * pnl_pct
+                    total_fees = notional_value * fee_pct * 2
+                    net_pnl = pnl_usd - total_fees
+                    
+                    capital += net_pnl
+                    if net_pnl > 0:
+                        wins_count += 1
+                    
+                    trades.append({
+                        'side': 'short',
+                        'entry': position['entry'],
+                        'exit': exit_price,
+                        'pnl_pct': pnl_pct * 100,
+                        'result': 'TP' if exit_price <= position['tp'] else 'SL'
+                    })
+                    
+                    entry_time_str = str(position.get('entry_time', ''))
+                    exit_time_str = str(timestamp)
+                    trades_list.append({
+                        'entry_short': {'time': entry_time_str, 'price': position['entry']},
+                        'exit_short': {'time': exit_time_str, 'price': exit_price}
+                    })
+                    position = None
+            
+            # Update Drawdown
+            peak_capital = max(peak_capital, capital)
+            if peak_capital > 0:
+                dd = (peak_capital - capital) / peak_capital
+                max_drawdown_pct = max(max_drawdown_pct, dd)
+            
+            if capital <= 0:
+                break
+        
+        # Entry-Logik (nur wenn keine Position)
         if not position:
-            side = 'long' if current['prediction'] >= pred_threshold else 'short' if current['prediction'] <= (1 - pred_threshold) else None
-            trade_allowed = True # Wird für den SuperTrend-Filter verwendet
-
-            if side:
-                # --- NEUER SUPER TREND FILTER ---
-                st_direction = current['supertrend_direction']
+            # LONG: Preis bei lower_6 UND nahe VAL/PoC
+            at_lower_band = current_low <= lower_6 * (1 + band_tolerance_pct)
+            near_vp_support = (abs(current_close - val) <= val * vp_tolerance_pct or 
+                              abs(current_close - poc) <= poc * vp_tolerance_pct)
+            
+            if use_longs and at_lower_band and near_vp_support:
+                entry_price = current_close
+                sl_price = lower_1
+                tp_price = poc if poc > entry_price else upper_6
                 
-                if st_direction == 1.0 and side == 'short':
-                    trade_allowed = False # Nur Longs bei Long-Trend
-                elif st_direction == -1.0 and side == 'long':
-                    trade_allowed = False # Nur Shorts bei Short-Trend
-                # --- ENDE NEUER SUPER TREND FILTER ---
-                
-                # *** VOLUME PROFILE KONFLUENZ-FILTER (nutzt vorberechnete Spalten) ***
-                if trade_allowed and use_volume_profile and 'vp_val' in current.index:
-                    vp_val = current.get('vp_val', np.nan)
-                    vp_vah = current.get('vp_vah', np.nan)
-                    vp_poc = current.get('vp_poc', np.nan)
-                    price = current['close']
-                    
-                    if not np.isnan(vp_val) and not np.isnan(vp_vah):
-                        tolerance = 0.01  # 1% Toleranz
-                        
-                        # Long nur wenn nahe VAL (Support) oder PoC
-                        if side == 'long':
-                            near_val = price <= vp_val * (1 + tolerance)
-                            near_poc_support = price <= vp_poc * (1 + tolerance * 0.5)
-                            if not (near_val or near_poc_support):
-                                trade_allowed = False
-                        
-                        # Short nur wenn nahe VAH (Resistance) oder PoC
-                        if side == 'short':
-                            near_vah = price >= vp_vah * (1 - tolerance)
-                            near_poc_resistance = price >= vp_poc * (1 - tolerance * 0.5)
-                            if not (near_vah or near_poc_resistance):
-                                trade_allowed = False
-                # *** ENDE VOLUME PROFILE FILTER ***
-                
-                # *** NEUE FILTER: ADX & VOLUME (wie in trade_manager) ***
-                if trade_allowed:
-                    # ADX-Filter
-                    current_adx = current.get('adx', 0)
-                    if current_adx < 20:
-                        trade_allowed = False
-                    
-                    # Volume-Filter (wenn vorhanden)
-                    if 'volume_ratio' in current.index:
-                        if current['volume_ratio'] < 0.8:
-                            trade_allowed = False
-                    
-                    # Volatilitäts-Filter
-                    if i >= 50:  # Genug Daten für Rolling Mean
-                        avg_atr = data_with_features['atr_normalized'].iloc[i-50:i].mean()
-                        if current['atr_normalized'] > avg_atr * 2.0:
-                            trade_allowed = False
-                # *** ENDE NEUE FILTER ***
-
-                if side and trade_allowed:
-                    entry_price = current['close']
-                    risk_amount_usd = current_capital * risk_per_trade_pct
-
-                    sl_distance = entry_price * initial_sl_pct
-                    if sl_distance == 0: continue
-
-                    notional_value = risk_amount_usd / initial_sl_pct
+                # Position Sizing
+                risk_amount_usd = capital * risk_pct
+                sl_distance_pct = abs(entry_price - sl_price) / entry_price
+                if sl_distance_pct > 0:
+                    notional_value = risk_amount_usd / sl_distance_pct
                     margin_used = notional_value / leverage
-                    if margin_used > current_capital: continue
-
-                    stop_loss_distance = entry_price * initial_sl_pct
-                    stop_loss = entry_price - stop_loss_distance if side == 'long' else entry_price + stop_loss_distance
-
-                    take_profit = entry_price + (entry_price - stop_loss) * risk_reward_ratio if side == 'long' else entry_price - (stop_loss - entry_price) * risk_reward_ratio
-
-                    # TSL-Aktivierungspreis basierend auf Activation RR
-                    activation_price = entry_price + stop_loss_distance * activation_rr if side == 'long' else entry_price - stop_loss_distance * activation_rr
-
-                    position = {'side': side, 'entry_price': entry_price, 'stop_loss': stop_loss,
-                                'take_profit': take_profit, 'margin_used': margin_used,
-                                'notional_value': notional_value,
-                                'trailing_active': False,
-                                'activation_price': activation_price,
-                                'peak_price': entry_price,
-                                'callback_rate': callback_rate,
-                                'entry_time': timestamp}  # Für Trade-Visualisierung
-
-    win_rate = (wins_count / trades_count * 100) if trades_count > 0 else 0
-    final_pnl_pct = ((current_capital - start_capital) / start_capital) * 100 if start_capital > 0 else 0
-    stats = {"total_pnl_pct": final_pnl_pct, "trades_count": trades_count, "win_rate": win_rate, "max_drawdown_pct": max_drawdown_pct, "end_capital": current_capital, "trades": trades_list}
+                    
+                    if margin_used <= capital:
+                        position = {
+                            'side': 'long',
+                            'entry': entry_price,
+                            'sl': sl_price,
+                            'tp': tp_price,
+                            'margin_used': margin_used,
+                            'entry_time': timestamp
+                        }
+                        if verbose:
+                            print(f"  [LONG] Entry: {entry_price:.2f}, SL: {sl_price:.2f}, TP: {tp_price:.2f}")
+            
+            # SHORT: Preis bei upper_6 UND nahe VAH/PoC
+            at_upper_band = current_high >= upper_6 * (1 - band_tolerance_pct)
+            near_vp_resistance = (abs(current_close - vah) <= vah * vp_tolerance_pct or 
+                                 abs(current_close - poc) <= poc * vp_tolerance_pct)
+            
+            if use_shorts and at_upper_band and near_vp_resistance and position is None:
+                entry_price = current_close
+                sl_price = upper_1
+                tp_price = poc if poc < entry_price else lower_6
+                
+                # Position Sizing
+                risk_amount_usd = capital * risk_pct
+                sl_distance_pct = abs(sl_price - entry_price) / entry_price
+                if sl_distance_pct > 0:
+                    notional_value = risk_amount_usd / sl_distance_pct
+                    margin_used = notional_value / leverage
+                    
+                    if margin_used <= capital:
+                        position = {
+                            'side': 'short',
+                            'entry': entry_price,
+                            'sl': sl_price,
+                            'tp': tp_price,
+                            'margin_used': margin_used,
+                            'entry_time': timestamp
+                        }
+                        if verbose:
+                            print(f"  [SHORT] Entry: {entry_price:.2f}, SL: {sl_price:.2f}, TP: {tp_price:.2f}")
+    
+    # Metriken berechnen
+    total_return = (capital - start_capital) / start_capital * 100
+    num_trades = len(trades)
+    win_rate = (wins_count / num_trades * 100) if num_trades > 0 else 0
+    
+    # Profit Factor
+    wins = [t for t in trades if t['pnl_pct'] > 0]
+    losses = [t for t in trades if t['pnl_pct'] <= 0]
+    gross_profit = sum(t['pnl_pct'] for t in wins) if wins else 0
+    gross_loss = abs(sum(t['pnl_pct'] for t in losses)) if losses else 1
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else 0
+    
+    stats = {
+        'total_pnl_pct': total_return,
+        'trades_count': num_trades,
+        'win_rate': win_rate,
+        'max_drawdown_pct': max_drawdown_pct * 100,
+        'end_capital': capital,
+        'profit_factor': profit_factor,
+        'wins': len(wins),
+        'losses': len(losses),
+        'trades': trades_list
+    }
     
     if return_equity:
         return stats, equity_snapshots
     return stats
+
+
+# Legacy-Wrapper für Kompatibilität
+def run_ann_backtest(data, params, model_paths=None, start_capital=1000, use_macd_filter=False, 
+                     htf_data=None, timeframe=None, verbose=False, params_for_htf_load=None, 
+                     use_volume_profile=True, vp_precomputed=False, return_equity=False, **kwargs):
+    """
+    Legacy-Wrapper für Kompatibilität mit altem Code.
+    Ruft jetzt run_fib_vp_backtest auf.
+    """
+    result = run_fib_vp_backtest(data, params, start_capital=start_capital, 
+                                 verbose=verbose, return_equity=return_equity)
+    return result

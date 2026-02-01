@@ -1,27 +1,29 @@
-# src/jaegerbot/analysis/show_results.py (Final Version 10 - Volume Profile Integration)
+# src/kbot/analysis/show_results.py
+# =============================================================================
+# KBot: Backtest-Ergebnisse anzeigen (Fibonacci BB + Volume Profile)
+# =============================================================================
+
 import os
 import sys
 import json
 import pandas as pd
-import numpy as np # Import für np.nan
+import numpy as np
 from datetime import date, datetime
-import logging
 import argparse
-
-logging.getLogger('tensorflow').setLevel(logging.ERROR)
-logging.getLogger('absl').setLevel(logging.ERROR)
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from kbot.analysis.backtester import load_data, calculate_volume_profile
-from kbot.utils.ann_model import load_model_and_scaler
-from kbot.analysis.portfolio_simulator import run_portfolio_simulation
-from kbot.analysis.portfolio_optimizer import run_portfolio_optimizer
+from kbot.analysis.backtester import (
+    load_data, 
+    calculate_volume_profile,
+    calculate_fibonacci_bollinger_bands,
+    run_fib_vp_backtest
+)
 from kbot.utils.telegram import send_document
 
 
-def show_volume_profile_summary(symbol, timeframe, data):
+def show_volume_profile_summary(symbol: str, timeframe: str, data: pd.DataFrame) -> dict:
     """Zeigt eine Zusammenfassung des Volume Profiles."""
     if len(data) < 200:
         print(f"  ⓘ Nicht genug Daten für Volume Profile ({len(data)} < 200)")
@@ -56,307 +58,166 @@ def show_volume_profile_summary(symbol, timeframe, data):
     
     return vp
 
-# --- Helper-Funktion für die Einzelanalyse (Modus 1) ---
-def run_single_analysis_via_simulator(start_date, end_date, start_capital):
-    print("--- KBot Ergebnis-Analyse (Einzel-Modus via Simulator) ---")
+
+def show_fibonacci_bands_summary(symbol: str, timeframe: str, data: pd.DataFrame, 
+                                  fib_length: int = 200, fib_mult: float = 3.0) -> dict:
+    """Zeigt eine Zusammenfassung der Fibonacci Bollinger Bands."""
+    if len(data) < fib_length:
+        print(f"  ⓘ Nicht genug Daten für Fibonacci BB ({len(data)} < {fib_length})")
+        return None
+    
+    bands = calculate_fibonacci_bollinger_bands(data, length=fib_length, mult=fib_mult)
+    
+    if bands.empty or bands['basis'].isna().all():
+        print(f"  ⓘ Fibonacci BB konnte nicht berechnet werden")
+        return None
+    
+    current_price = data['close'].iloc[-1]
+    latest_bands = bands.iloc[-1]
+    
+    # Bestimme Position relativ zu Bändern
+    if current_price <= latest_bands['lower_6']:
+        position = "Bei/Unter Band 6 (stark überverkauft)"
+        signal_hint = "🟢 LONG Signal!"
+    elif current_price <= latest_bands['lower_3']:
+        position = "Bei Band 3-6 (überverkauft)"
+        signal_hint = "🟢 Long-Bias"
+    elif current_price >= latest_bands['upper_6']:
+        position = "Bei/Über Band 6 (stark überkauft)"
+        signal_hint = "🔴 SHORT Signal!"
+    elif current_price >= latest_bands['upper_3']:
+        position = "Bei Band 3-6 (überkauft)"
+        signal_hint = "🔴 Short-Bias"
+    else:
+        position = "Im mittleren Bereich (neutral)"
+        signal_hint = "⚪ Kein Signal"
+    
+    print(f"\n  📈 Fibonacci Bollinger Bands für {symbol} ({timeframe}):")
+    print(f"     VWMA Basis:              {latest_bands['basis']:.2f}")
+    print(f"     Upper Band 6 (100%):     {latest_bands['upper_6']:.2f}")
+    print(f"     Upper Band 3 (50%):      {latest_bands['upper_3']:.2f}")
+    print(f"     Lower Band 3 (50%):      {latest_bands['lower_3']:.2f}")
+    print(f"     Lower Band 6 (100%):     {latest_bands['lower_6']:.2f}")
+    print(f"     Aktueller Preis:         {current_price:.2f}")
+    print(f"     Position:                {position}")
+    print(f"     Signal-Tendenz:          {signal_hint}")
+    
+    return {
+        'basis': latest_bands['basis'],
+        'upper_6': latest_bands['upper_6'],
+        'lower_6': latest_bands['lower_6'],
+        'current_price': current_price,
+        'signal_hint': signal_hint
+    }
+
+
+def run_single_backtest(start_date: str, end_date: str, start_capital: float = 1000):
+    """Führt Backtests für alle Konfigurationen durch."""
+    print("=" * 60)
+    print("KBot Backtest - Fibonacci BB + Volume Profile Strategie")
+    print("=" * 60)
+    
     configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
-    models_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'models')
     all_results = []
     
-    config_files = sorted([f for f in os.listdir(configs_dir) if f.startswith('config_') and f.endswith('.json')])
+    config_files = sorted([f for f in os.listdir(configs_dir) 
+                          if f.startswith('config_') and f.endswith('.json')])
 
     if not config_files:
-        print("\nKeine gültigen Konfigurationen zum Analysieren gefunden."); return
+        print("\nKeine Konfigurationen gefunden.")
+        return
 
     for filename in config_files:
         config_path = os.path.join(configs_dir, filename)
-        if not os.path.exists(config_path): continue
+        if not os.path.exists(config_path):
+            continue
 
-        with open(config_path, 'r') as f: config = json.load(f)
+        with open(config_path, 'r') as f:
+            config = json.load(f)
 
-        symbol, timeframe = config['market']['symbol'], config['market']['timeframe']
+        symbol = config.get('market', {}).get('symbol', 'BTC/USDT:USDT')
+        timeframe = config.get('market', {}).get('timeframe', '4h')
         strategy_name = f"{symbol} ({timeframe})"
 
-        print(f"\nAnalysiere Ergebnisse für: {strategy_name}...")
+        print(f"\n{'─' * 50}")
+        print(f"Analysiere: {strategy_name}")
+        print(f"{'─' * 50}")
 
-        safe_filename = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-        model_paths = {
-            'model': os.path.join(models_dir, f'ann_predictor_{safe_filename}.h5'),
-            'scaler': os.path.join(models_dir, f'ann_scaler_{safe_filename}.joblib')
-        }
-
-        if not os.path.exists(model_paths['model']):
-            print(f"--> WARNUNG: Modell nicht gefunden. Überspringe."); continue
-
+        # Daten laden
         data = load_data(symbol, timeframe, start_date, end_date)
         if data.empty:
-            print(f"--> WARNUNG: Konnte keine Daten laden. Überspringe."); continue
+            print(f"  ⚠️ Keine Daten verfügbar. Überspringe.")
+            continue
 
-        # Volume Profile Zusammenfassung anzeigen
+        print(f"  📅 Datenbereich: {data.index.min()} bis {data.index.max()}")
+        print(f"  📊 Anzahl Kerzen: {len(data)}")
+
+        # Indikatoren-Zusammenfassung
+        fib_length = config.get('strategy', {}).get('fib_length', 200)
+        fib_mult = config.get('strategy', {}).get('fib_mult', 3.0)
+        
+        show_fibonacci_bands_summary(symbol, timeframe, data, fib_length, fib_mult)
         show_volume_profile_summary(symbol, timeframe, data)
 
-        # Nur eine Strategie in das Dict laden; Schlüssel eindeutig pro Config
-        strategy_key = filename
-        model_loaded, scaler_loaded = load_model_and_scaler(model_paths['model'], model_paths['scaler'])
-        strategies_data = {
-            strategy_key: {
-                'symbol': symbol, 
-                'timeframe': timeframe, 
-                'data': data, 
-                'model': model_loaded, 
-                'scaler': scaler_loaded, 
-                'params': {**config.get('strategy', {}), **config.get('risk', {})}
-            }
-        }
+        # Backtest durchführen
+        print(f"\n  🔄 Führe Backtest durch...")
+        result = run_fib_vp_backtest(data, config, start_capital=start_capital, verbose=False)
         
-        # Führe den Portfolio-Simulator nur für diese eine Strategie aus
-        result = run_portfolio_simulation(start_capital, strategies_data, start_date, end_date)
+        print(f"\n  📊 BACKTEST-ERGEBNISSE:")
+        print(f"     Trades:              {result['trades_count']}")
+        print(f"     Win-Rate:            {result['win_rate']:.1f}%")
+        print(f"     Gesamtrendite:       {result['total_pnl_pct']:.2f}%")
+        print(f"     Max Drawdown:        {result['max_drawdown_pct']:.2f}%")
+        print(f"     Profit Factor:       {result.get('profit_factor', 0):.2f}")
+        print(f"     Endkapital:          ${result['end_capital']:.2f}")
         
-        if result['trade_count'] == 0:
-            pnl_value = 0.0
-            end_capital_value = start_capital
-        else:
-            pnl_value = result['total_pnl_pct']
-            end_capital_value = result['end_capital']
-
         all_results.append({
-            "Strategie": strategy_name,
-            "Trades": result['trade_count'],
-            "PnL %": pnl_value,
-            "Max DD %": result['max_drawdown_pct'],
-            "Endkapital": end_capital_value
+            'strategy': strategy_name,
+            'symbol': symbol,
+            'timeframe': timeframe,
+            **result
         })
 
-    if not all_results:
-        print("\nKeine gültigen Konfigurationen mehr übrig."); return
+    # Zusammenfassung
+    if all_results:
+        print(f"\n{'=' * 60}")
+        print("GESAMTÜBERSICHT")
+        print(f"{'=' * 60}")
+        
+        df = pd.DataFrame(all_results)
+        total_return = df['total_pnl_pct'].mean()
+        avg_win_rate = df['win_rate'].mean()
+        total_trades = df['trades_count'].sum()
+        
+        print(f"\nAnzahl Strategien:     {len(all_results)}")
+        print(f"Gesamte Trades:        {total_trades}")
+        print(f"Durchschn. Win-Rate:   {avg_win_rate:.1f}%")
+        print(f"Durchschn. Rendite:    {total_return:.2f}%")
+        
+        # Top/Flop Strategien
+        df_sorted = df.sort_values('total_pnl_pct', ascending=False)
+        
+        print(f"\n🏆 TOP 3 Strategien:")
+        for i, row in df_sorted.head(3).iterrows():
+            print(f"   {row['strategy']}: {row['total_pnl_pct']:.2f}%")
+        
+        print(f"\n📉 FLOP 3 Strategien:")
+        for i, row in df_sorted.tail(3).iterrows():
+            print(f"   {row['strategy']}: {row['total_pnl_pct']:.2f}%")
 
-    results_df = pd.DataFrame(all_results)
-    results_df = results_df.sort_values(by="PnL %", ascending=False)
 
-    display_columns = ["Strategie", "Trades", "PnL %", "Max DD %", "Endkapital"]
-
-    pd.set_option('display.width', 1000); pd.set_option('display.max_columns', None)
-    print("\n\n==================================================================================");
-    print(f"                 Zusammenfassung (Startkapital: {start_capital} USDT)");
-    print("==================================================================================")
-    pd.set_option('display.float_format', '{:.2f}'.format);
-    print(results_df.fillna('-').to_string(index=False, columns=display_columns));
-    print("==================================================================================")
-# --- ENDE Helper-Funktion ---
-
-
-def run_shared_mode(is_auto: bool, start_date, end_date, start_capital, max_drawdown=100.0):
-    mode_name = "Automatische Portfolio-Optimierung" if is_auto else "Manuelle Portfolio-Simulation"
-    print(f"--- KBot {mode_name} ---")
-    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
-    models_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'models')
-    available_strategies = []
+def main():
+    parser = argparse.ArgumentParser(description="KBot Backtest-Ergebnisse anzeigen")
+    parser.add_argument('--start', type=str, default='2024-01-01', 
+                       help='Startdatum (YYYY-MM-DD)')
+    parser.add_argument('--end', type=str, default=str(date.today()), 
+                       help='Enddatum (YYYY-MM-DD)')
+    parser.add_argument('--capital', type=float, default=1000, 
+                       help='Startkapital')
+    args = parser.parse_args()
     
-    # Lade Liste der verfügbaren Strategien (verwende Config-Inhalt, nicht nur Dateinamen)
-    if os.path.isdir(configs_dir):
-        for filename in sorted(os.listdir(configs_dir)):
-            if not (filename.startswith('config_') and filename.endswith('.json')):
-                continue
-
-            config_path = os.path.join(configs_dir, filename)
-            try:
-                with open(config_path, 'r') as cf:
-                    cfg = json.load(cf)
-                symbol = cfg.get('market', {}).get('symbol')
-                timeframe = cfg.get('market', {}).get('timeframe')
-
-                if not symbol or not timeframe:
-                    continue
-
-                safe_filename = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-                model_name = f"ann_predictor_{safe_filename}.h5"
-
-                if os.path.exists(os.path.join(models_dir, model_name)):
-                    available_strategies.append(filename)
-            except Exception:
-                continue
-    
-    if not available_strategies:
-        print("Keine optimierten Strategien gefunden."); return
-
-    selected_files = []
-    if not is_auto:
-        # --- Modus 2: Manuelle Auswahl ---
-        print("\nVerfügbare Strategien:")
-        for i, name in enumerate(available_strategies): print(f"  {i+1}) {name}")
-        selection = input("\nWelche Strategien sollen simuliert werden? (Zahlen mit Komma, z.B. 1,3,4 oder 'alle'): ")
-        try:
-            if selection.lower() == 'alle': selected_files = available_strategies
-            else: selected_files = [available_strategies[int(i.strip()) - 1] for i in selection.split(',')]
-        except (ValueError, IndexError): print("Ungültige Auswahl. Breche ab."); return
-    else: 
-        # --- Modus 3: Automatische Auswahl ---
-        selected_files = available_strategies
-
-    strategies_data = {}
-    print("\nLade Daten und Modelle für gewählte Strategien...")
-    for filename in selected_files:
-        with open(os.path.join(configs_dir, filename), 'r') as f: config = json.load(f)
-        symbol, timeframe = config['market']['symbol'], config['market']['timeframe']
-        safe_filename = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-        strategy_key = filename  # eindeutiger Schlüssel pro Config-Datei
-        
-        # Versuche, Modell und Scaler zu laden
-        model_paths = {'model': os.path.join(models_dir, f'ann_predictor_{safe_filename}.h5'), 'scaler': os.path.join(models_dir, f'ann_scaler_{safe_filename}.joblib')}
-        try:
-            model, scaler = load_model_and_scaler(model_paths['model'], model_paths['scaler'])
-        except Exception as e:
-            print(f"WARNUNG: Konnte Modell/Scaler für {filename} nicht laden. Fehler: {e}. Wird ignoriert.")
-            continue
-            
-        data = load_data(symbol, timeframe, start_date, end_date)
-        if model and scaler and not data.empty:
-            strategies_data[strategy_key] = {'symbol': symbol, 'timeframe': timeframe, 'data': data, 'model': model, 'scaler': scaler, 'params': {**config.get('strategy', {}), **config.get('risk', {})}}
-        else:
-            print(f"WARNUNG: Konnte Daten/Modell für {filename} nicht laden. Wird ignoriert.")
-    
-    if not strategies_data:
-        print("Konnte für keine der gewählten Strategien Daten laden. Breche ab."); return
-
-    # Variablen für das Reporting (werden in beiden Modi gefüllt)
-    equity_df = pd.DataFrame()
-    csv_path = ""
-    caption = ""
-    trade_count = 0
-    
-    try:
-        d1 = datetime.strptime(start_date, "%Y-%m-%d")
-        d2 = datetime.strptime(end_date, "%Y-%m-%d")
-        total_days = (d2 - d1).days
-        if total_days <= 0: total_days = 1
-    except Exception:
-        total_days = 0
-
-    if is_auto:
-        # --- Modus 3: Automatische Optimierung ---
-        print(f"\nINFO: Starte Optimierung mit maximal {max_drawdown:.2f}% Drawdown-Beschränkung.")
-
-        strategies_data_for_optimizer = {}
-        for filename in selected_files:
-            try:
-                if filename in strategies_data:
-                    strategies_data_for_optimizer[filename] = strategies_data[filename]
-            except Exception:
-                pass # Fehlerhafte Configs wurden bereits beim Laden ignoriert
-
-        results = run_portfolio_optimizer(start_capital, strategies_data_for_optimizer, start_date, end_date, max_drawdown)
-
-        if results and 'final_result' in results:
-            final_report = results['final_result']
-
-            trade_count = final_report.get('trade_count', 0)
-            
-            # Reporting-Strings
-            days_per_trade_str = ""
-            if trade_count > 0 and total_days > 0:
-                days_per_trade = total_days / trade_count
-                days_per_trade_str = f" (entspricht 1 Trade alle {days_per_trade:.1f} Tage)"
-
-            print("\n======================================================="); print("     Ergebnis der automatischen Portfolio-Optimierung"); print("=======================================================")
-            print(f"Zeitraum: {start_date} bis {end_date} ({total_days} Tage)\nStartkapital: {start_capital:.2f} USDT")
-            print(f"Maximal erlaubter DD: {max_drawdown:.2f}%")
-            print("\nOptimales Portfolio gefunden (" + str(len(results['optimal_portfolio'])) + " Strategien):")
-            for strat_filename in results['optimal_portfolio']: print(f"  - {strat_filename}")
-            print("\n--- Simulierte Performance dieses optimalen Portfolios ---")
-            print(f"Endkapital:       {final_report['end_capital']:.2f} USDT"); print(f"Gesamt PnL:       {final_report['end_capital'] - start_capital:+.2f} USDT ({final_report['total_pnl_pct']:.2f}%)")
-            print(f"Anzahl Trades:    {trade_count}{days_per_trade_str}")
-            print(f"Portfolio Max DD:   {final_report['max_drawdown_pct']:.2f}%")
-            print(f"Liquidiert:       {'JA, am ' + final_report['liquidation_date'].strftime('%Y-%m-%d') if final_report['liquidation_date'] else 'NEIN'}")
-
-            # Speichere optimale Strategien für das Bash-Script
-            optimal_configs_file = os.path.join(PROJECT_ROOT, '.optimal_configs.tmp')
-            with open(optimal_configs_file, 'w') as f:
-                f.write('\n'.join(results['optimal_portfolio']))
-            
-            csv_path = os.path.join(PROJECT_ROOT, 'optimal_portfolio_equity.csv')
-            caption = f"Automatischer Portfolio-Optimierungsbericht\nMax. erlaubter DD: {max_drawdown:.2f}%\nTrades: {trade_count}{days_per_trade_str}\nEndkapital: {final_report['end_capital']:.2f} USDT"
-            equity_df = final_report.get('equity_curve')
-        else:
-            print("\n======================================================="); print("     Ergebnis der automatischen Portfolio-Optimierung"); print("=======================================================")
-            print(f"❌ Es konnte kein Portfolio gefunden werden, das die Drawdown-Beschränkung von {max_drawdown:.2f}% erfüllt.")
-            
-    else:
-        # --- Modus 2: Manuelle Portfolio-Simulation (KORRIGIERT) ---
-        print("\n--- Starte Manuelle Portfolio-Simulation... ---")
-        
-        final_report = run_portfolio_simulation(start_capital, strategies_data, start_date, end_date)
-        
-        trade_count = final_report.get('trade_count', 0)
-        
-        days_per_trade_str = ""
-        if trade_count > 0 and total_days > 0:
-            days_per_trade = total_days / trade_count
-            days_per_trade_str = f" (entspricht 1 Trade alle {days_per_trade:.1f} Tage)"
-
-        print("\n======================================================="); 
-        print("     Ergebnis der Manuellen Portfolio-Simulation"); 
-        print("=======================================================")
-        print(f"Zeitraum: {start_date} bis {end_date} ({total_days} Tage)\nStartkapital: {start_capital:.2f} USDT")
-        print(f"Simulierte Strategien: {len(strategies_data)}")
-        for key in strategies_data.keys():
-            print(f"  - {key}")
-            
-        print("\n--- Simulierte Performance dieses Portfolios ---")
-        print(f"Endkapital:       {final_report['end_capital']:.2f} USDT"); 
-        print(f"Gesamt PnL:       {final_report['end_capital'] - start_capital:+.2f} USDT ({final_report['total_pnl_pct']:.2f}%)")
-        print(f"Anzahl Trades:    {trade_count}{days_per_trade_str}")
-        print(f"Portfolio Max DD:   {final_report['max_drawdown_pct']:.2f}%")
-        print(f"Liquidiert:       {'JA, am ' + final_report['liquidation_date'].strftime('%Y-%m-%d') if final_report['liquidation_date'] else 'NEIN'}")
-        
-        csv_path = os.path.join(PROJECT_ROOT, 'manual_portfolio_equity.csv')
-        caption = f"Manueller Portfolio-Bericht\nStrategien: {len(strategies_data)}\nTrades: {trade_count}{days_per_trade_str}\nEndkapital: {final_report['end_capital']:.2f} USDT"
-        equity_df = final_report.get('equity_curve')
-        # --- ENDE: Manuelle Portfolio-Simulation ---
-
-
-    # --- Export-Logik (wird für Modus 2 und 3 verwendet) ---
-    if equity_df is not None and not equity_df.empty:
-        print("\n--- Export ---")
-        print(f"✔ Details zur Equity-Kurve wurden nach '{os.path.basename(csv_path)}' exportiert.")
-        equity_df[['timestamp', 'equity', 'drawdown_pct']].to_csv(csv_path, index=False)
-        print("=======================================================")
-
-        try:
-            with open(os.path.join(PROJECT_ROOT, 'secret.json'), 'r') as f: secrets = json.load(f)
-            telegram_config = secrets.get('telegram', {})
-            if telegram_config.get('bot_token'):
-                print("Sende Bericht an Telegram...")
-                send_document(telegram_config.get('bot_token'), telegram_config.get('chat_id'), csv_path, caption)
-                print("✔ Bericht wurde erfolgreich an Telegram gesendet.")
-        except Exception as e:
-            # Zeige den Fehler nur, wenn der Export erfolgreich war, aber Telegram fehlschlug
-            print(f"ⓘ Konnte Bericht nicht an Telegram senden: {e}")
-    else:
-        # Dies wird bei Modus 3 (Optimierung) angezeigt, wenn kein Portfolio gefunden wurde
-        if is_auto:
-            pass
-        else:
-            print("\nKeine Equity-Daten zum Exportieren vorhanden (Möglicherweise 0 Trades).")
+    run_single_backtest(args.start, args.end, args.capital)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', default='1', type=str)
-    args = parser.parse_args()
-    print("\n--- Bitte Konfiguration für den Backtest festlegen ---")
-    start_date = input(f"Startdatum (JJJJ-MM-TT) [Standard: 2023-01-01]: ") or "2023-01-01"
-    end_date = input(f"Enddatum (JJJJ-MM-TT) [Standard: Heute]: ") or date.today().strftime("%Y-%m-%d")
-    start_capital = int(input(f"Startkapital in USDT eingeben [Standard: 1000]: ") or 1000)
-
-    max_dd_input = 100.0
-    if args.mode == '3':
-        max_dd_input = float(input(f"Gewünschten maximalen Drawdown in % eingeben [Standard: 30]: ") or 30.0)
-
-    print("--------------------------------------------------")
-    if args.mode == '2':
-        run_shared_mode(is_auto=False, start_date=start_date, end_date=end_date, start_capital=start_capital, max_drawdown=100.0)
-    elif args.mode == '3':
-        run_shared_mode(is_auto=True, start_date=start_date, end_date=end_date, start_capital=start_capital, max_drawdown=max_dd_input)
-    else:
-        # Führt die Einzelanalyse (Modus 1) über den robusten Simulator-Pfad aus
-        run_single_analysis_via_simulator(start_date=start_date, end_date=end_date, start_capital=start_capital)
+    main()

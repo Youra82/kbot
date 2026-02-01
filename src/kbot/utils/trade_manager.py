@@ -249,10 +249,64 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
         decision_debug['final_action'] = 'no_signal'
     else:
         decision_debug['final_action'] = 'allowed' if trade_allowed else 'rejected'
-    try:
-        logger.info(f"DecisionSummary: {json.dumps(decision_debug, ensure_ascii=False)}")
-    except Exception:
-        logger.info(f"DecisionSummary: prediction={prediction:.3f}, side={side}, allowed={trade_allowed}")
+    
+    # *** VERBESSERTE MENSCHENLESBARE LOG-AUSGABE ***
+    logger.info("=" * 60)
+    logger.info(f"📊 SIGNAL-ANALYSE für Kerze {last_candle_timestamp}")
+    logger.info("-" * 60)
+    
+    # Modell-Vorhersage mit Interpretation
+    if prediction >= pred_threshold:
+        signal_interpretation = f"LONG (≥{pred_threshold:.3f})"
+    elif prediction <= (1 - pred_threshold):
+        signal_interpretation = f"SHORT (≤{1-pred_threshold:.3f})"
+    else:
+        signal_interpretation = f"NEUTRAL ({1-pred_threshold:.3f} < {prediction:.3f} < {pred_threshold:.3f})"
+    
+    logger.info(f"🧠 Modell-Vorhersage: {prediction:.3f} → {signal_interpretation}")
+    logger.info(f"   Threshold: Long ≥{pred_threshold:.3f} | Short ≤{1-pred_threshold:.3f}")
+    
+    # SuperTrend Status
+    if st_direction == 1.0:
+        st_text = "🟢 LONG (Aufwärtstrend)"
+    elif st_direction == -1.0:
+        st_text = "🔴 SHORT (Abwärtstrend)"
+    else:
+        st_text = "⚪ NEUTRAL"
+    logger.info(f"📈 SuperTrend: {st_text}")
+    
+    # Filter-Status (falls ein Signal da war)
+    if side:
+        last_candle = data_with_features.iloc[-2]
+        current_adx = last_candle.get('adx', 0)
+        current_atr_norm = last_candle.get('atr_normalized', 0)
+        avg_atr_norm = data_with_features['atr_normalized'].rolling(50).mean().iloc[-2]
+        
+        if 'volume' in data_with_features.columns:
+            current_volume = last_candle['volume']
+            avg_volume = data_with_features['volume'].rolling(20).mean().iloc[-2]
+            vol_pct = (current_volume / avg_volume * 100) if avg_volume > 0 else 0
+            vol_status = "✅" if current_volume >= avg_volume * 0.8 else "❌"
+            logger.info(f"📊 Volume: {current_volume:.0f} ({vol_pct:.0f}% vom Durchschnitt) {vol_status} (min 80%)")
+        
+        adx_status = "✅" if current_adx >= 20 else "❌"
+        logger.info(f"💪 ADX (Trendstärke): {current_adx:.1f} {adx_status} (min 20)")
+        
+        atr_status = "✅" if current_atr_norm <= avg_atr_norm * 2.0 else "❌"
+        logger.info(f"📉 ATR (Volatilität): {current_atr_norm:.2f}% {atr_status} (max {avg_atr_norm*2:.2f}%)")
+    
+    # Finale Entscheidung
+    logger.info("-" * 60)
+    if side is None:
+        logger.info("🔴 ENTSCHEIDUNG: KEIN TRADE - Modell gibt kein Signal")
+        logger.info(f"   → Vorhersage {prediction:.3f} liegt im neutralen Bereich")
+    elif not trade_allowed:
+        filters_text = ", ".join(decision_debug.get('filters', [])) or 'unbekannt'
+        logger.info(f"🟡 ENTSCHEIDUNG: KEIN TRADE - Signal {side.upper()} wurde gefiltert")
+        logger.info(f"   → Abgelehnt durch: {filters_text}")
+    else:
+        logger.info(f"🟢 ENTSCHEIDUNG: TRADE {side.upper()} wird eröffnet!")
+    logger.info("=" * 60)
 
     # Optional: sende DecisionSummary per Telegram, wenn in den Strategy-Params aktiviert
     try:
@@ -452,17 +506,35 @@ def check_and_open_new_position(exchange: Exchange, model, scaler, params, teleg
 def full_trade_cycle(exchange, model, scaler, params, telegram_config, logger):
     """Der Haupt-Handelszyklus für eine einzelne Strategie."""
     symbol = params['market']['symbol']
+    timeframe = params['market'].get('timeframe', 'unknown')
+    
+    logger.info("")
+    logger.info("╔" + "═" * 58 + "╗")
+    logger.info(f"║  🤖 KBOT HANDELSZYKLUS - {symbol} ({timeframe})")
+    logger.info("╚" + "═" * 58 + "╝")
+    
     try:
         position = exchange.fetch_open_positions(symbol)
         position = position[0] if position else None
 
         if not position:
+            logger.info("📋 Status: Keine offene Position → Suche nach neuem Signal...")
             if not housekeeper_routine(exchange, symbol, logger):
                 logger.error("Housekeeper konnte die Umgebung nicht säubern. Breche ab.")
                 return
             check_and_open_new_position(exchange, model, scaler, params, telegram_config, logger)
         else:
-            logger.info(f"Offene Position für {symbol} gefunden. Warte auf SL/TSL/TP-Trigger.")
+            pos_side = position.get('side', 'unknown')
+            pos_size = position.get('contracts', 0)
+            entry_price = position.get('entryPrice', 0)
+            unrealized_pnl = position.get('unrealizedPnl', 0)
+            pnl_emoji = "🟢" if unrealized_pnl >= 0 else "🔴"
+            logger.info(f"📋 Status: Offene {pos_side.upper()} Position gefunden")
+            logger.info(f"   → Größe: {pos_size} Kontrakte @ {entry_price}")
+            logger.info(f"   → Unrealisierter PnL: {pnl_emoji} {unrealized_pnl:.2f} USDT")
+            logger.info(f"   → Warte auf SL/TSL/TP-Trigger...")
+        
+        logger.info("─" * 60)
 
     except ccxt.InsufficientFunds as e:
         logger.error(f"Fehler: Nicht genügend Guthaben. {e}")

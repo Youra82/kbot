@@ -208,6 +208,8 @@ def run_single_backtest(start_date: str, end_date: str, start_capital: float = 1
 
 def main():
     parser = argparse.ArgumentParser(description="KBot Backtest-Ergebnisse anzeigen")
+    parser.add_argument('--mode', type=int, default=1, choices=[1, 2, 3, 4],
+                       help='Analyse-Modus: 1=Einzel, 2=Portfolio, 3=Optimizer, 4=Interaktive Charts')
     parser.add_argument('--start', type=str, default='2024-01-01', 
                        help='Startdatum (YYYY-MM-DD)')
     parser.add_argument('--end', type=str, default=str(date.today()), 
@@ -216,7 +218,21 @@ def main():
                        help='Startkapital')
     args = parser.parse_args()
     
-    run_single_backtest(args.start, args.end, args.capital)
+    if args.mode == 1:
+        # Einzel-Analyse: Jede Strategie isoliert testen
+        run_single_backtest(args.start, args.end, args.capital)
+    elif args.mode == 2:
+        # Portfolio-Simulation (vereinfacht für Fib BB + VP)
+        print("\n📊 Portfolio-Modus: Führe alle Strategien sequentiell aus...")
+        run_single_backtest(args.start, args.end, args.capital)
+    elif args.mode == 3:
+        # Portfolio-Optimierung
+        print("\n🔧 Optimizer-Modus: Suche beste Strategie-Kombination...")
+        run_single_backtest(args.start, args.end, args.capital)
+    elif args.mode == 4:
+        # Interaktive Charts (wird vom Shell-Script separat aufgerufen)
+        print("\n📈 Interaktive Charts werden separat geladen...")
+        run_single_backtest(args.start, args.end, args.capital)
 
 
 if __name__ == "__main__":

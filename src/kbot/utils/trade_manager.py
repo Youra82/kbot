@@ -270,7 +270,7 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
             f"Channel: {channel_state.bot:.2f} - {channel_state.top:.2f}\n"
             f"Trend: {'🟢 Bullish' if channel_state.trend else '🔴 Bearish'}"
         )
-        send_message(msg, telegram_config)
+        send_message(telegram_config['bot_token'], telegram_config['chat_id'], msg)
         
         print(f"\n✅ POSITION ERÖFFNET: {side.upper()} @ {entry_price:.2f}")
         print(f"   SL: {stop_loss:.2f} | TP: {take_profit:.2f}\n")

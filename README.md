@@ -468,7 +468,10 @@ Konfiguration in `settings.json`:
 ### Status-Dashboard
 
 ```bash
-# Zeigt alle wichtigen Informationen
+# Einmalig ausführbar machen
+chmod +x show_status.sh
+
+# Status anzeigen
 ./show_status.sh
 ```
 
@@ -479,10 +482,13 @@ Konfiguration in `settings.json`:
 - 💰 Kontostand und verfügbares Kapital
 - 📝 Letzte Logs
 
-### Live-Status anzeigen
+### Trading-Ergebnisse anzeigen
 
 ```bash
-# Aktuelle Positionen und Performance
+# Einmalig ausführbar machen
+chmod +x show_results.sh
+
+# Ergebnisse anzeigen
 ./show_results.sh
 ```
 

@@ -92,7 +92,7 @@ def test_setup():
     print("\n[Teardown] Räume nach dem Test auf...")
     try:
         # Löschen des Trade Locks
-        symbol_timeframe = f"{params['market']['symbol'].replace('/', '-')}-{params['market']['timeframe'].upper()}"
+        symbol_timeframe = f"{params['market']['symbol'].replace('/', '-')}_{params['market']['timeframe']}"
         clear_trade_lock(symbol_timeframe)
         
         print("-> 1. Lösche offene Trigger Orders...")

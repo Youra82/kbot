@@ -232,11 +232,13 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
         return False
     
     try:
-        # Leverage setzen
-        exchange.set_leverage(symbol, leverage)
+        # Margin Mode setzen (isolated) vor Leverage
         margin_mode = params.get('risk', {}).get('margin_mode', 'isolated')
         logger.info(f"Setze Margin-Modus auf '{margin_mode}' für {symbol}")
         exchange.set_margin_mode(symbol, margin_mode)
+
+        # Leverage setzen
+        exchange.set_leverage(symbol, leverage, margin_mode=margin_mode)
         
         # Market Order
         order_side = 'buy' if side == 'long' else 'sell'

@@ -20,6 +20,7 @@ class Exchange:
             'password': self.account.get('password'),
             'options': {
                 'defaultType': 'swap',
+                'defaultMarginMode': 'isolated',
             },
             'enableRateLimit': True, # Neu hinzugefügt
         })
@@ -115,7 +116,11 @@ class Exchange:
 
     def set_margin_mode(self, symbol, mode='isolated'):
         try:
-            self.exchange.set_margin_mode(mode, symbol)
+            params = {
+                'productType': 'USDT-FUTURES',
+                'marginCoin': 'USDT'
+            }
+            self.exchange.set_margin_mode(mode, symbol, params)
             logger.info(f"Margin-Modus auf '{mode}' gesetzt für {symbol}")
             return True
         except Exception as e:
@@ -126,9 +131,15 @@ class Exchange:
                 return True
             return False
 
-    def set_leverage(self, symbol, level=10):
+    def set_leverage(self, symbol, level=10, margin_mode=None):
         try:
-            self.exchange.set_leverage(level, symbol)
+            params = {
+                'productType': 'USDT-FUTURES',
+                'marginCoin': 'USDT'
+            }
+            if margin_mode:
+                params['marginMode'] = margin_mode
+            self.exchange.set_leverage(level, symbol, params)
             return True
         except Exception as e:
             if 'Leverage not changed' not in str(e): 

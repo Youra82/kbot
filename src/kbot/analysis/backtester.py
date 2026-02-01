@@ -250,7 +250,7 @@ def check_vp_confluence(price, vp, tolerance_pct=1.0):
 
 
 # *** KORRIGIERTE BACKTESTER FUNKTION (SuperTrend + Volume Profile Filter) ***
-def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_filter=False, htf_data=None, timeframe=None, verbose=False, params_for_htf_load=None, use_volume_profile=True, vp_precomputed=False):
+def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_filter=False, htf_data=None, timeframe=None, verbose=False, params_for_htf_load=None, use_volume_profile=True, vp_precomputed=False, return_equity=False):
 
     model, scaler = load_model_and_scaler(model_paths['model'], model_paths['scaler'])
     if not model or not scaler: raise Exception("Modell/Scaler nicht gefunden!")
@@ -279,7 +279,10 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
     # ---
 
     if data_with_features.empty:
-        return {"total_pnl_pct": 0, "trades_count": 0, "win_rate": 0, "max_drawdown_pct": 1.0, "end_capital": start_capital}
+        empty_result = {"total_pnl_pct": 0, "trades_count": 0, "win_rate": 0, "max_drawdown_pct": 1.0, "end_capital": start_capital, "trades": []}
+        if return_equity:
+            return empty_result, []
+        return empty_result
 
     # *** ERWEITERTE FEATURE-LISTE FÜR BACKTEST ***
     # Muss exakt mit ann_model.py übereinstimmen (Scaler-Feature-Reihenfolge!)
@@ -350,6 +353,8 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
     # *** ENDE VP VORBERECHNUNG ***
     peak_capital, max_drawdown_pct = start_capital, 0.0
     position = None
+    trades_list = []  # Für Chart-Visualisierung
+    equity_snapshots = []  # Für Equity Curve
 
     # --- KORREKTUR: ADX / HTF-Filter-Initialisierung entfernt ---
     # Entferne die Lade-Logik für HTF-Daten, da der ADX-Filter entfernt wurde
@@ -357,6 +362,10 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
 
     for i in range(len(data_with_features)):
         current = data_with_features.iloc[i]
+        timestamp = current.name  # Für Equity Curve
+        
+        # Equity Snapshot bei jeder Kerze
+        equity_snapshots.append({'timestamp': timestamp, 'equity': current_capital})
 
         if position:
             exit_price, reason = None, None
@@ -401,6 +410,17 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
                 
                 if net_pnl > 0: wins_count += 1
                 trades_count += 1
+                
+                # Trade für Visualisierung speichern
+                entry_time = position.get('entry_time')
+                entry_time_str = entry_time.isoformat() if hasattr(entry_time, 'isoformat') else str(entry_time)
+                exit_time_str = timestamp.isoformat() if hasattr(timestamp, 'isoformat') else str(timestamp)
+                trade_record = {
+                    f"entry_{position['side']}": {'time': entry_time_str, 'price': position['entry_price']},
+                    f"exit_{position['side']}": {'time': exit_time_str, 'price': exit_price}
+                }
+                trades_list.append(trade_record)
+                
                 position = None
                 peak_capital = max(peak_capital, current_capital)
                 if peak_capital > 0:
@@ -491,8 +511,13 @@ def run_ann_backtest(data, params, model_paths, start_capital=1000, use_macd_fil
                                 'trailing_active': False,
                                 'activation_price': activation_price,
                                 'peak_price': entry_price,
-                                'callback_rate': callback_rate} # Speichern der Callback Rate für den TSL-Update
+                                'callback_rate': callback_rate,
+                                'entry_time': timestamp}  # Für Trade-Visualisierung
 
     win_rate = (wins_count / trades_count * 100) if trades_count > 0 else 0
     final_pnl_pct = ((current_capital - start_capital) / start_capital) * 100 if start_capital > 0 else 0
-    return {"total_pnl_pct": final_pnl_pct, "trades_count": trades_count, "win_rate": win_rate, "max_drawdown_pct": max_drawdown_pct, "end_capital": current_capital}
+    stats = {"total_pnl_pct": final_pnl_pct, "trades_count": trades_count, "win_rate": win_rate, "max_drawdown_pct": max_drawdown_pct, "end_capital": current_capital, "trades": trades_list}
+    
+    if return_equity:
+        return stats, equity_snapshots
+    return stats

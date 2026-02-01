@@ -235,7 +235,7 @@ def main():
                 bot_runner_script,
                 "--symbol", symbol,
                 "--timeframe", timeframe,
-                "--use_macd", str(use_macd) 
+                "--live"  # Live-Modus aktivieren
             ]
             
             try:

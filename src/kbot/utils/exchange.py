@@ -116,11 +116,13 @@ class Exchange:
     def set_margin_mode(self, symbol, mode='isolated'):
         try:
             self.exchange.set_margin_mode(mode, symbol)
+            logger.info(f"Margin-Modus auf '{mode}' gesetzt für {symbol}")
             return True
         except Exception as e:
             if 'Margin mode is the same' not in str(e): 
                 logger.warning(f"Warnung: Margin-Modus konnte nicht gesetzt werden: {e}")
             else:
+                logger.info(f"Margin-Modus ist bereits '{mode}' für {symbol}")
                 return True
             return False
 

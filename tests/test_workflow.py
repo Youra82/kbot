@@ -16,7 +16,7 @@ sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 # Importiere die KBot-Funktionen
 from kbot.utils.exchange import Exchange
-from kbot.utils.trade_manager import check_and_open_new_position, housekeeper_routine
+from kbot.utils.trade_manager import check_and_open_new_position, housekeeper_routine, clear_trade_lock
 from kbot.strategy.volume_channel_engine import VolumeChannelEngine
 
 
@@ -91,6 +91,10 @@ def test_setup():
 
     print("\n[Teardown] Räume nach dem Test auf...")
     try:
+        # Löschen des Trade Locks
+        symbol_timeframe = f"{params['market']['symbol'].replace('/', '-')}-{params['market']['timeframe'].upper()}"
+        clear_trade_lock(symbol_timeframe)
+        
         print("-> 1. Lösche offene Trigger Orders...")
         exchange.cancel_all_orders_for_symbol(symbol)
         time.sleep(2)

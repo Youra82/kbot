@@ -63,6 +63,14 @@ def set_trade_lock(symbol_timeframe: str, lock_duration_minutes: int = 60):
     save_trade_lock(trade_lock)
 
 
+def clear_trade_lock(symbol_timeframe: str):
+    """Löscht die Trade-Sperre für ein Symbol/Timeframe."""
+    trade_lock = load_or_create_trade_lock()
+    if symbol_timeframe in trade_lock:
+        del trade_lock[symbol_timeframe]
+        save_trade_lock(trade_lock)
+
+
 def calculate_lock_duration(timeframe: str) -> int:
     """Berechnet dynamische Lock-Duration basierend auf Timeframe (2.5x)."""
     tf_minutes = {

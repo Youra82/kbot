@@ -4,14 +4,16 @@
 # =============================================================================
 # Zeigt Candlestick-Chart mit Trade-Signalen (Entry/Exit Long/Short)
 # und Volume Channel Flow Visualisierung
+# Generiert HTML-Dateien für Telegram-Versand
 # =============================================================================
 
 import os
 import sys
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 import pandas as pd
 import numpy as np
@@ -97,8 +99,8 @@ def select_configs(strategies: List[Dict]) -> List[Dict]:
 
 
 def make_plot(symbol: str, timeframe: str, config: dict, 
-              start: str, end: str, start_capital: float) -> Path:
-    """Erstellt interaktiven Chart mit Candlesticks und Volume Channel"""
+              start: str, end: str, start_capital: float) -> Tuple[Path, dict]:
+    """Erstellt interaktiven Chart mit Candlesticks, Channel und Equity Curve"""
     
     print(f"   📊 Lade Daten für {symbol} ({timeframe})...")
     data = load_data(symbol, timeframe, start, end)
@@ -113,18 +115,14 @@ def make_plot(symbol: str, timeframe: str, config: dict,
     
     # Führe Backtest durch
     print(f"   🔄 Führe Backtest durch...")
-    result = run_backtest(df, config, start_capital=start_capital, verbose=False)
+    result, equity_snapshots = run_backtest(df, config, start_capital=start_capital, verbose=False, return_equity=True)
     
-    # === Erstelle Chart ===
-    fig = make_subplots(
-        rows=2, cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.08,
-        row_heights=[0.75, 0.25],
-        subplot_titles=[f'{symbol} ({timeframe}) - Volume Channel Flow', 'Volume']
-    )
+    trades_list = result.get('trades', [])
     
-    # === Row 1: Candlesticks + Channel ===
+    # === Erstelle Chart mit secondary_y für Equity ===
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # === Candlesticks ===
     fig.add_trace(
         go.Candlestick(
             x=df.index,
@@ -136,102 +134,166 @@ def make_plot(symbol: str, timeframe: str, config: dict,
             increasing_line_color="#16a34a",
             decreasing_line_color="#dc2626"
         ),
-        row=1, col=1
+        secondary_y=False
     )
     
-    # Channel Top
+    # === Channel Lines ===
     if 'channel_top' in df.columns:
         fig.add_trace(
             go.Scatter(
                 x=df.index,
                 y=df['channel_top'],
                 name='Channel Top',
-                line=dict(color='#f59e0b', width=1.5, dash='dash'),
-                hovertemplate='<b>Channel Top</b><br>%{y:.2f}<extra></extra>'
+                line=dict(color='#f59e0b', width=1.5, dash='dash')
             ),
-            row=1, col=1
+            secondary_y=False
         )
     
-    # Channel Bottom
     if 'channel_bot' in df.columns:
         fig.add_trace(
             go.Scatter(
                 x=df.index,
                 y=df['channel_bot'],
-                name='Channel Bottom',
-                line=dict(color='#ef4444', width=1.5, dash='dash'),
-                hovertemplate='<b>Channel Bottom</b><br>%{y:.2f}<extra></extra>'
+                name='Channel Bot',
+                line=dict(color='#ef4444', width=1.5, dash='dash')
             ),
-            row=1, col=1
+            secondary_y=False
         )
     
-    # Channel Mid
     if 'channel_avg' in df.columns:
         fig.add_trace(
             go.Scatter(
                 x=df.index,
                 y=df['channel_avg'],
                 name='Channel Mid',
-                line=dict(color='#6366f1', width=1),
-                hovertemplate='<b>Channel Mid</b><br>%{y:.2f}<extra></extra>'
+                line=dict(color='#6366f1', width=1)
             ),
-            row=1, col=1
+            secondary_y=False
         )
     
-    # === Row 2: Volume ===
-    colors = ['#16a34a' if df['close'].iloc[i] >= df['open'].iloc[i] 
-              else '#dc2626' for i in range(len(df))]
+    # === Trade Markers ===
+    entry_long_x, entry_long_y = [], []
+    exit_long_x, exit_long_y = [], []
+    entry_short_x, entry_short_y = [], []
+    exit_short_x, exit_short_y = [], []
     
-    fig.add_trace(
-        go.Bar(
-            x=df.index,
-            y=df['volume'],
-            name='Volume',
-            marker_color=colors,
-            showlegend=False,
-            hovertemplate='<b>Volume</b><br>%{y:.0f}<extra></extra>'
-        ),
-        row=2, col=1
-    )
+    for trade in trades_list:
+        if 'entry_long' in trade:
+            t = trade['entry_long']
+            if t.get('time') and t.get('price'):
+                entry_long_x.append(pd.to_datetime(t['time']))
+                entry_long_y.append(t['price'])
+        if 'exit_long' in trade:
+            t = trade['exit_long']
+            if t.get('time') and t.get('price'):
+                exit_long_x.append(pd.to_datetime(t['time']))
+                exit_long_y.append(t['price'])
+        if 'entry_short' in trade:
+            t = trade['entry_short']
+            if t.get('time') and t.get('price'):
+                entry_short_x.append(pd.to_datetime(t['time']))
+                entry_short_y.append(t['price'])
+        if 'exit_short' in trade:
+            t = trade['exit_short']
+            if t.get('time') and t.get('price'):
+                exit_short_x.append(pd.to_datetime(t['time']))
+                exit_short_y.append(t['price'])
+    
+    # Entry Long
+    if entry_long_x:
+        fig.add_trace(go.Scatter(
+            x=entry_long_x, y=entry_long_y, mode="markers",
+            marker=dict(color="#16a34a", symbol="triangle-up", size=14, line=dict(width=1.2, color="#0f5132")),
+            name="Entry Long"
+        ), secondary_y=False)
+    
+    # Exit Long
+    if exit_long_x:
+        fig.add_trace(go.Scatter(
+            x=exit_long_x, y=exit_long_y, mode="markers",
+            marker=dict(color="#22d3ee", symbol="circle", size=12, line=dict(width=1.1, color="#0e7490")),
+            name="Exit Long"
+        ), secondary_y=False)
+    
+    # Entry Short
+    if entry_short_x:
+        fig.add_trace(go.Scatter(
+            x=entry_short_x, y=entry_short_y, mode="markers",
+            marker=dict(color="#f59e0b", symbol="triangle-down", size=14, line=dict(width=1.2, color="#92400e")),
+            name="Entry Short"
+        ), secondary_y=False)
+    
+    # Exit Short
+    if exit_short_x:
+        fig.add_trace(go.Scatter(
+            x=exit_short_x, y=exit_short_y, mode="markers",
+            marker=dict(color="#ef4444", symbol="diamond", size=12, line=dict(width=1.1, color="#7f1d1d")),
+            name="Exit Short"
+        ), secondary_y=False)
+    
+    # === Equity Curve auf zweiter Y-Achse ===
+    if equity_snapshots:
+        equity_times = [pd.to_datetime(e['timestamp']) for e in equity_snapshots]
+        equity_values = [e['equity'] for e in equity_snapshots]
+        fig.add_trace(
+            go.Scatter(
+                x=equity_times,
+                y=equity_values,
+                name='Kontostand',
+                line=dict(color='#2563eb', width=2),
+                opacity=0.8
+            ),
+            secondary_y=True
+        )
     
     # === Layout ===
     total_return = result['total_pnl_pct']
     max_dd = result['max_drawdown_pct']
     end_capital = result['end_capital']
-    trades = result['trades_count']
+    trades_count = result['trades_count']
     win_rate = result['win_rate']
     
-    fig.update_layout(
-        title=dict(
-            text=f"<b>{symbol} ({timeframe})</b> | Return: {total_return:.2f}% | "
-                 f"Win-Rate: {win_rate:.1f}% | Max DD: {max_dd:.2f}% | "
-                 f"Trades: {trades} | Endkapital: ${end_capital:.2f}",
-            font=dict(size=14)
-        ),
-        xaxis=dict(rangeslider=dict(visible=False)),
-        xaxis2=dict(title="Datum/Zeit"),
-        yaxis=dict(title="Preis (USDT)"),
-        yaxis2=dict(title="Volume"),
-        template="plotly_dark",
-        height=800,
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        ),
-        hovermode='x unified'
+    pnl_sign = '+' if total_return >= 0 else ''
+    
+    title_text = (
+        f"{symbol} {timeframe} - KBot | "
+        f"Start Capital: ${start_capital:.2f} | "
+        f"End Capital: ${end_capital:.2f} | "
+        f"PnL: {pnl_sign}{total_return:.2f}% | "
+        f"Max DD: {max_dd:.2f}% | "
+        f"Trades: {trades_count} | "
+        f"Win Rate: {win_rate:.1f}%"
     )
+    
+    fig.update_layout(
+        title=dict(text=title_text, font=dict(size=12), x=0.5, xanchor='center'),
+        xaxis=dict(rangeslider=dict(visible=True)),
+        height=700,
+        template="plotly_white",
+        hovermode='x unified',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+    )
+    
+    fig.update_yaxes(title_text="Preis (USDT)", secondary_y=False)
+    fig.update_yaxes(title_text="Kontostand (USDT)", secondary_y=True)
     
     # Speichere HTML
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    fname = f"vcf_{sanitize(symbol)}_{sanitize(timeframe)}_{sanitize(start)}_{sanitize(end)}.html"
+    fname = f"vcf_{sanitize(symbol)}_{sanitize(timeframe)}.html"
     out_path = OUTPUT_DIR / fname
     fig.write_html(out_path, include_plotlyjs="cdn")
     
     print(f"   ✅ Chart gespeichert: {out_path}")
-    return out_path
+    
+    stats = {
+        'total_pnl_pct': total_return,
+        'max_drawdown_pct': max_dd,
+        'end_capital': end_capital,
+        'trades_count': trades_count,
+        'win_rate': win_rate
+    }
+    
+    return out_path, stats
 
 
 def main():
@@ -287,10 +349,12 @@ def main():
         print(f"🔍 Erstelle Chart für {symbol} ({timeframe})")
         
         try:
-            out = make_plot(symbol, timeframe, config, start_date, end_date, start_capital)
-            outputs.append((out, symbol, timeframe))
+            out_path, stats = make_plot(symbol, timeframe, config, start_date, end_date, start_capital)
+            outputs.append((out_path, symbol, timeframe, stats))
         except Exception as e:
             print(f"   ❌ Fehler: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     # Zusammenfassung
@@ -299,10 +363,10 @@ def main():
         print("✅ Alle Charts wurden erstellt!")
         print(f"{'='*60}")
         print("\nGespeicherte Charts:")
-        for p, sym, tf in outputs:
+        for p, sym, tf, stats in outputs:
             print(f"  📊 {p}")
         
-        # Telegram versenden
+        # Telegram versenden (HTML-Dokument)
         if send_telegram and telegram_config:
             print("\n📤 Sende Charts via Telegram...")
             try:
@@ -310,9 +374,16 @@ def main():
                 bot_token = telegram_config.get('bot_token')
                 chat_id = telegram_config.get('chat_id')
                 
-                for p, sym, tf in outputs:
+                for p, sym, tf, stats in outputs:
                     try:
-                        send_document(bot_token, chat_id, str(p), caption=f"📊 KBot Chart: {sym} ({tf})")
+                        pnl = stats['total_pnl_pct']
+                        pnl_sign = '+' if pnl >= 0 else ''
+                        caption = (f"📊 KBot: {sym} ({tf})\n"
+                                   f"PnL: {pnl_sign}{pnl:.2f}% | "
+                                   f"Trades: {stats['trades_count']} | "
+                                   f"Win Rate: {stats['win_rate']:.1f}%")
+                        
+                        send_document(bot_token, chat_id, str(p), caption=caption)
                         print(f"   ✅ Gesendet: {sym} ({tf})")
                     except Exception as e:
                         print(f"   ❌ Fehler beim Senden von {sym}: {e}")

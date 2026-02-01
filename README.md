@@ -570,27 +570,27 @@ Um eine sofortige Optimierung zu starten (ignoriert das Zeitintervall):
 
 ```bash
 # Letzten Optimierungszeitpunkt löschen (erzwingt Neustart)
-rm /home/ubuntu/kbot/data/cache/.last_optimization_run
+rm ~/kbot/data/cache/.last_optimization_run
 
 # Master Runner starten (prüft ob Optimierung fällig ist)
-cd /home/ubuntu/kbot && .venv/bin/python3 master_runner.py
+cd ~/kbot && .venv/bin/python3 master_runner.py
 ```
 
 ### Optimizer-Logs überwachen
 
 ```bash
 # Optimizer-Log live mitverfolgen
-tail -f /home/ubuntu/kbot/logs/optimizer_output.log
+tail -f ~/kbot/logs/optimizer_output.log
 
 # Letzte 50 Zeilen des Optimizer-Logs anzeigen
-tail -50 /home/ubuntu/kbot/logs/optimizer_output.log
+tail -50 ~/kbot/logs/optimizer_output.log
 ```
 
 ### Optimierungsergebnisse ansehen
 
 ```bash
 # Beste gefundene Parameter anzeigen (erste 50 Zeilen)
-cat /home/ubuntu/kbot/artifacts/results/optimization_results.json | head -50
+cat ~/kbot/artifacts/results/optimization_results.json | head -50
 ```
 
 ### Optimizer-Prozess überwachen

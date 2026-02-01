@@ -241,7 +241,8 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
         time.sleep(1)
         
         # Tatsächlichen Entry-Preis holen
-        entry_price = float(order.get('average', current_price))
+        avg_price = order.get('average') or order.get('price') or current_price
+        entry_price = float(avg_price) if avg_price else current_price
         
         # SL/TP Orders setzen
         sl_side = 'sell' if side == 'long' else 'buy'

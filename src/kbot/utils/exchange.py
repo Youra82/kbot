@@ -181,6 +181,10 @@ class Exchange:
             logger.error(f"Fehler beim Abrufen des Kontostandes: {e}")
             return 0
 
+    def cancel_all_orders_for_symbol(self, symbol):
+        """Alias für cleanup_all_open_orders - für Kompatibilität mit Tests."""
+        return self.cleanup_all_open_orders(symbol)
+    
     def cleanup_all_open_orders(self, symbol):
         # ... (Unveränderter Code von Zeile 248 bis 284)
         cancelled_count = 0

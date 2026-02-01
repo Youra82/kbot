@@ -130,7 +130,7 @@ def test_full_kbot_workflow_on_bitget(test_setup):
     print(f"\n--- Verfügbares Guthaben für Test: {bal:.4f} USDT ---")
 
     # Mocke das Signal um einen Trade zu erzwingen
-    with patch('kbot.utils.trade_manager.analyze_and_log_signal', return_value=('buy', 'Test-Signal')):
+    with patch('kbot.utils.trade_manager.analyze_and_log_signal', return_value=('long', 'Test-Signal')):
         print("\n[Schritt 1/3] Mocke Signal und prüfe Trade-Eröffnung...")
         check_and_open_new_position(exchange, params, telegram_config, logger)
 

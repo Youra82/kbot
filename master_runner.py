@@ -228,9 +228,8 @@ def main():
             # --- Log-Datei pro Bot erstellen ---
             bot_log_file = os.path.join(LOG_DIR, f"bot_{symbol.replace('/', '_').replace(':', '')}_{timeframe}.log")
             
-            # --- HIER IST DIE FINALE KORREKTUR ---
-            # Der --use_macd Parameter wird jetzt korrekt an den Befehl übergeben
-            # UND stdout/stderr werden zur Log-Datei umgeleitet
+            # --- SYNCHRONE AUSFÜHRUNG ---
+            # Der Bot wird SYNCHRON ausgeführt, damit alle Logs direkt in cron.log erscheinen
             command = [
                 python_executable,
                 bot_runner_script,
@@ -240,14 +239,36 @@ def main():
             ]
             
             try:
+                # Synchrone Ausführung - Output geht direkt in cron.log
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=120  # 2 Minuten Timeout pro Bot
+                )
+                
+                # Ausgabe in cron.log schreiben
+                if result.stdout:
+                    for line in result.stdout.strip().split('\n'):
+                        if line.strip():
+                            logger.info(line)
+                
+                if result.stderr:
+                    for line in result.stderr.strip().split('\n'):
+                        if line.strip():
+                            logger.error(line)
+                
+                # Zusätzlich in separate Log-Datei schreiben (für Archiv)
                 with open(bot_log_file, 'a') as log_file:
-                    subprocess.Popen(
-                        command,
-                        stdout=log_file,
-                        stderr=subprocess.STDOUT,
-                        text=True
-                    )
-                logger.info(f"Bot-Prozess gestartet - Logs: {bot_log_file}")
+                    log_file.write(f"\n=== {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+                    if result.stdout:
+                        log_file.write(result.stdout)
+                    if result.stderr:
+                        log_file.write(result.stderr)
+                        
+                logger.info(f"Bot-Zyklus beendet für {symbol} ({timeframe})")
+            except subprocess.TimeoutExpired:
+                logger.error(f"Timeout: Bot für {symbol} hat zu lange gedauert (>120s)")
             except Exception as e:
                 logger.error(f"Fehler beim Starten des Bot für {symbol}: {e}")
             

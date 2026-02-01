@@ -55,10 +55,30 @@ def load_settings() -> dict:
         return json.load(f)
 
 def load_secrets() -> dict:
+    """Lädt die secret.json Datei."""
     if not SECRET_FILE.exists():
+        print(f"⚠️ secret.json nicht gefunden: {SECRET_FILE}")
         return {}
-    with open(SECRET_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+    
+    try:
+        # Debug: Zeige den rohen Dateiinhalt
+        with open(SECRET_FILE, "r", encoding="utf-8") as f:
+            raw_content = f.read()
+            print(f"DEBUG secret.json Pfad: {SECRET_FILE}")
+            print(f"DEBUG secret.json Größe: {len(raw_content)} Bytes")
+        
+        with open(SECRET_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            print(f"✓ secret.json geladen, Keys: {list(data.keys())}")
+            # Debug: Zeige ob telegram-Werte existieren
+            if "telegram" in data:
+                tg = data["telegram"]
+                print(f"DEBUG telegram.bot_token Länge: {len(tg.get('bot_token', ''))}")
+                print(f"DEBUG telegram.chat_id Länge: {len(tg.get('chat_id', ''))}")
+            return data
+    except Exception as e:
+        print(f"Fehler beim Laden von secret.json: {e}")
+        return {}
 
 def extract_symbols_timeframes(settings: dict, extract_type: str) -> list:
     opt_settings = settings.get("optimization_settings", {})

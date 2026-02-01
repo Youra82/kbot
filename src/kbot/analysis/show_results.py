@@ -1,6 +1,6 @@
 # src/kbot/analysis/show_results.py
 # =============================================================================
-# KBot: Backtest-Ergebnisse anzeigen (Fibonacci BB + Volume Profile)
+# KBot: Backtest-Ergebnisse anzeigen (Volume Channel Flow)
 # =============================================================================
 
 import os
@@ -8,113 +8,73 @@ import sys
 import json
 import pandas as pd
 import numpy as np
-from datetime import date, datetime
+from datetime import date
 import argparse
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
-from kbot.analysis.backtester import (
-    load_data, 
-    calculate_volume_profile,
-    calculate_fibonacci_bollinger_bands,
-    run_fib_vp_backtest
-)
-from kbot.utils.telegram import send_document
+from kbot.analysis.backtester import load_data, run_backtest
+from kbot.strategy.volume_channel_engine import VolumeChannelEngine
 
 
-def show_volume_profile_summary(symbol: str, timeframe: str, data: pd.DataFrame) -> dict:
-    """Zeigt eine Zusammenfassung des Volume Profiles."""
-    if len(data) < 200:
-        print(f"  ⓘ Nicht genug Daten für Volume Profile ({len(data)} < 200)")
+def show_channel_summary(symbol: str, timeframe: str, data: pd.DataFrame, 
+                          params: dict) -> dict:
+    """Zeigt eine Zusammenfassung des Volume Channel Flow."""
+    strategy = params.get('strategy', {})
+    
+    engine = VolumeChannelEngine(settings=strategy)
+    df = engine.process_dataframe(data)
+    
+    if df.empty or df['channel_top'].isna().all():
+        print(f"  ⓘ Channel konnte nicht berechnet werden")
         return None
     
-    vp = calculate_volume_profile(data.tail(200), num_bars=50)
+    current = df.iloc[-1]
+    current_price = current['close']
+    channel_top = current['channel_top']
+    channel_bot = current['channel_bot']
+    channel_avg = current['channel_avg']
+    trend = current['channel_trend']
     
-    if vp is None:
-        print(f"  ⓘ Volume Profile konnte nicht berechnet werden")
-        return None
-    
-    current_price = data['close'].iloc[-1]
-    
-    # Bestimme Position relativ zu VP Levels
-    if current_price < vp['val']:
-        position = "UNTER Value Area (überverkauft)"
-        signal_hint = "🟢 Long-Bias"
-    elif current_price > vp['vah']:
-        position = "ÜBER Value Area (überkauft)"
-        signal_hint = "🔴 Short-Bias"
+    # Bestimme Position im Channel
+    if current_price >= channel_top:
+        position = "ÜBER dem Channel (Breakout Long)"
+        signal_hint = "🟢 LONG aktiv"
+    elif current_price <= channel_bot:
+        position = "UNTER dem Channel (Breakout Short)"
+        signal_hint = "🔴 SHORT aktiv"
+    elif current_price > channel_avg:
+        position = "Obere Hälfte des Channels"
+        signal_hint = "⚪ Abwarten"
     else:
-        position = "IN Value Area (neutral)"
+        position = "Untere Hälfte des Channels"
         signal_hint = "⚪ Abwarten"
     
-    print(f"\n  📊 Volume Profile für {symbol} ({timeframe}):")
-    print(f"     PoC (Point of Control):  {vp['poc']:.2f}")
-    print(f"     VAH (Value Area High):   {vp['vah']:.2f}")
-    print(f"     VAL (Value Area Low):    {vp['val']:.2f}")
-    print(f"     Aktueller Preis:         {current_price:.2f}")
-    print(f"     Position:                {position}")
-    print(f"     Signal-Tendenz:          {signal_hint}")
+    trend_str = "🟢 BULLISH" if trend == 1 else "🔴 BEARISH" if trend == -1 else "⚪ NEUTRAL"
     
-    return vp
-
-
-def show_fibonacci_bands_summary(symbol: str, timeframe: str, data: pd.DataFrame, 
-                                  fib_length: int = 200, fib_mult: float = 3.0) -> dict:
-    """Zeigt eine Zusammenfassung der Fibonacci Bollinger Bands."""
-    if len(data) < fib_length:
-        print(f"  ⓘ Nicht genug Daten für Fibonacci BB ({len(data)} < {fib_length})")
-        return None
-    
-    bands = calculate_fibonacci_bollinger_bands(data, length=fib_length, mult=fib_mult)
-    
-    if bands.empty or bands['basis'].isna().all():
-        print(f"  ⓘ Fibonacci BB konnte nicht berechnet werden")
-        return None
-    
-    current_price = data['close'].iloc[-1]
-    latest_bands = bands.iloc[-1]
-    
-    # Bestimme Position relativ zu Bändern
-    if current_price <= latest_bands['lower_6']:
-        position = "Bei/Unter Band 6 (stark überverkauft)"
-        signal_hint = "🟢 LONG Signal!"
-    elif current_price <= latest_bands['lower_3']:
-        position = "Bei Band 3-6 (überverkauft)"
-        signal_hint = "🟢 Long-Bias"
-    elif current_price >= latest_bands['upper_6']:
-        position = "Bei/Über Band 6 (stark überkauft)"
-        signal_hint = "🔴 SHORT Signal!"
-    elif current_price >= latest_bands['upper_3']:
-        position = "Bei Band 3-6 (überkauft)"
-        signal_hint = "🔴 Short-Bias"
-    else:
-        position = "Im mittleren Bereich (neutral)"
-        signal_hint = "⚪ Kein Signal"
-    
-    print(f"\n  📈 Fibonacci Bollinger Bands für {symbol} ({timeframe}):")
-    print(f"     VWMA Basis:              {latest_bands['basis']:.2f}")
-    print(f"     Upper Band 6 (100%):     {latest_bands['upper_6']:.2f}")
-    print(f"     Upper Band 3 (50%):      {latest_bands['upper_3']:.2f}")
-    print(f"     Lower Band 3 (50%):      {latest_bands['lower_3']:.2f}")
-    print(f"     Lower Band 6 (100%):     {latest_bands['lower_6']:.2f}")
-    print(f"     Aktueller Preis:         {current_price:.2f}")
-    print(f"     Position:                {position}")
-    print(f"     Signal-Tendenz:          {signal_hint}")
+    print(f"\n  📊 Volume Channel Flow für {symbol} ({timeframe}):")
+    print(f"     Channel Top:         {channel_top:.2f}")
+    print(f"     Channel Avg:         {channel_avg:.2f}")
+    print(f"     Channel Bot:         {channel_bot:.2f}")
+    print(f"     Aktueller Preis:     {current_price:.2f}")
+    print(f"     Channel Trend:       {trend_str}")
+    print(f"     Position:            {position}")
+    print(f"     Signal-Tendenz:      {signal_hint}")
     
     return {
-        'basis': latest_bands['basis'],
-        'upper_6': latest_bands['upper_6'],
-        'lower_6': latest_bands['lower_6'],
-        'current_price': current_price,
-        'signal_hint': signal_hint
+        'channel_top': channel_top,
+        'channel_bot': channel_bot,
+        'channel_avg': channel_avg,
+        'trend': trend,
+        'current_price': current_price
     }
 
 
 def run_single_backtest(start_date: str, end_date: str, start_capital: float = 1000):
     """Führt Backtests für alle Konfigurationen durch."""
     print("=" * 60)
-    print("KBot Backtest - Fibonacci BB + Volume Profile Strategie")
+    print("KBot Backtest - Volume Channel Flow Strategie")
     print("=" * 60)
     
     configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
@@ -152,16 +112,12 @@ def run_single_backtest(start_date: str, end_date: str, start_capital: float = 1
         print(f"  📅 Datenbereich: {data.index.min()} bis {data.index.max()}")
         print(f"  📊 Anzahl Kerzen: {len(data)}")
 
-        # Indikatoren-Zusammenfassung
-        fib_length = config.get('strategy', {}).get('fib_length', 200)
-        fib_mult = config.get('strategy', {}).get('fib_mult', 3.0)
-        
-        show_fibonacci_bands_summary(symbol, timeframe, data, fib_length, fib_mult)
-        show_volume_profile_summary(symbol, timeframe, data)
+        # Channel-Zusammenfassung
+        show_channel_summary(symbol, timeframe, data, config)
 
         # Backtest durchführen
         print(f"\n  🔄 Führe Backtest durch...")
-        result = run_fib_vp_backtest(data, config, start_capital=start_capital, verbose=False)
+        result = run_backtest(data, config, start_capital=start_capital, verbose=False)
         
         print(f"\n  📊 BACKTEST-ERGEBNISSE:")
         print(f"     Trades:              {result['trades_count']}")
@@ -188,28 +144,31 @@ def run_single_backtest(start_date: str, end_date: str, start_capital: float = 1
         total_return = df['total_pnl_pct'].mean()
         avg_win_rate = df['win_rate'].mean()
         total_trades = df['trades_count'].sum()
+        avg_pf = df['profit_factor'].mean()
         
         print(f"\nAnzahl Strategien:     {len(all_results)}")
         print(f"Gesamte Trades:        {total_trades}")
         print(f"Durchschn. Win-Rate:   {avg_win_rate:.1f}%")
         print(f"Durchschn. Rendite:    {total_return:.2f}%")
+        print(f"Durchschn. PF:         {avg_pf:.2f}")
         
         # Top/Flop Strategien
         df_sorted = df.sort_values('total_pnl_pct', ascending=False)
         
         print(f"\n🏆 TOP 3 Strategien:")
-        for i, row in df_sorted.head(3).iterrows():
+        for _, row in df_sorted.head(3).iterrows():
             print(f"   {row['strategy']}: {row['total_pnl_pct']:.2f}%")
         
-        print(f"\n📉 FLOP 3 Strategien:")
-        for i, row in df_sorted.tail(3).iterrows():
-            print(f"   {row['strategy']}: {row['total_pnl_pct']:.2f}%")
+        if len(df_sorted) > 3:
+            print(f"\n📉 FLOP 3 Strategien:")
+            for _, row in df_sorted.tail(3).iterrows():
+                print(f"   {row['strategy']}: {row['total_pnl_pct']:.2f}%")
 
 
 def main():
     parser = argparse.ArgumentParser(description="KBot Backtest-Ergebnisse anzeigen")
     parser.add_argument('--mode', type=int, default=1, choices=[1, 2, 3, 4],
-                       help='Analyse-Modus: 1=Einzel, 2=Portfolio, 3=Optimizer, 4=Interaktive Charts')
+                       help='Analyse-Modus: 1=Einzel, 2=Portfolio, 3=Optimizer, 4=Charts')
     parser.add_argument('--start', type=str, default='2024-01-01', 
                        help='Startdatum (YYYY-MM-DD)')
     parser.add_argument('--end', type=str, default=str(date.today()), 
@@ -218,21 +177,8 @@ def main():
                        help='Startkapital')
     args = parser.parse_args()
     
-    if args.mode == 1:
-        # Einzel-Analyse: Jede Strategie isoliert testen
-        run_single_backtest(args.start, args.end, args.capital)
-    elif args.mode == 2:
-        # Portfolio-Simulation (vereinfacht für Fib BB + VP)
-        print("\n📊 Portfolio-Modus: Führe alle Strategien sequentiell aus...")
-        run_single_backtest(args.start, args.end, args.capital)
-    elif args.mode == 3:
-        # Portfolio-Optimierung
-        print("\n🔧 Optimizer-Modus: Suche beste Strategie-Kombination...")
-        run_single_backtest(args.start, args.end, args.capital)
-    elif args.mode == 4:
-        # Interaktive Charts (wird vom Shell-Script separat aufgerufen)
-        print("\n📈 Interaktive Charts werden separat geladen...")
-        run_single_backtest(args.start, args.end, args.capital)
+    # Alle Modi führen aktuell den gleichen Backtest aus
+    run_single_backtest(args.start, args.end, args.capital)
 
 
 if __name__ == "__main__":

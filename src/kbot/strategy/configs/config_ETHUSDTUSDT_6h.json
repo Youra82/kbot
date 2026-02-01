@@ -1,25 +1,23 @@
 {
-    "market": {
-        "symbol": "ETH/USDT:USDT",
-        "timeframe": "6h"
-    },
-    "strategy": {
-        "fib_length": 200,
-        "fib_mult": 3.0,
-        "band_tolerance_pct": 0.5,
-        "vp_tolerance_pct": 1.0
-    },
-    "volume_profile": {
-        "lookback": 200,
-        "value_area_pct": 68
-    },
-    "risk": {
-        "margin_mode": "isolated",
-        "risk_per_trade_pct": 1.0,
-        "leverage": 5
-    },
-    "behavior": {
-        "use_longs": true,
-        "use_shorts": true
-    }
+    "market":  {
+                   "symbol":  "ETH/USDT:USDT",
+                   "timeframe":  "6h"
+               },
+    "strategy":  {
+                     "atr_period":  200,
+                     "channel_width":  3,
+                     "use_volume_confirmation":  true,
+                     "min_channel_length":  10,
+                     "volume_bins":  30,
+                     "risk_reward_ratio":  2
+                 },
+    "risk":  {
+                 "margin_mode":  "isolated",
+                 "risk_per_trade_pct":  1.0,
+                 "leverage":  5
+             },
+    "behavior":  {
+                     "use_longs":  true,
+                     "use_shorts":  true
+                 }
 }

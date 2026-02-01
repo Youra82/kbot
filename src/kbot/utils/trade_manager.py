@@ -263,11 +263,6 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
         exchange.place_trigger_market_order(symbol, sl_side, contracts, sl_rounded, {'reduceOnly': True})
         logger.info(f"Stop-Loss (Trigger Order) gesetzt: {stop_loss:.2f}")
         
-        # ===== TRIGGER MARKET ORDER für TP =====
-        tp_rounded = float(exchange.exchange.price_to_precision(symbol, take_profit))
-        exchange.place_trigger_market_order(symbol, tp_side, contracts, tp_rounded, {'reduceOnly': True})
-        logger.info(f"Take-Profit (Trigger Order) gesetzt: {take_profit:.2f}")
-        
         # ===== TRAILING STOP LOSS =====
         # Aktiviert sich bei 1.5x RR vom Entry
         sl_distance = abs(entry_price - stop_loss)
@@ -298,7 +293,6 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
             f"Richtung: {side.upper()}\n"
             f"Entry: {entry_price:.2f}\n"
             f"Stop-Loss: {stop_loss:.2f}\n"
-            f"Take-Profit: {take_profit:.2f}\n"
             f"Größe: {contracts:.6f}\n"
             f"Risiko: {risk_pct*100:.1f}%\n\n"
             f"Channel: {channel_state.bot:.2f} - {channel_state.top:.2f}\n"
@@ -307,7 +301,7 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
         send_message(telegram_config['bot_token'], telegram_config['chat_id'], msg)
         
         print(f"\n✅ POSITION ERÖFFNET: {side.upper()} @ {entry_price:.2f}")
-        print(f"   SL: {stop_loss:.2f} | TP: {take_profit:.2f}")
+        print(f"   SL: {stop_loss:.2f}")
         print(f"   TSL aktiviert @ {activation_price:.2f}\n")
         
         return True

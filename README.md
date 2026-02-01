@@ -438,7 +438,32 @@ Das Script lädt die optimalen Parameter und nutzt sie für die Backtests:
 - ✅ Konsistente Strategie-Ausführung
 - ✅ Einfaches A/B-Testing von Parametern
 
-## �📊 Monitoring & Status
+## 🤖 Auto-Optimizer Scheduler
+
+Automatische Optimierung nach Zeitplan mit Telegram-Benachrichtigungen.
+
+```bash
+# Status prüfen
+python3 auto_optimizer_scheduler.py --check-only
+
+# Sofort optimieren
+python3 auto_optimizer_scheduler.py --force
+
+# Als Daemon laufen
+python3 auto_optimizer_scheduler.py --daemon
+```
+
+Konfiguration in `settings.json`:
+```json
+"optimization_settings": {
+    "enabled": true,
+    "schedule": { "day_of_week": 0, "hour": 3, "interval_days": 7 },
+    "symbols_to_optimize": "auto",
+    "timeframes_to_optimize": "auto"
+}
+```
+
+## 📊 Monitoring & Status
 
 ### Status-Dashboard
 

@@ -4,19 +4,19 @@
         "timeframe": "15m"
     },
     "strategy": {
-        "prediction_threshold": 0.6,
-        "fib_length": 210,
-        "fib_mult": 3.88
+        "fib_length": 200,
+        "fib_mult": 3.0,
+        "band_tolerance_pct": 0.5,
+        "vp_tolerance_pct": 1.0
+    },
+    "volume_profile": {
+        "lookback": 200,
+        "value_area_pct": 68
     },
     "risk": {
         "margin_mode": "isolated",
-        "risk_per_trade_pct": 1.99,
-        "risk_reward_ratio": 1.58,
-        "leverage": 23,
-        "trailing_stop_activation_rr": 2.02,
-        "trailing_stop_callback_rate_pct": 0.55,
-        "atr_multiplier_sl": 3.28,
-        "min_sl_pct": 1.81
+        "risk_per_trade_pct": 1.0,
+        "leverage": 5
     },
     "behavior": {
         "use_longs": true,

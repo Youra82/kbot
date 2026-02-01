@@ -1,39 +1,97 @@
-# src/kbot/utils/trade_manager.py (KORRIGIERTE VERSION - Bereinigt)
+# src/kbot/utils/trade_manager.py
+# KBot: Fibonacci Bollinger Bands + Volume Profile Mean-Reversion Strategy
+# =========================================================================
+# STRATEGIE:
+# - Long Entry: Preis bei lower_6 UND nahe VAL/PoC (Konfluenz)
+# - Short Entry: Preis bei upper_6 UND nahe VAH/PoC (Konfluenz)
+# - TP1: PoC (50% Position), TP2: gegenüberliegendes Band 6
+# - SL: Band 1 (Long: lower_1, Short: upper_1)
+# =========================================================================
+
 import logging
 import time
 import ccxt
 import os
 import json
 import pandas as pd
-import ta
+import numpy as np
 import math
 
 from kbot.utils.telegram import send_message
-from kbot.utils.ann_model import create_ann_features
 from kbot.utils.exchange import Exchange
-from kbot.utils.supertrend_indicator import SuperTrendLocal
+from kbot.utils.volume_profile import calculate_volume_profile, get_volume_profile_signal
 
 # Pfade für die Lock-Datei definieren
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 LOCK_FILE_PATH = os.path.join(PROJECT_ROOT, 'artifacts', 'db', 'trade_lock.json')
 
+
 # --------------------------------------------------------------------------- #
-# Trade-Lock-Hilfsfunktionen (Unverändert)
+# Fibonacci Bollinger Bands Berechnung
+# --------------------------------------------------------------------------- #
+def calculate_fibonacci_bollinger_bands(df: pd.DataFrame, length: int = 200, mult: float = 3.0) -> pd.DataFrame:
+    """
+    Berechnet Fibonacci Bollinger Bands basierend auf VWMA.
+    
+    Args:
+        df: OHLCV DataFrame
+        length: VWMA-Periode (Standard: 200)
+        mult: Standardabweichungs-Multiplikator (Standard: 3.0)
+    
+    Returns:
+        DataFrame mit allen Fibonacci-Bändern
+    """
+    # HLC3 (Typical Price)
+    hlc3 = (df['high'] + df['low'] + df['close']) / 3
+    
+    # VWMA (Volume Weighted Moving Average)
+    vwma = (hlc3 * df['volume']).rolling(window=length).sum() / df['volume'].rolling(window=length).sum()
+    
+    # Standardabweichung
+    stdev = hlc3.rolling(window=length).std()
+    
+    # Basis und Deviation
+    basis = vwma
+    dev = mult * stdev
+    
+    # Fibonacci-Levels
+    fib_levels = {
+        1: 0.236,
+        2: 0.382,
+        3: 0.5,
+        4: 0.618,
+        5: 0.764,
+        6: 1.0
+    }
+    
+    bands = pd.DataFrame(index=df.index)
+    bands['basis'] = basis
+    bands['dev'] = dev
+    
+    for level, fib in fib_levels.items():
+        bands[f'upper_{level}'] = basis + (fib * dev)
+        bands[f'lower_{level}'] = basis - (fib * dev)
+    
+    return bands
+
+
+# --------------------------------------------------------------------------- #
+# Trade-Lock-Hilfsfunktionen
 # --------------------------------------------------------------------------- #
 def get_trade_lock(strategy_id):
-    """Liest den Zeitstempel des letzten Trades für eine Strategie aus der Lock-Datei."""
+    """Liest den Zeitstempel des letzten Trades für eine Strategie."""
     if not os.path.exists(LOCK_FILE_PATH):
         return None
     try:
         with open(LOCK_FILE_PATH, 'r') as f:
             locks = json.load(f)
-        # NEU: Der gespeicherte Wert ist der Zeitstempel der Kerze, die gehandelt wurde
         return locks.get(strategy_id)
     except (json.JSONDecodeError, FileNotFoundError):
         return None
 
+
 def set_trade_lock(strategy_id, candle_timestamp):
-    """Setzt eine Sperre für eine Strategie, um erneutes Handeln auf derselben Kerze zu verhindern."""
+    """Setzt eine Sperre für eine Strategie."""
     os.makedirs(os.path.dirname(LOCK_FILE_PATH), exist_ok=True)
     locks = {}
     if os.path.exists(LOCK_FILE_PATH):
@@ -42,29 +100,25 @@ def set_trade_lock(strategy_id, candle_timestamp):
                 locks = json.load(f)
         except json.JSONDecodeError:
             locks = {}
-    # Speichere nur den Zeitstempel der Kerze
     locks[strategy_id] = candle_timestamp.strftime('%Y-%m-%d %H:%M:%S')
     with open(LOCK_FILE_PATH, 'w') as f:
         json.dump(locks, f, indent=4)
 
 
 # --------------------------------------------------------------------------- #
-# Housekeeper & Helper (Unverändert)
+# Housekeeper
 # --------------------------------------------------------------------------- #
-
 def housekeeper_routine(exchange, symbol, logger):
-    """Storniert alle offenen Orders FÜR EIN SYMBOL und versucht, die Position zu schließen, falls verwaist."""
+    """Storniert alle offenen Orders und schließt verwaiste Positionen."""
     logger.info(f"Starte Aufräum-Routine für {symbol}...")
 
-    # 1. Alle ORDERS stornieren (robust)
     try:
         cancelled_count = exchange.cleanup_all_open_orders(symbol)
         if cancelled_count > 0:
-            logger.info(f"{cancelled_count} verwaiste Order(s) gefunden und storniert.")
+            logger.info(f"{cancelled_count} verwaiste Order(s) storniert.")
     except Exception as e:
         logger.error(f"Fehler während der Order-Aufräumung: {e}")
 
-    # 2. Position prüfen und schließen (wichtig für Teardown/Fallback)
     try:
         position = exchange.fetch_open_positions(symbol)
         if position:
@@ -72,446 +126,359 @@ def housekeeper_routine(exchange, symbol, logger):
             close_side = 'sell' if pos_info['side'] == 'long' else 'buy'
             contracts = float(pos_info['contracts'])
 
-            logger.warning(f"Housekeeper: Schließe verwaiste Position ({pos_info['side']} {contracts:.6f})...")
+            logger.warning(f"Schließe verwaiste Position ({pos_info['side']} {contracts:.6f})...")
             exchange.create_market_order(symbol, close_side, contracts, {'reduceOnly': True})
             time.sleep(2)
 
             if exchange.fetch_open_positions(symbol):
-                logger.error("Housekeeper: Position konnte nicht geschlossen werden!")
+                logger.error("Position konnte nicht geschlossen werden!")
                 return False
-            else:
-                logger.info(f"Housekeeper: {symbol} ist jetzt sauber.")
-                return True
-        else:
-            logger.info(f"Housekeeper: {symbol} ist jetzt sauber.")
-            return True
+        return True
     except Exception as e:
-        logger.error(f"Housekeeper-Fehler beim Positions-Management: {e}", exc_info=True)
+        logger.error(f"Housekeeper-Fehler: {e}", exc_info=True)
         return False
 
 
 # --------------------------------------------------------------------------- #
-# Hauptfunktion: Trade öffnen (mit dynamischem SL)
+# Signal-Erkennung: Fibonacci Bollinger Bands + Volume Profile Konfluenz
 # --------------------------------------------------------------------------- #
-def check_and_open_new_position(exchange: Exchange, model, scaler, params, telegram_config, logger):
+def detect_fib_vp_signal(df: pd.DataFrame, bands: pd.DataFrame, params: dict) -> dict:
+    """
+    Erkennt Mean-Reversion Signale basierend auf Fibonacci Bollinger Bands
+    und Volume Profile Konfluenz.
+    
+    Entry-Logik:
+    - LONG: Preis bei/unter lower_6 UND nahe VAL oder PoC
+    - SHORT: Preis bei/über upper_6 UND nahe VAH oder PoC
+    
+    Args:
+        df: OHLCV DataFrame
+        bands: Fibonacci Bollinger Bands DataFrame
+        params: Strategy-Parameter
+    
+    Returns:
+        Dictionary mit Signal-Informationen
+    """
+    # Aktuelle Werte (letzte geschlossene Kerze = iloc[-2])
+    current_close = df['close'].iloc[-2]
+    current_low = df['low'].iloc[-2]
+    current_high = df['high'].iloc[-2]
+    candle_timestamp = df.index[-2]
+    
+    # Fibonacci Bands der letzten Kerze
+    upper_6 = bands['upper_6'].iloc[-2]
+    upper_1 = bands['upper_1'].iloc[-2]
+    lower_6 = bands['lower_6'].iloc[-2]
+    lower_1 = bands['lower_1'].iloc[-2]
+    basis = bands['basis'].iloc[-2]
+    
+    # Volume Profile berechnen
+    vp_lookback = params.get('volume_profile', {}).get('lookback', 200)
+    vp = get_volume_profile_signal(df, current_close, lookback=vp_lookback)
+    
+    poc = vp['poc']
+    vah = vp['vah']
+    val = vp['val']
+    
+    # Konfluenz-Toleranz (wie weit Preis von Band/VP-Level entfernt sein darf)
+    band_tolerance_pct = params.get('strategy', {}).get('band_tolerance_pct', 0.5)
+    vp_tolerance_pct = params.get('strategy', {}).get('vp_tolerance_pct', 1.0)
+    
+    # Signal-Erkennung
+    signal = {
+        'side': None,
+        'entry_price': current_close,
+        'candle_timestamp': candle_timestamp,
+        'reason': [],
+        # Fibonacci Bands
+        'upper_6': upper_6,
+        'upper_1': upper_1,
+        'lower_6': lower_6,
+        'lower_1': lower_1,
+        'basis': basis,
+        # Volume Profile
+        'poc': poc,
+        'vah': vah,
+        'val': val,
+        'vp_position': vp['position_in_va'],
+        # Konfluenz-Flags
+        'at_lower_band': False,
+        'at_upper_band': False,
+        'near_vp_support': False,
+        'near_vp_resistance': False,
+        'confluence': False
+    }
+    
+    # Prüfe ob Preis am unteren Band 6 ist (Long-Zone)
+    band_tolerance = lower_6 * (band_tolerance_pct / 100)
+    if current_low <= lower_6 + band_tolerance:
+        signal['at_lower_band'] = True
+        signal['reason'].append(f"Preis bei lower_6 ({lower_6:.2f})")
+    
+    # Prüfe ob Preis am oberen Band 6 ist (Short-Zone)
+    band_tolerance = upper_6 * (band_tolerance_pct / 100)
+    if current_high >= upper_6 - band_tolerance:
+        signal['at_upper_band'] = True
+        signal['reason'].append(f"Preis bei upper_6 ({upper_6:.2f})")
+    
+    # Prüfe VP-Konfluenz für Long (nahe VAL oder PoC)
+    vp_tolerance = val * (vp_tolerance_pct / 100)
+    if abs(current_close - val) <= vp_tolerance or abs(current_close - poc) <= vp_tolerance:
+        signal['near_vp_support'] = True
+        signal['reason'].append(f"Nahe VAL ({val:.2f}) oder PoC ({poc:.2f})")
+    
+    # Prüfe VP-Konfluenz für Short (nahe VAH oder PoC)
+    vp_tolerance = vah * (vp_tolerance_pct / 100)
+    if abs(current_close - vah) <= vp_tolerance or abs(current_close - poc) <= vp_tolerance:
+        signal['near_vp_resistance'] = True
+        signal['reason'].append(f"Nahe VAH ({vah:.2f}) oder PoC ({poc:.2f})")
+    
+    # Finale Signal-Entscheidung: Konfluenz von Fib-Band + VP-Level
+    use_longs = params.get('behavior', {}).get('use_longs', True)
+    use_shorts = params.get('behavior', {}).get('use_shorts', True)
+    
+    # LONG Signal: Bei lower_6 UND VP-Support (VAL/PoC)
+    if signal['at_lower_band'] and signal['near_vp_support'] and use_longs:
+        signal['side'] = 'buy'
+        signal['confluence'] = True
+        signal['reason'].append("✅ KONFLUENZ: Fib-Band + VP-Support")
+    
+    # SHORT Signal: Bei upper_6 UND VP-Resistance (VAH/PoC)
+    elif signal['at_upper_band'] and signal['near_vp_resistance'] and use_shorts:
+        signal['side'] = 'sell'
+        signal['confluence'] = True
+        signal['reason'].append("✅ KONFLUENZ: Fib-Band + VP-Resistance")
+    
+    return signal
 
+
+# --------------------------------------------------------------------------- #
+# Position eröffnen mit SL und TP
+# --------------------------------------------------------------------------- #
+def open_position_with_sl_tp(exchange: Exchange, signal: dict, params: dict, telegram_config: dict, logger):
+    """
+    Eröffnet eine Position mit Stop-Loss und Take-Profit basierend auf Fibonacci Bands.
+    
+    SL-Logik:
+    - Long: SL bei lower_1 (erstes Fibonacci-Band)
+    - Short: SL bei upper_1
+    
+    TP-Logik:
+    - TP1 (50%): Bei PoC
+    - TP2 (50%): Bei gegenüberliegendem Band 6
+    """
+    symbol = params['market']['symbol']
+    side = signal['side']
+    entry_price = signal['entry_price']
+    
+    # Berechne Positionsgröße basierend auf Risiko
+    risk_pct = params.get('risk', {}).get('risk_per_trade_pct', 1.0) / 100
+    
+    # Stop-Loss Level
+    if side == 'buy':
+        sl_price = signal['lower_1']  # SL bei lower_1
+        sl_distance_pct = (entry_price - sl_price) / entry_price
+    else:
+        sl_price = signal['upper_1']  # SL bei upper_1
+        sl_distance_pct = (sl_price - entry_price) / entry_price
+    
+    # Hole Balance und berechne Positionsgröße
+    try:
+        balance = exchange.fetch_account_balance()
+        total_balance = balance.get('total', 0)
+        
+        if total_balance <= 0:
+            logger.error("Kein Guthaben verfügbar!")
+            return False
+        
+        # Risikobetrag
+        risk_amount = total_balance * risk_pct
+        
+        # Leverage
+        leverage = params.get('risk', {}).get('leverage', 5)
+        exchange.set_leverage(symbol, leverage)
+        
+        # Positionsgröße = Risikobetrag / SL-Distanz
+        position_value = risk_amount / sl_distance_pct if sl_distance_pct > 0 else 0
+        position_value = min(position_value, total_balance * leverage * 0.95)  # Max 95% der Margin
+        
+        # Contracts berechnen
+        market_info = exchange.get_market_info(symbol)
+        contract_size = market_info.get('contractSize', 1)
+        min_qty = market_info.get('limits', {}).get('amount', {}).get('min', 0.001)
+        qty_precision = market_info.get('precision', {}).get('amount', 3)
+        
+        contracts = position_value / entry_price / contract_size
+        contracts = round(contracts, qty_precision)
+        contracts = max(contracts, min_qty)
+        
+        logger.info(f"Position: {contracts} Kontrakte @ ~{entry_price:.2f} (Leverage: {leverage}x)")
+        
+    except Exception as e:
+        logger.error(f"Fehler bei Positionsberechnung: {e}")
+        return False
+    
+    # Order platzieren
+    try:
+        order = exchange.create_market_order(symbol, side, contracts)
+        time.sleep(1)
+        
+        # Position verifizieren
+        position = exchange.fetch_open_positions(symbol)
+        if not position:
+            logger.error("Position konnte nicht eröffnet werden!")
+            return False
+        
+        pos_info = position[0]
+        actual_entry = float(pos_info.get('entryPrice', entry_price))
+        
+        logger.info(f"✅ Position eröffnet: {side.upper()} @ {actual_entry:.2f}")
+        
+        # SL platzieren
+        sl_side = 'sell' if side == 'buy' else 'buy'
+        sl_order = exchange.create_stop_loss_order(symbol, sl_side, contracts, sl_price)
+        logger.info(f"🛡️ Stop-Loss gesetzt bei {sl_price:.2f}")
+        
+        # TP berechnen
+        if side == 'buy':
+            tp1_price = signal['poc']  # TP1 bei PoC
+            tp2_price = signal['upper_6']  # TP2 bei upper_6
+        else:
+            tp1_price = signal['poc']  # TP1 bei PoC
+            tp2_price = signal['lower_6']  # TP2 bei lower_6
+        
+        # Telegram Nachricht
+        try:
+            msg = (
+                f"🚀 *KBot Trade Eröffnet*\n\n"
+                f"📊 *{symbol}*\n"
+                f"📈 Richtung: *{side.upper()}*\n"
+                f"💰 Entry: {actual_entry:.2f}\n"
+                f"🛡️ Stop-Loss: {sl_price:.2f}\n"
+                f"🎯 TP1 (PoC): {tp1_price:.2f}\n"
+                f"🎯 TP2 (Band): {tp2_price:.2f}\n"
+                f"📏 Leverage: {leverage}x\n"
+                f"💵 Positionsgröße: {contracts} Kontrakte\n\n"
+                f"📋 *Grund:* Fib-Band + VP Konfluenz"
+            )
+            send_message(telegram_config.get('bot_token'), telegram_config.get('chat_id'), msg)
+        except Exception as e:
+            logger.warning(f"Telegram-Nachricht fehlgeschlagen: {e}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Eröffnen der Position: {e}", exc_info=True)
+        return False
+
+
+# --------------------------------------------------------------------------- #
+# Hauptfunktion: Neue Position prüfen und eröffnen
+# --------------------------------------------------------------------------- #
+def check_and_open_new_position(exchange: Exchange, params: dict, telegram_config: dict, logger):
+    """
+    Prüft auf neue Trading-Signale basierend auf Fibonacci Bollinger Bands
+    und Volume Profile Konfluenz.
+    """
     symbol = params['market']['symbol']
     timeframe = params['market']['timeframe']
     strategy_id = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-    account_name = exchange.account.get('name', 'Standard-Account')
     
-    # Circuit breaker removed per user request.
-
     logger.info("Suche nach neuen Signalen...")
+    
+    # Daten laden
     data = exchange.fetch_recent_ohlcv(symbol, timeframe, limit=500)
-
-    if len(data) < 2:
-        logger.warning("Nicht genug Daten geladen. Überspringe.")
+    
+    if len(data) < 200:  # Mindestens 200 Kerzen für VWMA
+        logger.warning(f"Nicht genug Daten ({len(data)} < 200). Überspringe.")
         return
-
+    
+    # Prüfe ob bereits auf dieser Kerze gehandelt wurde
     last_candle_timestamp = data.index[-2]
     last_trade_timestamp_str = get_trade_lock(strategy_id)
     if last_trade_timestamp_str and last_trade_timestamp_str == last_candle_timestamp.strftime('%Y-%m-%d %H:%M:%S'):
-        logger.info(f"Signal für Kerze {last_candle_timestamp} wurde bereits gehandelt. Überspringe bis zur nächsten Kerze.")
+        logger.info(f"Signal für Kerze {last_candle_timestamp} wurde bereits gehandelt. Überspringe.")
         return
-
-    data_with_features = create_ann_features(data.copy())
-
-    # --- SuperTrend Richtung hinzufügen ---
-    st_indicator = SuperTrendLocal(data_with_features['high'], data_with_features['low'], data_with_features['close'], window=10, multiplier=3.0)
-    # Verwende die Richtung der VORHERIGEN Kerze
-    st_direction = st_indicator.get_supertrend_direction().iloc[-2]
-    # ---
-
-    # *** ERWEITERTE FEATURE-LISTE ***
-    # Feature 'ema_cross_20_50' entfernt (konsistent mit ann_model.py)
-    feature_cols = [
-        'bb_width', 'bb_pband', 'obv', 'rsi', 'macd_diff', 'macd', 
-        'atr_normalized', 'adx', 'adx_pos', 'adx_neg',
-        'volume_ratio', 'mfi', 'cmf',
-        'price_to_ema20', 'price_to_ema50',
-        'stoch_k', 'stoch_d', 'williams_r', 'roc', 'cci',
-        'price_to_resistance', 'price_to_support',
-        'high_low_range', 'close_to_high', 'close_to_low',
-        'day_of_week', 'hour_of_day',
-        'returns_lag1', 'returns_lag2', 'returns_lag3', 'hist_volatility'
-    ]
-    # ---
-
-    # Robustness: fülle fehlende Feature-Spalten mit Defaults (0 oder neutrale Werte),
-    # damit Tests mit eingeschränktem Feature-Set nicht fehlschlagen.
-    latest_slice = data_with_features.iloc[-2:-1].copy()
-    for col in feature_cols:
-        if col not in latest_slice.columns:
-            # Wähle neutrale Default-Werte je nach Feature-Typ
-            if col in ('adx', 'adx_pos', 'adx_neg'):
-                latest_slice[col] = 0.0
-            elif col in ('volume_ratio', 'mfi', 'cmf'):
-                latest_slice[col] = 1.0 if col == 'volume_ratio' else 50.0
-            elif col in ('day_of_week', 'hour_of_day'):
-                latest_slice[col] = 0
-            else:
-                latest_slice[col] = 0.0
-    # Start with all available columns from the latest slice (we'll reindex to the scaler's
-    # expected features below). This preserves any extra engineered features present.
-    latest_features = latest_slice.copy()
-
-    # If the scaler was fitted with feature names, ensure the DataFrame matches that order
-    # and fill any missing columns with neutral defaults (0.0).
-    required_features = []
-    try:
-        required_features = list(getattr(scaler, 'feature_names_in_', []))
-    except Exception:
-        required_features = []
-
-    if required_features:
-        missing = [f for f in required_features if f not in latest_features.columns]
-        if missing:
-            for col in missing:
-                # Use 0.0 as a safe neutral default for unknown numeric features
-                latest_features[col] = 0.0
-            logger.info(f"Ergänzte fehlende Features für Scaler: {', '.join(missing)}")
-        # Reorder columns to match the scaler's expected input
-        latest_features = latest_features.reindex(columns=required_features)
-
-    if latest_features.isnull().values.any():
-        logger.warning("Neueste Feature-Daten sind unvollständig (NaNs), überspringe diesen Zyklus.")
-        return
-
-    scaled_features = scaler.transform(latest_features)
-    prediction = model.predict(scaled_features, verbose=0)[0][0]
-    logger.info(f"Analyse für Kerze {last_candle_timestamp} -> Modell-Vorhersage: {prediction:.3f}")
-
-    pred_threshold = params['strategy']['prediction_threshold']
-    side = None
-
-    # Sammle Entscheidungsinformationen für bessere Nachvollziehbarkeit
-    decision_debug = {
-        'prediction': float(prediction),
-        'threshold': float(pred_threshold),
-        'candidate_side': None,
-        'st_direction': float(st_direction) if not pd.isna(st_direction) else None,
-        'filters': []
-    }
-
-    # --- Zuerst ANN-Signal prüfen ---
-    if prediction >= pred_threshold and params.get('behavior', {}).get('use_longs', True):
-        side = 'buy'
-    elif prediction <= (1 - pred_threshold) and params.get('behavior', {}).get('use_shorts', True):
-        side = 'sell'
-    decision_debug['candidate_side'] = side
-
-    # --- SUPER TREND FILTER: Trendbestätigung und Richtung erzwingen ---
-    trade_allowed = True
-    if side == 'buy':
-        if st_direction != 1.0:
-            trade_allowed = False
-            logger.info("Signal (Long) abgelehnt: Kein Long-Trend (SuperTrend).")
-            decision_debug['filters'].append('supertrend_not_long')
-    elif side == 'sell':
-        if st_direction != -1.0:
-            trade_allowed = False
-            logger.info("Signal (Short) abgelehnt: Kein Short-Trend (SuperTrend).")
-            decision_debug['filters'].append('supertrend_not_short')
-    # --- ENDE SUPER TREND FILTER ---
     
-    # *** NEUE FILTER: ADX & VOLUME ***
-    if side and trade_allowed:
-        last_candle = data_with_features.iloc[-2]
-        
-        # ADX-Filter: Nur bei ausreichender Trendstärke traden
-        current_adx = last_candle.get('adx', 0)
-        if current_adx < 20:
-            trade_allowed = False
-            logger.info(f"Signal abgelehnt: ADX zu niedrig ({current_adx:.1f} < 20). Kein klarer Trend.")
-            decision_debug['filters'].append(f'adx_too_low:{current_adx:.1f}')
-        
-        # Volume-Filter: Mindestens 80% des Average Volume
-        if 'volume' in data_with_features.columns:
-            current_volume = last_candle['volume']
-            avg_volume = data_with_features['volume'].rolling(20).mean().iloc[-2]
-            if current_volume < avg_volume * 0.8:
-                trade_allowed = False
-                logger.info(f"Signal abgelehnt: Volume zu niedrig ({current_volume:.0f} < {avg_volume*0.8:.0f}).")
-                decision_debug['filters'].append(f'volume_too_low:{int(current_volume)}')
-        
-        # Volatilitäts-Filter: Keine extremen Spikes
-        current_atr_norm = last_candle.get('atr_normalized', 0)
-        avg_atr_norm = data_with_features['atr_normalized'].rolling(50).mean().iloc[-2]
-        if current_atr_norm > avg_atr_norm * 2.0:
-            trade_allowed = False
-            logger.info(f"Signal abgelehnt: Extreme Volatilität erkannt (ATR {current_atr_norm:.2f}% > {avg_atr_norm*2:.2f}%).")
-            decision_debug['filters'].append(f'atr_spike:{current_atr_norm:.2f}')
-    # *** ENDE NEUE FILTER ***
-
-    # Abschließende Entscheidungsübersicht (wird geloggt, bevor evtl. ein Trade geöffnet wird)
-    if side is None:
-        decision_debug['final_action'] = 'no_signal'
-    else:
-        decision_debug['final_action'] = 'allowed' if trade_allowed else 'rejected'
+    # Fibonacci Bollinger Bands berechnen
+    fib_length = params.get('strategy', {}).get('fib_length', 200)
+    fib_mult = params.get('strategy', {}).get('fib_mult', 3.0)
+    bands = calculate_fibonacci_bollinger_bands(data, length=fib_length, mult=fib_mult)
     
-    # *** VERBESSERTE MENSCHENLESBARE LOG-AUSGABE (print für cron.log) ***
+    # Signal erkennen (Fib-Band + VP Konfluenz)
+    signal = detect_fib_vp_signal(data, bands, params)
+    
+    # Aktuelle Werte für Log
+    current_close = data['close'].iloc[-2]
+    
+    # *** MENSCHENLESBARE LOG-AUSGABE ***
     print("=" * 60)
-    print(f"📊 SIGNAL-ANALYSE für Kerze {last_candle_timestamp}")
+    print(f"📊 SIGNAL-ANALYSE für Kerze {signal['candle_timestamp']}")
+    print("-" * 60)
+    print(f"💰 Aktueller Preis: {current_close:.2f}")
+    print("")
+    print("📈 Fibonacci Bollinger Bands:")
+    print(f"   Upper 6: {signal['upper_6']:.2f} | Upper 1: {signal['upper_1']:.2f}")
+    print(f"   Basis:   {signal['basis']:.2f}")
+    print(f"   Lower 1: {signal['lower_1']:.2f} | Lower 6: {signal['lower_6']:.2f}")
+    print("")
+    print("📊 Volume Profile:")
+    print(f"   VAH (Resistance): {signal['vah']:.2f}")
+    print(f"   PoC (Control):    {signal['poc']:.2f}")
+    print(f"   VAL (Support):    {signal['val']:.2f}")
+    print(f"   Position: {signal['vp_position'].upper()}")
+    print("")
+    print("🔍 Konfluenz-Check:")
+    at_lower = "✅" if signal['at_lower_band'] else "❌"
+    at_upper = "✅" if signal['at_upper_band'] else "❌"
+    vp_support = "✅" if signal['near_vp_support'] else "❌"
+    vp_resistance = "✅" if signal['near_vp_resistance'] else "❌"
+    print(f"   {at_lower} Am unteren Band (lower_6)")
+    print(f"   {at_upper} Am oberen Band (upper_6)")
+    print(f"   {vp_support} Nahe VP-Support (VAL/PoC)")
+    print(f"   {vp_resistance} Nahe VP-Resistance (VAH/PoC)")
     print("-" * 60)
     
-    # Modell-Vorhersage mit Interpretation
-    if prediction >= pred_threshold:
-        signal_interpretation = f"LONG (≥{pred_threshold:.3f})"
-    elif prediction <= (1 - pred_threshold):
-        signal_interpretation = f"SHORT (≤{1-pred_threshold:.3f})"
+    if signal['side'] and signal['confluence']:
+        print(f"🟢 ENTSCHEIDUNG: TRADE {signal['side'].upper()} wird eröffnet!")
+        for reason in signal['reason']:
+            print(f"   → {reason}")
+        print("=" * 60)
+        
+        # Trade-Lock setzen
+        set_trade_lock(strategy_id, last_candle_timestamp)
+        
+        # Position eröffnen
+        success = open_position_with_sl_tp(exchange, signal, params, telegram_config, logger)
+        if not success:
+            logger.error("Trade konnte nicht eröffnet werden!")
+    
+    elif signal['at_lower_band'] or signal['at_upper_band']:
+        print("🟡 ENTSCHEIDUNG: KEIN TRADE - Band erreicht, aber KEINE VP-Konfluenz")
+        for reason in signal['reason']:
+            print(f"   → {reason}")
+        print("=" * 60)
+    
     else:
-        signal_interpretation = f"NEUTRAL ({1-pred_threshold:.3f} < {prediction:.3f} < {pred_threshold:.3f})"
-    
-    print(f"🧠 Modell-Vorhersage: {prediction:.3f} → {signal_interpretation}")
-    print(f"   Threshold: Long ≥{pred_threshold:.3f} | Short ≤{1-pred_threshold:.3f}")
-    
-    # SuperTrend Status
-    if st_direction == 1.0:
-        st_text = "🟢 LONG (Aufwärtstrend)"
-    elif st_direction == -1.0:
-        st_text = "🔴 SHORT (Abwärtstrend)"
-    else:
-        st_text = "⚪ NEUTRAL"
-    print(f"📈 SuperTrend: {st_text}")
-    
-    # Filter-Status (falls ein Signal da war)
-    if side:
-        last_candle = data_with_features.iloc[-2]
-        current_adx = last_candle.get('adx', 0)
-        current_atr_norm = last_candle.get('atr_normalized', 0)
-        avg_atr_norm = data_with_features['atr_normalized'].rolling(50).mean().iloc[-2]
-        
-        if 'volume' in data_with_features.columns:
-            current_volume = last_candle['volume']
-            avg_volume = data_with_features['volume'].rolling(20).mean().iloc[-2]
-            vol_pct = (current_volume / avg_volume * 100) if avg_volume > 0 else 0
-            vol_status = "✅" if current_volume >= avg_volume * 0.8 else "❌"
-            print(f"📊 Volume: {current_volume:.0f} ({vol_pct:.0f}% vom Durchschnitt) {vol_status} (min 80%)")
-        
-        adx_status = "✅" if current_adx >= 20 else "❌"
-        print(f"💪 ADX (Trendstärke): {current_adx:.1f} {adx_status} (min 20)")
-        
-        atr_status = "✅" if current_atr_norm <= avg_atr_norm * 2.0 else "❌"
-        print(f"📉 ATR (Volatilität): {current_atr_norm:.2f}% {atr_status} (max {avg_atr_norm*2:.2f}%)")
-    
-    # Finale Entscheidung
-    print("-" * 60)
-    if side is None:
-        print("🔴 ENTSCHEIDUNG: KEIN TRADE - Modell gibt kein Signal")
-        print(f"   → Vorhersage {prediction:.3f} liegt im neutralen Bereich")
-    elif not trade_allowed:
-        filters_text = ", ".join(decision_debug.get('filters', [])) or 'unbekannt'
-        print(f"🟡 ENTSCHEIDUNG: KEIN TRADE - Signal {side.upper()} wurde gefiltert")
-        print(f"   → Abgelehnt durch: {filters_text}")
-    else:
-        print(f"🟢 ENTSCHEIDUNG: TRADE {side.upper()} wird eröffnet!")
-    print("=" * 60)
-
-    # Optional: sende DecisionSummary per Telegram, wenn in den Strategy-Params aktiviert
-    try:
-        if params.get('notifications', {}).get('decision_summary', False):
-            filters_text = ', '.join(decision_debug.get('filters', [])) or 'keine'
-            human_msg = (
-                f"Decision: {decision_debug.get('final_action', 'unknown').upper()}\n"
-                f"Prediction: {decision_debug.get('prediction'):.3f} (thr {decision_debug.get('threshold'):.3f})\n"
-                f"Side: {decision_debug.get('candidate_side')} | ST: {decision_debug.get('st_direction')}\n"
-                f"Filters: {filters_text}"
-            )
-            send_message(telegram_config.get('bot_token'), telegram_config.get('chat_id'), human_msg)
-    except Exception:
-        logger.debug('Telegram DecisionSummary konnte nicht gesendet werden.', exc_info=True)
+        print("🔴 ENTSCHEIDUNG: KEIN TRADE - Preis nicht an Entry-Zone")
+        print(f"   → Warte auf Preis bei upper_6 ({signal['upper_6']:.2f}) oder lower_6 ({signal['lower_6']:.2f})")
+        print("=" * 60)
 
 
-    if side and trade_allowed:
-        logger.info(f"Gültiges Signal '{side.upper()}' für Kerze {last_candle_timestamp} erkannt (ST Trend). Beginne Trade-Eröffnung.")
-        p = params['risk']
-
-        risk_per_trade_pct = p['risk_per_trade_pct'] / 100.0
-        risk_reward_ratio = p['risk_reward_ratio']
-        # --- NEU: Dynamische SL-Parameter lesen ---
-        # Nutze 0.5% als Fallback für min_sl_pct, falls es in alten Configs fehlt
-        min_sl_pct = p.get('min_sl_pct', 0.5) / 100.0
-        atr_multiplier_sl = p.get('atr_multiplier_sl', 2.0)
-        # --- ENDE NEU ---
-        leverage = p['leverage']
-        activation_rr = p.get('trailing_stop_activation_rr', 2.0)
-        callback_rate_pct = p.get('trailing_stop_callback_rate_pct', 1.0) / 100.0
-
-        current_balance = exchange.fetch_balance_usdt()
-        if current_balance <= 0: logger.error("Kein Guthaben zum Eröffnen."); return
-
-        risk_amount_usd = current_balance * risk_per_trade_pct
-        ticker = exchange.fetch_ticker(symbol)
-        entry_price = ticker['last']
-        
-        # --- NEU: DYNAMISCHE SL-DISTANZ-BERECHNUNG (wie TitanBot) ---
-        last_candle = data_with_features.iloc[-2] # Nimm die abgeschlossene Kerze
-        current_atr = last_candle.get('atr', 0.0)
-        
-        if current_atr <= 0:
-            logger.error("ATR ist Null oder ungültig. Kann dynamischen SL nicht setzen."); return
-
-        sl_distance_atr = current_atr * atr_multiplier_sl
-        sl_distance_min = entry_price * min_sl_pct
-        sl_distance = max(sl_distance_atr, sl_distance_min)
-        # --- ENDE DYNAMISCHE SL-DISTANZ-BERECHNUNG ---
-
-        if sl_distance == 0: logger.error("SL-Distanz Null."); return
-
-        # Neuberechnung der Positionsgröße basierend auf der DYNAMISCHEN SL-Distanz
-        notional_value = risk_amount_usd / (sl_distance / entry_price)
-        amount = notional_value / entry_price
-
-        # --- Ensure amount meets exchange market minimums and precision ---
-        try:
-            market_info = exchange.markets.get(symbol) if getattr(exchange, 'markets', None) else None
-        except Exception:
-            market_info = None
-
-        min_amount = None
-        min_notional = None
-        if market_info:
-            limits = market_info.get('limits', {})
-            amt_lim = limits.get('amount') or {}
-            cost_lim = limits.get('cost') or {}
-            min_amount = amt_lim.get('min')
-            min_notional = cost_lim.get('min')
-
-        # If notional-based minimum exists, enforce it (min cost in quote currency)
-        if min_notional and (amount * entry_price) < float(min_notional):
-            needed_amount = float(min_notional) / entry_price
-            logger.info(f"Erhöhe Ordermenge auf Mindestnotional {min_notional} USDT -> setze amount {needed_amount:.8f} (vor Rundung)")
-            amount = needed_amount
-
-        # If amount minimum exists, enforce it
-        if min_amount and amount < float(min_amount):
-            logger.info(f"Erhöhe Ordermenge auf Mindestmenge {min_amount} -> setze amount {float(min_amount):.8f} (vor Rundung)")
-            amount = float(min_amount)
-
-        # Round amount to exchange precision using wrapper
-        try:
-            amount = float(exchange.exchange.amount_to_precision(symbol, amount))
-        except Exception:
-            # best-effort rounding fallback
-            amount = float(round(amount, 8))
-
-        # If rounding caused the notional to fall slightly under the min_notional, try to increase
-        # the amount by one precision step until the notional meets the minimum (or until a safety cap).
-        try:
-            precision_step = 1e-8
-            if market_info and market_info.get('precision') and market_info['precision'].get('amount') is not None:
-                amt_prec = market_info['precision']['amount']
-                precision_step = 10 ** (-int(amt_prec))
-        except Exception:
-            precision_step = 1e-8
-
-        if min_notional:
-            target_notional = float(min_notional)
-            iter_cnt = 0
-            while (amount * entry_price) < target_notional and iter_cnt < 50:
-                amount += precision_step
-                try:
-                    amount = float(exchange.exchange.amount_to_precision(symbol, amount))
-                except Exception:
-                    amount = float(round(amount, 8))
-                iter_cnt += 1
-            if (amount * entry_price) < target_notional:
-                logger.error(f"FEHLER: Berechneter Notional {amount*entry_price:.4f} USDT liegt unter Mindestnotional {min_notional} nach Anpassung. Abbruch.")
-                return
-
-        if min_amount and amount < float(min_amount):
-            logger.error(f"FEHLER: Berechneter Betrag {amount} liegt unter dem Mindestbetrag {min_amount}. Abbruch.")
-            return
-
-        # Berechnung der Trigger-Preise
-        stop_loss_price = entry_price - sl_distance if side == 'buy' else entry_price + sl_distance
-        activation_price = entry_price + sl_distance * activation_rr if side == 'buy' else entry_price - sl_distance * activation_rr
-
-        tsl_side = 'sell' if side == 'buy' else 'buy'
-        # Der fixe TP wird nur für die Message benötigt, aber nicht als Order platziert
-        take_profit_price = entry_price + sl_distance * risk_reward_ratio if side == 'buy' else entry_price - sl_distance * risk_reward_ratio
-
-        # --- Trade-Eröffnung ---
-        try:
-            if not exchange.set_leverage(symbol, leverage): return
-            if not exchange.set_margin_mode(symbol, p.get('margin_mode', 'isolated')): return
-
-            order_params = {'marginMode': p['margin_mode']}
-            exchange.create_market_order(symbol, side, amount, params=order_params)
-
-            time.sleep(2)
-
-            final_position = exchange.fetch_open_positions(symbol)
-            if not final_position: raise Exception("Position konnte nicht bestätigt werden.")
-            final_amount = float(final_position[0]['contracts'])
-
-            sl_rounded = float(exchange.exchange.price_to_precision(symbol, stop_loss_price))
-            activation_price_rounded = float(exchange.exchange.price_to_precision(symbol, activation_price))
-
-            # --- 1. Fixen SL setzen (PRIORITÄT) ---
-            logger.info(f"Platziere FIXEN SL @ {sl_rounded} (kritische Sicherheit).")
-            exchange.place_trigger_market_order(
-                symbol, tsl_side, final_amount, sl_rounded, {'reduceOnly': True}
-            )
-
-            # --- 2. TSL als dynamischen TP setzen (Sekundär) ---
-            tsl_placed = False
-            try:
-                logger.info(f"Platziere TSL (ersetzt TP): Aktivierung @ {activation_price_rounded}, Callback @ {callback_rate_pct*100:.2f}%")
-                tsl_order = exchange.place_trailing_stop_order(
-                    symbol,
-                    tsl_side,
-                    final_amount,
-                    activation_price_rounded,
-                    callback_rate_pct,
-                    {'reduceOnly': True}
-                )
-                if tsl_order:
-                    tsl_placed = True
-            except Exception as inner_e:
-                logger.warning(f"WARNUNG: TSL-Platzierung fehlgeschlagen. Fixer SL sollte aktiv sein. Fehler: {inner_e}")
-
-            # --- Erfolgsnachricht senden ---
-            set_trade_lock(strategy_id, last_candle_timestamp)
-
-            tsl_status = f", TSL aktiv (Aktivierung @ ${activation_price_rounded:.4f})" if tsl_placed else " - KEIN TSL aktiv (nur fixer SL)"
-
-            message = (f"🧠 ANN Signal für *{account_name}* ({symbol}, {side.upper()})\n"
-                        f"- Entry @ Market (≈${entry_price:.4f})\n"
-                        f"- SL: ${sl_rounded:.4f} (DYNAMISCHE SICHERHEIT)\n"
-                        f"- TP: {tsl_status}")
-            send_message(telegram_config.get('bot_token'), telegram_config.get('chat_id'), message)
-            logger.info(f"Trade-Eröffnungsprozess abgeschlossen (SL gesetzt{tsl_status}).")
-
-
-        except Exception as e:
-            # KRITISCHER FEHLERFALL: Position ist möglicherweise offen, aber ungeschützt.
-            logger.error(f"FEHLER beim Eröffnen/SL-Platzierung: {e}")
-
-            final_position_after_error = exchange.fetch_open_positions(symbol)
-            if final_position_after_error:
-                # Schließen der Position, da wir nicht garantieren können, dass der SL sitzt
-                logger.critical("Position konnte nicht geschützt werden! Starte Notfallschließung.")
-                housekeeper_routine(exchange, symbol, logger) # Schließt die Position
-
-                fallback_msg = (f"❌ *Kritisch: Position geschlossen*\n"
-                                f"SL-Platzierung/Trade-Eröffnung fehlgeschlagen für *{symbol}*. "
-                                f"Die Position wurde ZUR SICHERHEIT geschlossen.")
-                send_message(telegram_config.get('bot_token'), telegram_config.get('chat_id'), fallback_msg)
-            else:
-                logger.info("Keine Position nach Fehler gefunden. Alles geschlossen.")
-
-
-def full_trade_cycle(exchange, model, scaler, params, telegram_config, logger):
-    """Der Haupt-Handelszyklus für eine einzelne Strategie."""
+# --------------------------------------------------------------------------- #
+# Haupt-Handelszyklus
+# --------------------------------------------------------------------------- #
+def full_trade_cycle(exchange: Exchange, params: dict, telegram_config: dict, logger):
+    """
+    Der Haupt-Handelszyklus für die Fibonacci Bollinger Bands + Volume Profile Strategie.
+    """
     symbol = params['market']['symbol']
     timeframe = params['market'].get('timeframe', 'unknown')
     
-    # Wichtige Logs gehen zu print() damit sie in cron.log erscheinen
     print("")
     print("╔" + "═" * 58 + "╗")
     print(f"║  🤖 KBOT HANDELSZYKLUS - {symbol} ({timeframe})")
+    print(f"║  📐 Strategie: Fibonacci Bollinger Bands + Volume Profile")
     print("╚" + "═" * 58 + "╝")
     
     try:
@@ -523,7 +490,7 @@ def full_trade_cycle(exchange, model, scaler, params, telegram_config, logger):
             if not housekeeper_routine(exchange, symbol, logger):
                 print("❌ Housekeeper konnte die Umgebung nicht säubern. Breche ab.")
                 return
-            check_and_open_new_position(exchange, model, scaler, params, telegram_config, logger)
+            check_and_open_new_position(exchange, params, telegram_config, logger)
         else:
             pos_side = position.get('side', 'unknown')
             pos_size = position.get('contracts', 0)
@@ -533,7 +500,7 @@ def full_trade_cycle(exchange, model, scaler, params, telegram_config, logger):
             print(f"📋 Status: Offene {pos_side.upper()} Position gefunden")
             print(f"   → Größe: {pos_size} Kontrakte @ {entry_price}")
             print(f"   → Unrealisierter PnL: {pnl_emoji} {unrealized_pnl:.2f} USDT")
-            print(f"   → Warte auf SL/TSL/TP-Trigger...")
+            print(f"   → Warte auf SL/TP-Trigger...")
         
         print("─" * 60)
 

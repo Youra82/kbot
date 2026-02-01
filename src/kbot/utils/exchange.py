@@ -149,6 +149,28 @@ class Exchange:
         order_params.update(params)
         return self._with_rate_limit_retry(self.exchange.create_order, symbol, 'market', side, rounded_amount, params=order_params)
 
+    def create_stop_loss_order(self, symbol, side, amount, stop_price, params={}):
+        """
+        Erstellt eine Stop-Loss Order (Trigger Market Order mit reduceOnly).
+        - symbol: Handelspaar z.B. 'PEPE/USDT:USDT'
+        - side: 'sell' für Long-Position SL, 'buy' für Short-Position SL
+        - amount: Kontraktmenge
+        - stop_price: Trigger-Preis für Stop-Loss
+        """
+        logger.info(f"Erstelle SL Order: {symbol} {side} @ {stop_price}")
+        return self.place_trigger_market_order(symbol, side, amount, stop_price, {'reduceOnly': True, **params})
+
+    def create_take_profit_order(self, symbol, side, amount, take_profit_price, params={}):
+        """
+        Erstellt eine Take-Profit Order (Trigger Market Order mit reduceOnly).
+        - symbol: Handelspaar z.B. 'PEPE/USDT:USDT'
+        - side: 'sell' für Long-Position TP, 'buy' für Short-Position TP
+        - amount: Kontraktmenge
+        - take_profit_price: Trigger-Preis für Take-Profit
+        """
+        logger.info(f"Erstelle TP Order: {symbol} {side} @ {take_profit_price}")
+        return self.place_trigger_market_order(symbol, side, amount, take_profit_price, {'reduceOnly': True, **params})
+
     def fetch_open_positions(self, symbol):
         positions = self._with_rate_limit_retry(self.exchange.fetch_positions, [symbol])
         open_positions = [p for p in positions if p.get('contracts', 0.0) > 0.0]

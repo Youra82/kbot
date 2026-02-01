@@ -244,17 +244,41 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
         avg_price = order.get('average') or order.get('price') or current_price
         entry_price = float(avg_price) if avg_price else current_price
         
-        # SL/TP Orders setzen
+        # SL/TP Sides
         sl_side = 'sell' if side == 'long' else 'buy'
         tp_side = sl_side
         
-        # Stop-Loss
-        exchange.create_stop_loss_order(symbol, sl_side, contracts, stop_loss)
-        logger.info(f"Stop-Loss gesetzt: {stop_loss:.2f}")
+        # ===== TRIGGER MARKET ORDER für Static SL =====
+        sl_rounded = float(exchange.exchange.price_to_precision(symbol, stop_loss))
+        exchange.place_trigger_market_order(symbol, sl_side, contracts, sl_rounded, {'reduceOnly': True})
+        logger.info(f"Stop-Loss (Trigger Order) gesetzt: {stop_loss:.2f}")
         
-        # Take-Profit
-        exchange.create_take_profit_order(symbol, tp_side, contracts, take_profit)
-        logger.info(f"Take-Profit gesetzt: {take_profit:.2f}")
+        # ===== TRIGGER MARKET ORDER für TP =====
+        tp_rounded = float(exchange.exchange.price_to_precision(symbol, take_profit))
+        exchange.place_trigger_market_order(symbol, tp_side, contracts, tp_rounded, {'reduceOnly': True})
+        logger.info(f"Take-Profit (Trigger Order) gesetzt: {take_profit:.2f}")
+        
+        # ===== TRAILING STOP LOSS =====
+        # Aktiviert sich bei 1.5x RR vom Entry
+        sl_distance = abs(entry_price - stop_loss)
+        act_rr = params.get('risk', {}).get('trailing_stop_activation_rr', 1.5)
+        callback_pct = params.get('risk', {}).get('trailing_stop_callback_rate_pct', 0.5) / 100.0
+        
+        if side == 'long':
+            activation_price = entry_price + sl_distance * act_rr
+        else:
+            activation_price = entry_price - sl_distance * act_rr
+        
+        activation_rounded = float(exchange.exchange.price_to_precision(symbol, activation_price))
+        
+        tsl = exchange.place_trailing_stop_order(
+            symbol, sl_side, contracts, activation_rounded, callback_pct, {'reduceOnly': True}
+        )
+        
+        if tsl:
+            logger.info(f"Trailing-Stop aktiviert @ {activation_price:.2f} (Callback: {callback_pct*100:.2f}%)")
+        else:
+            logger.warning("Trailing-Stop fehlgeschlagen - läuft mit Static SL")
         
         # Telegram Benachrichtigung
         channel_state = engine.get_channel_state(df)
@@ -273,7 +297,8 @@ def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
         send_message(telegram_config['bot_token'], telegram_config['chat_id'], msg)
         
         print(f"\n✅ POSITION ERÖFFNET: {side.upper()} @ {entry_price:.2f}")
-        print(f"   SL: {stop_loss:.2f} | TP: {take_profit:.2f}\n")
+        print(f"   SL: {stop_loss:.2f} | TP: {take_profit:.2f}")
+        print(f"   TSL aktiviert @ {activation_price:.2f}\n")
         
         return True
         

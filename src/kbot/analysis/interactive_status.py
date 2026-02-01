@@ -257,6 +257,23 @@ def main():
     except ValueError:
         start_capital = 1000
     
+    # Telegram-Option
+    send_telegram = input("Telegram versenden? (j/n) [Standard: n]: ").strip().lower() in ['j', 'y', 'yes']
+    
+    # Lade Telegram-Konfiguration
+    telegram_config = {}
+    if send_telegram:
+        try:
+            with open(PROJECT_ROOT / "secret.json", "r", encoding="utf-8") as f:
+                secrets = json.load(f)
+            telegram_config = secrets.get('telegram', {})
+            if not telegram_config.get('bot_token') or not telegram_config.get('chat_id'):
+                print("⚠️  Telegram bot_token oder chat_id fehlt in secret.json")
+                send_telegram = False
+        except Exception as e:
+            print(f"⚠️  Konnte secret.json nicht lesen: {e}")
+            send_telegram = False
+    
     # Erstelle Charts
     print(f"\n📊 Erstelle {len(selected)} Chart(s)...\n")
     
@@ -271,7 +288,7 @@ def main():
         
         try:
             out = make_plot(symbol, timeframe, config, start_date, end_date, start_capital)
-            outputs.append(out)
+            outputs.append((out, symbol, timeframe))
         except Exception as e:
             print(f"   ❌ Fehler: {e}")
             continue
@@ -282,8 +299,26 @@ def main():
         print("✅ Alle Charts wurden erstellt!")
         print(f"{'='*60}")
         print("\nGespeicherte Charts:")
-        for p in outputs:
+        for p, sym, tf in outputs:
             print(f"  📊 {p}")
+        
+        # Telegram versenden
+        if send_telegram and telegram_config:
+            print("\n📤 Sende Charts via Telegram...")
+            try:
+                from kbot.utils.telegram import send_document
+                bot_token = telegram_config.get('bot_token')
+                chat_id = telegram_config.get('chat_id')
+                
+                for p, sym, tf in outputs:
+                    try:
+                        send_document(bot_token, chat_id, str(p), caption=f"📊 KBot Chart: {sym} ({tf})")
+                        print(f"   ✅ Gesendet: {sym} ({tf})")
+                    except Exception as e:
+                        print(f"   ❌ Fehler beim Senden von {sym}: {e}")
+            except Exception as e:
+                print(f"❌ Telegram-Modul nicht verfügbar: {e}")
+        
         print("\n💡 HTML im Browser öffnen für interaktive Zoom/Pan-Funktionen")
     else:
         print("\n❌ Keine Charts erzeugt.")

@@ -174,19 +174,13 @@ def main():
             print(f"Fehler beim Initialisieren der Exchange: {e}")
             return
 
-        tf_map_seconds = {'1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '6h':21600, '12h':43200, '1d':86400}
-        sleep_seconds = tf_map_seconds.get(args.timeframe, 3600)
-
-        print(f"Starte Live-Loop für {args.symbol} ({args.timeframe}). Intervall ≈ {sleep_seconds}s")
+        print(f"Starte Live-Zyklus für {args.symbol} ({args.timeframe})")
         try:
-            while True:
-                try:
-                    full_trade_cycle(exchange, model, scaler, params, telegram_config, logger)
-                except Exception as e:
-                    logger.error(f"Fehler im Handelszyklus: {e}", exc_info=True)
-                time.sleep(sleep_seconds)
-        except KeyboardInterrupt:
-            print('\nLive-Run durch Benutzer gestoppt.')
+            # Führe EINEN Handelszyklus aus (kein Loop - Cron ruft periodisch auf)
+            full_trade_cycle(exchange, model, scaler, params, telegram_config, logger)
+            print(f"Live-Zyklus für {args.symbol} abgeschlossen.")
+        except Exception as e:
+            logger.error(f"Fehler im Handelszyklus: {e}", exc_info=True)
         return
 
     print("\nKBot Backtest (Kanalstrategie)")

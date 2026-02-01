@@ -218,7 +218,7 @@ def main():
             study.optimize(
                 objective,
                 n_trials=args.trials,
-                n_jobs=args.jobs if args.jobs > 0 else None,
+                n_jobs=args.jobs if args.jobs > 0 else 1,
                 show_progress_bar=True
             )
             

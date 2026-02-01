@@ -21,7 +21,7 @@ echo -e "=======================================================${NC}"
 
 # --- Pfade definieren ---
 VENV_PATH=".venv/bin/activate"
-OPTIMIZER="src/kbot/analysis/optimizer_new.py"
+OPTIMIZER="src/kbot/analysis/optimizer.py"
 
 # --- Umgebung aktivieren ---
 if [ ! -f "$VENV_PATH" ]; then

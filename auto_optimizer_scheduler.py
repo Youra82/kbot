@@ -180,10 +180,27 @@ def run_optimization() -> bool:
     
     symbols = extract_symbols_timeframes(settings, "symbols")
     timeframes = extract_symbols_timeframes(settings, "timeframes")
-    lookback_days = opt_settings.get("lookback_days", 365)
+    raw_lookback = opt_settings.get("lookback_days", 365)
     start_capital = opt_settings.get("start_capital", 1000)
     n_cores = opt_settings.get("cpu_cores", -1)
     n_trials = opt_settings.get("num_trials", 500)
+
+    # Support automatic lookback selection when configured as "auto"
+    if isinstance(raw_lookback, str) and raw_lookback.lower() in ("auto", "a"):
+        tf_ranges = {
+            "15m": (30, 90), "30m": (30, 90),
+            "1h": (180, 365), "2h": (180, 365),
+            "4h": (365, 730), "6h": (365, 730),
+            "1d": (730, 1825), "1w": (730, 1825)
+        }
+        midpoints = []
+        for tf in timeframes:
+            lo, hi = tf_ranges.get(tf, (365, 365))
+            midpoints.append((lo + hi) // 2)
+        lookback_days = max(midpoints) if midpoints else 365
+        log(f"Auto lookback: Timeframes: {', '.join(timeframes)} => lookback_days: {lookback_days}")
+    else:
+        lookback_days = int(raw_lookback)
     
     constraints = opt_settings.get("constraints", {})
     max_dd = constraints.get("max_drawdown_pct", 30)

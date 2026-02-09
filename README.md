@@ -251,6 +251,21 @@ grep 'ERROR' logs/*.log           # Fehler prüfen
 
 ---
 
+### Optimization Settings
+
+- `lookback_days`: integer or `"auto"` (recommended). When set to `auto` the scheduler picks a suitable default based on chosen timeframes:
+
+| Timeframe | Recommended lookback (days) |
+|-----------|-----------------------------|
+| 15m, 30m  | 30 - 90                     |
+| 1h, 2h    | 180 - 365                   |
+| 4h, 6h    | 365 - 730                   |
+| 1d, 1w    | 730 - 1825                  |
+
+When `auto`, the scheduler uses the midpoint for each timeframe and selects the maximum across selected timeframes to ensure sufficient historical coverage.
+
+---
+
 ## 📋 Systemanforderungen
 
 ### Hardware

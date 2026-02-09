@@ -215,7 +215,6 @@ def run_optimization() -> bool:
         "--trials", str(n_trials),
         "--min_pnl", str(min_pnl),
         "--mode", "strict",
-        "--threshold", "0.6"
     ]
     
     log(f"")

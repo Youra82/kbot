@@ -251,6 +251,20 @@ grep 'ERROR' logs/*.log           # Fehler prüfen
 
 ---
 
+### Optimization: Lookback (auto)
+
+You can set `"optimization_settings": { "lookback_days": "auto" }` to have the scheduler automatically choose a suitable historical lookback based on the timeframes that will be optimized. The defaults are:
+
+| Timeframe | Default lookback (days) |
+|-----------|-------------------------:|
+| 15m, 30m  | 60                      |
+| 1h, 2h    | 365                     |
+| 4h, 6h    | 730                     |
+| 1d, 1w    | 1095                    |
+
+When `auto` is selected, the scheduler uses the maximum default across the chosen timeframes so that all timeframes have sufficient history.
+
+
 ## 📋 Systemanforderungen
 
 ### Hardware

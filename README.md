@@ -405,6 +405,42 @@ Sauber: SIGTERM an alle Optimizer-Prozesse senden
 sudo pkill -f 'src/kbot/analysis/optimizer.py'
 ```
 
+### Optimizer manuell triggern
+
+Um eine sofortige Optimierung zu starten (ignoriert das Zeitintervall):
+
+```bash
+# Letzten Optimierungszeitpunkt löschen (erzwingt Neustart)
+rm ~/kbot/data/cache/.last_optimization_run
+
+# Master Runner starten (prüft ob Optimierung fällig ist)
+cd ~/kbot && .venv/bin/python3 master_runner.py
+```
+
+Optimizer-Logs überwachen
+
+```bash
+# Optimizer-Log live mitverfolgen
+tail -f ~/kbot/logs/optimizer_output.log
+
+# Letzte 50 Zeilen des Optimizer-Logs anzeigen
+tail -50 ~/kbot/logs/optimizer_output.log
+```
+
+Optimierungsergebnisse ansehen
+
+```bash
+# Beste gefundene Parameter anzeigen (erste 50 Zeilen)
+cat ~/kbot/artifacts/results/optimization_results.json | head -50
+```
+
+Optimizer-Prozess überwachen
+
+```bash
+# Prüfen ob Optimizer gerade läuft (aktualisiert jede Sekunde)
+watch -n 1 "ps aux | grep optimizer"
+```
+
 ## � Interaktives Pipeline-Script
 
 Das **`run_pipeline.sh`** Script automatisiert die Parameter-Optimierung für deine Handelsstrategien. Es führt einen Grid-Search über die Fibonacci Bollinger Bands Parameter durch und findet die optimalen Einstellungen für dein ausgewähltes Symbol und Timeframe.

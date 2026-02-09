@@ -251,21 +251,6 @@ grep 'ERROR' logs/*.log           # Fehler prüfen
 
 ---
 
-### Optimization Settings
-
-- `lookback_days`: integer or `"auto"` (recommended). When set to `auto` the scheduler picks a suitable default based on chosen timeframes:
-
-| Timeframe | Recommended lookback (days) |
-|-----------|-----------------------------|
-| 15m, 30m  | 30 - 90                     |
-| 1h, 2h    | 180 - 365                   |
-| 4h, 6h    | 365 - 730                   |
-| 1d, 1w    | 730 - 1825                  |
-
-When `auto`, the scheduler uses the midpoint for each timeframe and selects the maximum across selected timeframes to ensure sufficient historical coverage.
-
----
-
 ## 📋 Systemanforderungen
 
 ### Hardware
@@ -410,50 +395,6 @@ Logverzeichnis anlegen:
 
 ```bash
 mkdir -p /home/ubuntu/kbot/logs
-```
-
-### Optimierungen stoppen
-
-Sauber: SIGTERM an alle Optimizer-Prozesse senden
-
-```bash
-sudo pkill -f 'src/kbot/analysis/optimizer.py'
-```
-
-### Optimizer manuell triggern
-
-Um eine sofortige Optimierung zu starten (ignoriert das Zeitintervall):
-
-```bash
-# Letzten Optimierungszeitpunkt löschen (erzwingt Neustart)
-rm ~/kbot/data/cache/.last_optimization_run
-
-# Master Runner starten (prüft ob Optimierung fällig ist)
-cd ~/kbot && .venv/bin/python3 master_runner.py
-```
-
-Optimizer-Logs überwachen
-
-```bash
-# Optimizer-Log live mitverfolgen
-tail -f ~/kbot/logs/optimizer_output.log
-
-# Letzte 50 Zeilen des Optimizer-Logs anzeigen
-tail -50 ~/kbot/logs/optimizer_output.log
-```
-
-Optimierungsergebnisse ansehen
-
-```bash
-# Beste gefundene Parameter anzeigen (erste 50 Zeilen)
-cat ~/kbot/artifacts/results/optimization_results.json | head -50
-```
-
-Optimizer-Prozess überwachen
-
-```bash
-# Prüfen ob Optimizer gerade läuft (aktualisiert jede Sekunde)
-watch -n 1 "ps aux | grep optimizer"
 ```
 
 ## � Interaktives Pipeline-Script

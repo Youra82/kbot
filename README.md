@@ -397,6 +397,14 @@ Logverzeichnis anlegen:
 mkdir -p /home/ubuntu/kbot/logs
 ```
 
+### Optimierungen stoppen
+
+Sauber: SIGTERM an alle Optimizer-Prozesse senden
+
+```bash
+sudo pkill -f 'src/kbot/analysis/optimizer.py'
+```
+
 ## � Interaktives Pipeline-Script
 
 Das **`run_pipeline.sh`** Script automatisiert die Parameter-Optimierung für deine Handelsstrategien. Es führt einen Grid-Search über die Fibonacci Bollinger Bands Parameter durch und findet die optimalen Einstellungen für dein ausgewähltes Symbol und Timeframe.

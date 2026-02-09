@@ -95,7 +95,7 @@ def create_safe_filename(symbol: str, timeframe: str) -> str:
 
 def save_config(symbol: str, timeframe: str, best_params: dict, 
                 result: dict, start_date: str, end_date: str):
-    """Speichert die beste Konfiguration."""
+    """Speichert die beste Konfiguration. Dateiname enthält einen Zeitstempel zur Eindeutigkeit."""
     
     safe_filename = create_safe_filename(symbol, timeframe)
     config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
@@ -134,11 +134,13 @@ def save_config(symbol: str, timeframe: str, best_params: dict,
         }
     }
     
-    config_path = os.path.join(config_dir, f"config_{safe_filename}.json")
+    timestamp = datetime.now().strftime('%Y%m%dT%H%M%S')
+    config_path = os.path.join(config_dir, f"config_{safe_filename}_{timestamp}.json")
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=4)
     
-    print(f"\n✅ Konfiguration gespeichert: {config_path}")
+    pid = os.getpid()
+    print(f"\n✅ Konfiguration gespeichert: {config_path} (PID: {pid})")
     return config_path
 
 
@@ -265,9 +267,18 @@ def main():
             print(f"   Profit Factor: {final_result.get('profit_factor', 0):.2f}")
             print(f"   Endkapital:    ${final_result['end_capital']:.2f}")
             
-            # Config speichern
-            save_config(symbol, timeframe, best.params, final_result,
-                       args.start_date, args.end_date)
+            # Config speichern — nur wenn Trades vorhanden sind
+            trades = final_result.get('trades_count', 0)
+            if trades <= 0:
+                print(f"\n⚠️ Keine Trades im finalen Backtest für {symbol} ({timeframe}). Konfiguration wird nicht gespeichert.")
+            else:
+                saved = save_config(symbol, timeframe, best.params, final_result,
+                           args.start_date, args.end_date)
+                # Optional: send Telegram with saved configuration
+                try:
+                    print(f"ℹ️ Konfiguration gespeichert: {saved}")
+                except Exception:
+                    pass
     
     print("\n" + "=" * 60)
     print("   ✅ Optimierung abgeschlossen!")

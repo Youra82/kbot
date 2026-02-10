@@ -240,45 +240,60 @@ def run_optimization() -> bool:
     log(f"╚══════════════════════════════════════════════════════════════╝")
     log(f"")
 
-    # Send a single start notification (if enabled)
+    # Prevent concurrent optimizer runs by using an atomic lock file create
+    lock_file = LAST_RUN_FILE.parent / ".optimization_lock"
     try:
-        if opt_settings.get("notify_on_start", True):
-            msg = (
-                f"🔄 KBot Auto-Optimierung START\n"
-                f"Symbole: {', '.join(symbols)}\n"
-                f"Timeframes: {', '.join(timeframes)}\n"
-                f"Trials pro Kombination: {n_trials}\n"
-                f"Zeitraum: {start_date} bis {end_date}"
-            )
-            send_telegram(msg)
-    except Exception as e:
-        log(f"Warnung: Konnte Start-Nachricht nicht senden: {e}")
-    
-    try:
-        # Prevent concurrent optimizer runs by using a lock file
-        lock_file = LAST_RUN_FILE.parent / ".optimization_lock"
-        if lock_file.exists():
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        # Try to create lock file atomically; fail if exists
+        fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(fd, 'w') as f:
+            f.write(str(os.getpid()))
+        got_lock = True
+        log(f"Info: Lock-File erstellt (Scheduler PID: {os.getpid()}). Ich starte Optimizer.")
+    except FileExistsError:
+        got_lock = False
+        try:
+            with open(lock_file, 'r') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+            log(f"Info: Optimizer läuft bereits (PID: {pid}). Überspringe neuen Start.")
+            return False
+        except OSError:
+            log("Info: Gefundene Lock-Datei veraltet. Entferne und versuche erneut.")
             try:
-                with open(lock_file, 'r') as f:
-                    pid = int(f.read().strip())
-                # Check if pid is alive
-                os.kill(pid, 0)
-                log(f"Info: Optimizer läuft bereits (PID: {pid}). Überspringe neuen Start.")
-                return False
-            except OSError:
-                # Stale lock file
-                log("Info: Gefundene Lock-Datei veraltet. Entferne und starte neu.")
-                try:
-                    lock_file.unlink()
-                except:
-                    pass
+                lock_file.unlink()
             except Exception:
                 pass
+            # Retry once
+            try:
+                fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                with os.fdopen(fd, 'w') as f:
+                    f.write(str(os.getpid()))
+                got_lock = True
+                log(f"Info: Lock-File erstellt nach Entfernen (Scheduler PID: {os.getpid()}).")
+            except Exception:
+                log("Warnung: Konnte Lock-File nicht erstellen. Überspringe Start.")
+                return False
 
-        process = subprocess.Popen(cmd, cwd=str(SCRIPT_DIR))
-        # write child pid to lock file
+    # Only the process holding the lock sends the start notification
+    if got_lock:
         try:
-            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            if opt_settings.get("notify_on_start", True):
+                msg = (
+                    f"🔄 KBot Auto-Optimierung START\n"
+                    f"Symbole: {', '.join(symbols)}\n"
+                    f"Timeframes: {', '.join(timeframes)}\n"
+                    f"Trials pro Kombination: {n_trials}\n"
+                    f"Zeitraum: {start_date} bis {end_date}"
+                )
+                send_telegram(msg)
+        except Exception as e:
+            log(f"Warnung: Konnte Start-Nachricht nicht senden: {e}")
+
+    try:
+        process = subprocess.Popen(cmd, cwd=str(SCRIPT_DIR))
+        # write child pid to lock file (overwrite with child PID)
+        try:
             with open(lock_file, 'w') as f:
                 f.write(str(process.pid))
         except Exception:

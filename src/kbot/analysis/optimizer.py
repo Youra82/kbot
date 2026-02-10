@@ -217,6 +217,14 @@ def main():
     print(f"   Modus:        {args.mode}")
     print("=" * 60)
     
+    # Collector for per-run notifications
+    notifications = {
+        'saved': [],
+        'skipped_worse': [],
+        'skipped_zero_trades': [],
+        'errors': []
+    }
+
     for symbol in symbols:
         for timeframe in timeframes:
             print(f"\n{'─' * 50}")
@@ -311,23 +319,43 @@ def main():
             best_existing_pnl = get_best_existing_pnl(safe_filename)
 
             if trades <= 0:
-                msg = f"⚠️ [{run_id}] Keine Trades im finalen Backtest für {symbol} ({timeframe}). Konfiguration wird nicht gespeichert."
+                msg = f"⚠️ [{run_id}] Keine Trades im finalen Backtest für {symbol} ({timeframe})."
                 print(msg)
-                # Telegram warnen
-                send_warning_telegram(f"KBot Optimizer: {msg}")
+                notifications['skipped_zero_trades'].append({'symbol': symbol, 'timeframe': timeframe})
             else:
                 if best_existing_pnl is not None and final_pnl <= best_existing_pnl:
                     msg = f"⚠️ [{run_id}] Ergebnis nicht besser als bestehende Konfiguration ({final_pnl}% <= {best_existing_pnl}%). Überspringe Speichern für {symbol} ({timeframe})."
                     print(msg)
-                    send_warning_telegram(f"KBot Optimizer: {msg}")
+                    notifications['skipped_worse'].append({'symbol': symbol, 'timeframe': timeframe, 'final_pnl': final_pnl, 'best_existing_pnl': best_existing_pnl})
                 else:
                     saved = save_config(symbol, timeframe, best.params, final_result,
                                args.start_date, args.end_date)
                     print(f"[{run_id}] ✅ Konfiguration gespeichert: {saved}")
-                    # Telegram Info
-                    send_warning_telegram(f"✅ KBot Optimizer: Neue Konfiguration gespeichert für {symbol} ({timeframe})\nDatei: {saved}\nPnL: {final_pnl}%")
+                    notifications['saved'].append({'symbol': symbol, 'timeframe': timeframe, 'file': saved, 'final_pnl': final_pnl})
 
     
+    # Write run summary to artifacts for scheduler to pick up
+    try:
+        runs_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'optimizer_runs')
+        os.makedirs(runs_dir, exist_ok=True)
+        summary = {
+            'run_id': run_id,
+            'start_date': args.start_date,
+            'end_date': args.end_date,
+            'symbols': symbols,
+            'timeframes': timeframes,
+            'saved': notifications['saved'],
+            'skipped_worse': notifications['skipped_worse'],
+            'skipped_zero_trades': notifications['skipped_zero_trades'],
+            'errors': notifications['errors']
+        }
+        summary_path = os.path.join(runs_dir, f"optimizer_summary_{run_id}.json")
+        with open(summary_path, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2)
+        print(f"\n🔔 Run summary written: {summary_path}")
+    except Exception as e:
+        print(f"Fehler beim Schreiben der Run-Summary: {e}")
+
     print("\n" + "=" * 60)
     print("   ✅ Optimierung abgeschlossen!")
     print("=" * 60 + "\n")

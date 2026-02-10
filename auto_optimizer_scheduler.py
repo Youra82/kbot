@@ -241,18 +241,77 @@ def run_optimization() -> bool:
     log(f"")
     
     try:
+        # Prevent concurrent optimizer runs by using a lock file
+        lock_file = LAST_RUN_FILE.parent / ".optimization_lock"
+        if lock_file.exists():
+            try:
+                with open(lock_file, 'r') as f:
+                    pid = int(f.read().strip())
+                # Check if pid is alive
+                os.kill(pid, 0)
+                log(f"Info: Optimizer läuft bereits (PID: {pid}). Überspringe neuen Start.")
+                return False
+            except OSError:
+                # Stale lock file
+                log("Info: Gefundene Lock-Datei veraltet. Entferne und starte neu.")
+                try:
+                    lock_file.unlink()
+                except:
+                    pass
+            except Exception:
+                pass
+
         process = subprocess.Popen(cmd, cwd=str(SCRIPT_DIR))
+        # write child pid to lock file
+        try:
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(lock_file, 'w') as f:
+                f.write(str(process.pid))
+        except Exception:
+            pass
+
         process.wait()
         returncode = process.returncode
-        
+        # remove lock file
+        try:
+            if lock_file.exists():
+                lock_file.unlink()
+        except Exception:
+            pass
+
         duration = int((time.time() - start_time) / 60)
         save_last_run_time()
-        
+
+        # On success, try to load latest optimizer summary and send single Telegram
         if returncode == 0:
             log(f"✅ OPTIMIERUNG ERFOLGREICH ({duration} Minuten)")
-            if opt_settings.get("send_telegram_on_completion", True):
-                interval_days = opt_settings.get("schedule", {}).get("interval_days", 7)
-                send_telegram(f"✅ KBot Auto-Optimierung ABGESCHLOSSEN\n\nDauer: {duration} Minuten\nSymbole: {', '.join(symbols)}\nTimeframes: {', '.join(timeframes)}")
+            # try to find latest summary file
+            try:
+                runs_dir = SCRIPT_DIR / 'artifacts' / 'optimizer_runs'
+                latest = None
+                if runs_dir.exists():
+                    files = sorted(runs_dir.glob('optimizer_summary_*.json'), key=os.path.getmtime, reverse=True)
+                    if files:
+                        latest = files[0]
+                saved_count = skipped_worse = skipped_zero = 0
+                saved_files = []
+                if latest:
+                    with open(latest, 'r', encoding='utf-8') as f:
+                        summary = json.load(f)
+                        saved = summary.get('saved', [])
+                        skipped_worse_list = summary.get('skipped_worse', [])
+                        skipped_zero_list = summary.get('skipped_zero_trades', [])
+                        saved_count = len(saved)
+                        skipped_worse = len(skipped_worse_list)
+                        skipped_zero = len(skipped_zero_list)
+                        saved_files = [s.get('file') for s in saved]
+                if opt_settings.get("send_telegram_on_completion", True):
+                    msg = f"✅ KBot Auto-Optimierung ABGESCHLOSSEN\n\nDauer: {duration} Minuten\nSymbole: {', '.join(symbols)}\nTimeframes: {', '.join(timeframes)}\nSaved: {saved_count} configs, Skipped (worse): {skipped_worse}, Skipped (0 trades): {skipped_zero}"
+                    if saved_files:
+                        msg += f"\nBeispiele: {', '.join(saved_files[:3])}"
+                    send_telegram(msg)
+            except Exception as e:
+                log(f"Warnung: Konnte Summary nicht laden: {e}")
             return True
         else:
             log(f"❌ OPTIMIERUNG FEHLGESCHLAGEN (Exit-Code: {returncode})")

@@ -17,85 +17,66 @@
 
 ## 📊 Übersicht
 
-KBot ist ein Trend-Following Breakout-System, das **Volume Channel Flow** nutzt. Der Bot berechnet dynamische Kanäle basierend auf ATR und analysiert das Volume-Profil sowie Volume-Delta für robuste Einstiege. Die Strategie funktioniert auf allen Timeframes und handelt Long/Short bei Ausbrüchen aus dem Kanal.
+KBot ist ein modularer **Volume Channel Flow**-Trading-Stack mit Fokus auf robustes Breakout‑Trading, adaptiver Parameter‑Optimierung und automatisiertem Backtesting. Kernelemente sind dynamische ATR‑Kanäle, Preis‑Volume Profile und Volumen‑Confirmation; ergänzt um eine Risk‑Engine, automatische Positionsberechnung und eine Optuna‑basierte Optimization‑Pipeline.
 
 ### 🧭 Trading-Logik (Kurzfassung)
-- **ATR-Kanal**: Dynamische obere/untere Grenzen (ATR × Channel_Width um HL2 = Typical Price)
-- **Volume Profile**: Integration in 30 Kerzen-Segmente (POC = Point of Control, Value Area)
-- **Volume Delta**: Akkumulation/Distribution für Confirmation (bullish/bearish Volume)
-- **Entry Long**: Close > Channel Top + (optional) positive Volume Delta
-- **Entry Short**: Close < Channel Bottom + (optional) negative Volume Delta
-- **Stop-Loss**: Gegenüberliegende Kanal-Grenze
-- **Take-Profit**: Entry + (SL-Distance × Risk-Reward-Ratio)
+- **ATR-Kanal**: Dynamische obere/untere Grenzen (ATR × channel_width rund um Typical Price)
+- **Volume Profile**: Preis‑Zonen (POC, Value Area) für Konfluenz‑Checks
+- **Volume Delta**: Volumen‑Delta zur Signalbestätigung (optional konfigurierbar)
+- **Entry Long**: Breakout über Channel Top kombiniert mit Volume/POC‑Konfluenz
+- **Entry Short**: Breakout unter Channel Bottom kombiniert mit Volume/POC‑Konfluenz
+- **Stop-Loss**: Dynamisch (z. B. Gegenüberliegende Kanal‑Grenze oder ATR‑basierter SL)
+- **Take-Profit**: Flexible Zielsetzung (RR‑Verhältnis, Teil‑Schließungen bei POC/Levels)
+- **Sicherheits-Checks**: Minimum Trades, minimale PnL/Win‑Rate, und keine Speicherung bei 0 Trades
 
-### 🔍 Strategie-Visualisierung
+### Wichtige Modernisierungen
+- **Adaptive Lookback**: `lookback_days` kann `"auto"` sein (wahl des Rückblicks pro Timeframe)
+- **Optimierungshygiene**: Speichern nur bei besseren Backtests; Timestamped Configs; Run‑Summaries
+- **Saubere Automatisierung**: Locking verhindert Überlappungen; Scheduler sendet **eine** Start- und **eine** Abschlussnachricht per Telegram
+- **Monitoring**: Run‑Summaries in `artifacts/optimizer_runs/` und konsolidierte Telegram‑Summary am Ende
+
+### Visualisierung (Kurzübersicht)
 ```mermaid
 flowchart LR
-    A["OHLCV Marktdaten"]
-    B["ATR Berechnung<br/>(Period=200)"]
-    C["Channel Grenzen<br/>Top/Bottom"]
-    D["Volume Profile<br/>POC, Value Area"]
-    E["Volume Delta<br/>Confirmation"]
-    F["Breakout Signal<br/>Long/Short"]
-    G["Risk Engine<br/>SL/TP"]
-    H["Order Router (CCXT)"]
-
-    A --> B --> C
-    A --> D --> E
-    C --> F
-    E --> F
-    F --> G --> H
+  A[OHLCV Daten] --> B(ATR Kanal)
+  A --> C(Volume Profile)
+  C --> D(POC / Value Area)
+  A --> E(Volume Delta)
+  B & D & E --> F(Breakout + Konfluenz)
+  F --> G(Risk Engine)
+  G --> H(Order Router / CCXT)
 ```
-
-### 📈 Trade-Beispiel (Entry/SL/TP)
-- **Channel**: ATR(200) berechnet; Channel Top = 50000, Bottom = 48000
-- **Breakout**: Price steigt über 50000 mit positivem Volume Delta → Long Signal
-- **Entry**: Automatischer Einstieg bei Channel Top Durchbruch
-- **SL**: Bei 48000 (Channel Bottom)
-- **TP**: Entry + (2000 × 2.0 RR) = 54000
-- **Trend**: Klare Richtungsbias durch Channel Position
-- **Entry Long**: Automatischer Einstieg bei Konfluenz
-- **TP1**: Bei PoC (Point of Control) - 50% Position schließen
-- **TP2**: Bei upper_6 - Rest schließen
-- **SL**: Unter lower_1
 
 ---
 
 ## 🚀 Features
 
 ### Trading Features
-- ✅ **Volume Channel Flow** Strategie - ATR-basierte dynamische Kanäle
-- ✅ **Volume Profile Integration** - POC (Point of Control), Value Area
-- ✅ **Volume Delta Confirmation** - Bullish/Bearish Volumen-Akkumulation
-- ✅ **Breakout-Trading** - Long bei Kanal-Ausbruch nach oben, Short nach unten
-- ✅ **Long & Short Trading** - Bidirektionales Trend-Following
-- ✅ Unterstützt mehrere Kryptowährungspaare (BTC, ETH, SOL, ADA, DOGE, XRP, etc.)
-- ✅ Flexible Timeframe-Unterstützung (15m, 30m, 1h, 4h, 6h, 1d, 1w)
-- ✅ Automatische Positionsgröße basierend auf verfügbarem Kapital und Leverage
-- ✅ ATR-basiertes Stop-Loss und Take-Profit Management
-- ✅ Optuna-basierte Parameter-Optimierung
+- ✅ **Volume Channel Flow** mit ATR‑Kanälen und Volume‑Profile‑Konfluenz
+- ✅ **Volume Delta Confirmation** (optional)
+- ✅ **Adaptive Lookback** (automatische Wahl des Datenzeitraums pro Timeframe)
+- ✅ **Long & Short** mit dynamischem Risk‑Management
+- ✅ **Optimierungs‑Pipeline** (Optuna) mit konsolidierten Run‑Summaries
+- ✅ **Safety‑Checks** (keine Speicherung bei 0 Trades, Vergleich mit existierenden Ergebnissen)
 
-### Technical Features
+### Technische Features
 - ✅ CCXT Integration (Bitget, Binance, Kraken, etc.)
-- ✅ ATR-Berechnung mit anpassbarer Periode (default: 200)
-- ✅ Volume Profile Analyse pro Kerzen-Segment
-- ✅ Live Backtesting mit realistischer Slippage-Simulation
-- ✅ Optuna Parameter-Optimierung (Hyperparameter Tuning)
-- ✅ Robust Error-Handling und Logging
-- ✅ Pipeline-Automation mit fortlaufender Optimierung
+- ✅ Optuna Parameter‑Optimierung und SQLite Study‑Storage
+- ✅ Konfigurierbare Scheduler + Locking (Vermeidung von Doppelstarts)
+- ✅ Telegram Notifications (Start & Abschluss‑Summary)
+- ✅ Umfangreiches Logging und artifacts (configs, results, run summaries)
 
-### Volume Channel Flow - Parameter
-
+### Wichtige Konfigurations‑Parameter
 | Parameter | Beschreibung | Default | Bereich |
 |-----------|-------------|---------|---------|
-| **atr_period** | ATR Berechnung Periode | 200 | 100-300 |
-| **channel_width** | ATR Multiplikator für Kanal-Breite | 3.0 | 2.0-5.0 |
-| **min_channel_length** | Minimum Kerzen für Kanal-Bildung | 10 | 5-20 |
-| **volume_bins** | Preis-Level für Volume Profile | 30 | 15-50 |
-| **use_volume_confirmation** | Volume Delta als Filter nutzen | true | - |
-| **risk_reward_ratio** | TP zu SL Verhältnis | 2.0 | 1.5-4.0 |
-| **risk_per_trade_pct** | Risiko pro Trade in % | 1.0 | 0.5-2.0 |
-| **leverage** | Hebel für Positionen | 5 | 3-20 |
+| **lookback_days** | Datenrückblick in Tagen oder `"auto"` | `auto` | int / "auto" |
+| **trials** | Optuna Trials pro Kombination | 500 | int |
+| **start_capital** | Startkapital für Backtests | 1000 | float |
+| **min_trades** | Minimum Trades für gültigen Backtest | 10 | int |
+| **max_drawdown_pct** | Max zulässiger Drawdown (Optimierungs-Constraint) | 30 | float |
+| **min_win_rate_pct** | Minimale Win‑Rate (Optimierungs‑Constraint) | 50 | float |
+
+---
 
 ---
 

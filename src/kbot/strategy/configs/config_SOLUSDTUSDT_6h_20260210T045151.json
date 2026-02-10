@@ -1,0 +1,32 @@
+{
+    "market": {
+        "symbol": "SOL/USDT:USDT",
+        "timeframe": "6h"
+    },
+    "strategy": {
+        "atr_period": 120,
+        "channel_width": 2.75,
+        "min_channel_length": 17,
+        "volume_bins": 20,
+        "use_volume_confirmation": false,
+        "risk_reward_ratio": 2.25
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 0.5,
+        "leverage": 17
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-10T04:51:51.967485",
+        "data_range": "2023-02-10 to 2026-02-09",
+        "backtest_pnl_pct": 444.82,
+        "backtest_win_rate": 43.3,
+        "backtest_max_dd_pct": 55.58,
+        "backtest_trades": 67,
+        "backtest_profit_factor": 1.82
+    }
+}

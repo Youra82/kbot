@@ -55,6 +55,30 @@ def check_and_run_optimizer():
         minute = schedule.get('minute', 0)
         interval_days = schedule.get('interval_days', 7)
         
+        # Wenn es noch keinen letzten Optimierungszeitpunkt gibt -> sofort starten
+        cache_dir = os.path.join(SCRIPT_DIR, 'data', 'cache')
+        cache_file = os.path.join(cache_dir, '.last_optimization_run')
+        if not os.path.exists(cache_file):
+            print(f"    Hinweis: Kein letzter Optimierungszeitpunkt gefunden. Starte Optimierung jetzt.")
+            logger.info("Kein letzter Optimierungszeitpunkt gefunden. Starte Optimierung jetzt.")
+            python_executable = os.path.join(SCRIPT_DIR, '.venv', 'bin', 'python3')
+            optimizer_script = os.path.join(SCRIPT_DIR, 'auto_optimizer_scheduler.py')
+            log_file = os.path.join(SCRIPT_DIR, 'logs', 'optimizer_output.log')
+            if os.path.exists(optimizer_script):
+                os.makedirs(os.path.dirname(log_file), exist_ok=True)
+                with open(log_file, 'a') as log:
+                    subprocess.Popen(
+                        [python_executable, optimizer_script, '--force'],
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        cwd=SCRIPT_DIR,
+                        start_new_session=True
+                    )
+                return True
+            else:
+                logger.error(f"Fehler: {optimizer_script} nicht gefunden!")
+                return False
+
         # Prüfe ob heute der richtige Tag ist
         if now.weekday() != day_of_week:
             return False

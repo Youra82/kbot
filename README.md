@@ -192,6 +192,17 @@ bash ./run_pipeline.sh
 - `risk_per_trade_pct`: 0.5-2.0 (Schritte: 0.25)
 - `leverage`: 3-20
 
+### New: Non-interactive pipeline & ensemble selection (POC)
+You can run the pipeline in non-interactive mode and have it automatically select an ensemble after an optimization run.
+
+Example (non-interactive):
+
+```bash
+./run_pipeline.sh --non-interactive --min_trades 20 --min_pnl 20 --min_pf 1.2 --ensemble_size 5
+```
+
+This runs the optimizer and then `scripts/pick_and_simulate.py` selects top configs and writes `artifacts/ensemble.json` (POC). Use `--auto_push` to commit the output automatically.
+
 ### Backtesting (show_results.sh)
 
 ```bash
@@ -250,20 +261,6 @@ grep 'ERROR' logs/*.log           # Fehler prüfen
 ## ⚙️ Konfiguration
 
 ---
-
-### Optimization: Lookback (auto)
-
-You can set `"optimization_settings": { "lookback_days": "auto" }` to have the scheduler automatically choose a suitable historical lookback based on the timeframes that will be optimized. The defaults are:
-
-| Timeframe | Default lookback (days) |
-|-----------|-------------------------:|
-| 15m, 30m  | 60                      |
-| 1h, 2h    | 365                     |
-| 4h, 6h    | 730                     |
-| 1d, 1w    | 1095                    |
-
-When `auto` is selected, the scheduler uses the maximum default across the chosen timeframes so that all timeframes have sufficient history.
-
 
 ## 📋 Systemanforderungen
 

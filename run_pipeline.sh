@@ -44,10 +44,39 @@ if [[ "${CLEANUP_CHOICE,,}" == "j" ]]; then
     echo -e "${GREEN}✔ Aufräumen abgeschlossen.${NC}"
 fi
 
-# --- Interaktive Abfrage ---
-echo ""
-read -p "Handelspaar(e) eingeben (ohne /USDT, z.B. BTC ETH): " SYMBOLS
-read -p "Zeitfenster eingeben (z.B. 4h 1d): " TIMEFRAMES
+# --- Interaktive Abfrage (oder non-interactive flags) ---
+# If running in non-interactive mode, pass --non-interactive and other flags.
+if [[ "$1" == "--non-interactive" ]]; then
+    # parse simple args in the form: --min_trades 20 --min_pnl 20 --min_pf 1.2 --ensemble_size 5
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --min_trades)
+                MIN_TRADES="$2"; shift 2;;
+            --min_pnl)
+                MIN_PNL="$2"; shift 2;;
+            --min_pf)
+                MIN_PF="$2"; shift 2;;
+            --ensemble_size)
+                ENSEMBLE_SIZE="$2"; shift 2;;
+            --auto_push)
+                AUTO_PUSH=1; shift;;
+            --non-interactive)
+                NONINTERACTIVE=1; shift;;
+            *)
+                shift;;
+        esac
+    done
+fi
+
+if [[ -z "$NONINTERACTIVE" ]]; then
+    echo ""
+    read -p "Handelspaar(e) eingeben (ohne /USDT, z.B. BTC ETH): " SYMBOLS
+    read -p "Zeitfenster eingeben (z.B. 4h 1d): " TIMEFRAMES
+else
+    SYMBOLS=${SYMBOLS:-BTC ETH}
+    TIMEFRAMES=${TIMEFRAMES:-1h 2h 4h}
+    echo "Non-interactive mode: Symbols=$SYMBOLS Timeframes=$TIMEFRAMES"
+fi
 
 # --- Validierung ---
 VALID_TIMEFRAMES="1m 5m 15m 30m 1h 2h 4h 6h 12h 1d 1w"
@@ -103,26 +132,40 @@ read -p "CPU-Kerne [Standard: -1 für alle]: " N_CORES
 N_CORES=${N_CORES:--1}
 
 # --- Optimierungs-Modus ---
-echo -e "\n${YELLOW}Wähle einen Optimierungs-Modus:${NC}"
-echo "  1) Strenger Modus (Min Win-Rate, Min PnL, Max DD)"
-echo "  2) 'Finde das Beste'-Modus (nur Max DD als Constraint)"
-read -p "Auswahl (1-2) [Standard: 2]: " OPTIM_MODE
-OPTIM_MODE=${OPTIM_MODE:-2}
+if [[ -z "$NONINTERACTIVE" ]]; then
+    echo -e "\n${YELLOW}Wähle einen Optimierungs-Modus:${NC}"
+    echo "  1) Strenger Modus (Min Win-Rate, Min PnL, Max DD)"
+    echo "  2) 'Finde das Beste'-Modus (nur Max DD als Constraint)"
+    read -p "Auswahl (1-2) [Standard: 2]: " OPTIM_MODE
+    OPTIM_MODE=${OPTIM_MODE:-2}
 
-read -p "Max Drawdown % [Standard: 30]: " MAX_DD
-MAX_DD=${MAX_DD:-30}
+    read -p "Max Drawdown % [Standard: 30]: " MAX_DD
+    MAX_DD=${MAX_DD:-30}
 
-if [ "$OPTIM_MODE" == "1" ]; then
-    OPTIM_MODE_ARG="strict"
-    read -p "Min Win-Rate % [Standard: 50]: " MIN_WR
-    MIN_WR=${MIN_WR:-50}
-    read -p "Min PnL % [Standard: 0]: " MIN_PNL
-    MIN_PNL=${MIN_PNL:-0}
+    if [ "$OPTIM_MODE" == "1" ]; then
+        OPTIM_MODE_ARG="strict"
+        read -p "Min Win-Rate % [Standard: 50]: " MIN_WR
+        MIN_WR=${MIN_WR:-50}
+        read -p "Min PnL % [Standard: 0]: " MIN_PNL
+        MIN_PNL=${MIN_PNL:-0}
+    else
+        OPTIM_MODE_ARG="best_profit"
+        MIN_WR=0
+        MIN_PNL=-99999
+    fi
 else
-    OPTIM_MODE_ARG="best_profit"
-    MIN_WR=0
-    MIN_PNL=-99999
+    OPTIM_MODE_ARG=${OPTIM_MODE_ARG:-best_profit}
+    MAX_DD=${MAX_DD:-30}
+    MIN_WR=${MIN_WR:-0}
+    MIN_PNL=${MIN_PNL:--99999}
 fi
+
+# defaults for post-processing filters when non-interactive
+MIN_TRADES=${MIN_TRADES:-${MIN_TRADES:-20}}
+MIN_PNL=${MIN_PNL:-${MIN_PNL:-20}}
+MIN_PF=${MIN_PF:-${MIN_PF:-1.2}}
+ENSEMBLE_SIZE=${ENSEMBLE_SIZE:-${ENSEMBLE_SIZE:-5}}
+AUTO_PUSH=${AUTO_PUSH:-0}
 
 # --- Zusammenfassung ---
 echo -e "\n${BLUE}=======================================================${NC}"
@@ -160,6 +203,10 @@ if [ $? -eq 0 ]; then
     echo -e "\n${YELLOW}Nächste Schritte:${NC}"
     echo "  1) ./show_results.sh        # Ergebnisse anzeigen"
     echo "  2) python master_runner.py  # Bot starten"
+
+    # post-processing: pick ensemble and quick simulate
+    echo -e "\n${CYAN}📋 Picking ensemble based on thresholds: trades>=${MIN_TRADES}, pnl>=${MIN_PNL}, pf>=${MIN_PF}${NC}"
+    python3 scripts/pick_and_simulate.py --min_trades ${MIN_TRADES} --min_pnl ${MIN_PNL} --min_pf ${MIN_PF} --ensemble_size ${ENSEMBLE_SIZE} --output artifacts/ensemble.json ${AUTO_PUSH:+--auto_push}
 else
     echo -e "\n${RED}❌ Fehler bei der Optimierung.${NC}"
 fi

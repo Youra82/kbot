@@ -61,6 +61,7 @@
       "min_pnl_pct": 0
     },
     "auto_clear_cache_days": 0,
-    "send_telegram_on_completion": true
+    "send_telegram_on_completion": true,
+    "notify_on_start": true
   }
 }

@@ -239,6 +239,20 @@ def run_optimization() -> bool:
     log(f"║  Trials pro Kombination: {n_trials}")
     log(f"╚══════════════════════════════════════════════════════════════╝")
     log(f"")
+
+    # Send a single start notification (if enabled)
+    try:
+        if opt_settings.get("notify_on_start", True):
+            msg = (
+                f"🔄 KBot Auto-Optimierung START\n"
+                f"Symbole: {', '.join(symbols)}\n"
+                f"Timeframes: {', '.join(timeframes)}\n"
+                f"Trials pro Kombination: {n_trials}\n"
+                f"Zeitraum: {start_date} bis {end_date}"
+            )
+            send_telegram(msg)
+    except Exception as e:
+        log(f"Warnung: Konnte Start-Nachricht nicht senden: {e}")
     
     try:
         # Prevent concurrent optimizer runs by using a lock file

@@ -6,7 +6,6 @@
 import os
 import sys
 import json
-import glob
 import optuna
 import argparse
 from datetime import datetime
@@ -96,7 +95,7 @@ def create_safe_filename(symbol: str, timeframe: str) -> str:
 
 def save_config(symbol: str, timeframe: str, best_params: dict, 
                 result: dict, start_date: str, end_date: str):
-    """Speichert die beste Konfiguration. Dateiname enthält einen Zeitstempel zur Eindeutigkeit."""
+    """Speichert die beste Konfiguration."""
     
     safe_filename = create_safe_filename(symbol, timeframe)
     config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
@@ -135,47 +134,12 @@ def save_config(symbol: str, timeframe: str, best_params: dict,
         }
     }
     
-    timestamp = datetime.now().strftime('%Y%m%dT%H%M%S')
-    config_path = os.path.join(config_dir, f"config_{safe_filename}_{timestamp}.json")
+    config_path = os.path.join(config_dir, f"config_{safe_filename}.json")
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=4)
     
-    pid = os.getpid()
-    print(f"\n✅ Konfiguration gespeichert: {config_path} (PID: {pid})")
+    print(f"\n✅ Konfiguration gespeichert: {config_path}")
     return config_path
-
-
-def send_warning_telegram(message: str):
-    try:
-        from kbot.utils.telegram import send_message
-        secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
-        if os.path.exists(secret_path):
-            with open(secret_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                tg = data.get('telegram', {})
-                bot = tg.get('bot_token')
-                chat = tg.get('chat_id')
-                if bot and chat:
-                    send_message(bot, chat, message)
-    except Exception:
-        pass
-
-
-def get_best_existing_pnl(safe_filename: str):
-    config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
-    pattern = os.path.join(config_dir, f"config_{safe_filename}_*.json")
-    best = None
-    for path in glob.glob(pattern):
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                pnl = data.get('optimization', {}).get('backtest_pnl_pct')
-                if pnl is not None:
-                    if best is None or pnl > best:
-                        best = pnl
-        except Exception:
-            continue
-    return best
 
 
 def main():
@@ -195,7 +159,8 @@ def main():
     parser.add_argument('--min_trades', type=int, default=10, help="Min Trades")
     parser.add_argument('--start_capital', type=float, default=1000, help="Startkapital")
     parser.add_argument('--mode', type=str, default='strict', choices=['strict', 'best_profit'])
-    args = parser.parse_args()    
+    args = parser.parse_args()
+    
     # Globale Constraints setzen
     MAX_DRAWDOWN_CONSTRAINT = args.max_drawdown
     MIN_WIN_RATE_CONSTRAINT = args.min_win_rate
@@ -217,14 +182,6 @@ def main():
     print(f"   Modus:        {args.mode}")
     print("=" * 60)
     
-    # Collector for per-run notifications
-    notifications = {
-        'saved': [],
-        'skipped_worse': [],
-        'skipped_zero_trades': [],
-        'errors': []
-    }
-
     for symbol in symbols:
         for timeframe in timeframes:
             print(f"\n{'─' * 50}")
@@ -300,62 +257,18 @@ def main():
             final_result = run_backtest(HISTORICAL_DATA.copy(), final_params, 
                                         start_capital=START_CAPITAL, verbose=False)
             
-            run_ts = datetime.now().strftime('%Y%m%dT%H%M%S')
-            pid = os.getpid()
-            run_id = f"{run_ts}-{pid}"
-
-            print(f"\n\n[{run_id}] 📊 FINALES BACKTEST-ERGEBNIS:")
-            print(f"[{run_id}]    Trades:        {final_result['trades_count']}")
-            print(f"[{run_id}]    Win-Rate:      {final_result['win_rate']:.1f}%")
-            print(f"[{run_id}]    Rendite:       {final_result['total_pnl_pct']:.2f}%")
-            print(f"[{run_id}]    Max Drawdown:  {final_result['max_drawdown_pct']:.2f}%")
-            print(f"[{run_id}]    Profit Factor: {final_result.get('profit_factor', 0):.2f}")
-            print(f"[{run_id}]    Endkapital:    ${final_result['end_capital']:.2f}")
+            print(f"\n📊 FINALES BACKTEST-ERGEBNIS:")
+            print(f"   Trades:        {final_result['trades_count']}")
+            print(f"   Win-Rate:      {final_result['win_rate']:.1f}%")
+            print(f"   Rendite:       {final_result['total_pnl_pct']:.2f}%")
+            print(f"   Max Drawdown:  {final_result['max_drawdown_pct']:.2f}%")
+            print(f"   Profit Factor: {final_result.get('profit_factor', 0):.2f}")
+            print(f"   Endkapital:    ${final_result['end_capital']:.2f}")
             
-            # Config speichern — nur wenn Trades vorhanden sind und Ergebnis besser als bestehende
-            trades = final_result.get('trades_count', 0)
-            final_pnl = round(final_result.get('total_pnl_pct', 0), 4)
-            safe_filename = create_safe_filename(symbol, timeframe)
-            best_existing_pnl = get_best_existing_pnl(safe_filename)
-
-            if trades <= 0:
-                msg = f"⚠️ [{run_id}] Keine Trades im finalen Backtest für {symbol} ({timeframe})."
-                print(msg)
-                notifications['skipped_zero_trades'].append({'symbol': symbol, 'timeframe': timeframe})
-            else:
-                if best_existing_pnl is not None and final_pnl <= best_existing_pnl:
-                    msg = f"⚠️ [{run_id}] Ergebnis nicht besser als bestehende Konfiguration ({final_pnl}% <= {best_existing_pnl}%). Überspringe Speichern für {symbol} ({timeframe})."
-                    print(msg)
-                    notifications['skipped_worse'].append({'symbol': symbol, 'timeframe': timeframe, 'final_pnl': final_pnl, 'best_existing_pnl': best_existing_pnl})
-                else:
-                    saved = save_config(symbol, timeframe, best.params, final_result,
-                               args.start_date, args.end_date)
-                    print(f"[{run_id}] ✅ Konfiguration gespeichert: {saved}")
-                    notifications['saved'].append({'symbol': symbol, 'timeframe': timeframe, 'file': saved, 'final_pnl': final_pnl})
-
+            # Config speichern
+            save_config(symbol, timeframe, best.params, final_result,
+                       args.start_date, args.end_date)
     
-    # Write run summary to artifacts for scheduler to pick up
-    try:
-        runs_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'optimizer_runs')
-        os.makedirs(runs_dir, exist_ok=True)
-        summary = {
-            'run_id': run_id,
-            'start_date': args.start_date,
-            'end_date': args.end_date,
-            'symbols': symbols,
-            'timeframes': timeframes,
-            'saved': notifications['saved'],
-            'skipped_worse': notifications['skipped_worse'],
-            'skipped_zero_trades': notifications['skipped_zero_trades'],
-            'errors': notifications['errors']
-        }
-        summary_path = os.path.join(runs_dir, f"optimizer_summary_{run_id}.json")
-        with open(summary_path, 'w', encoding='utf-8') as f:
-            json.dump(summary, f, indent=2)
-        print(f"\n🔔 Run summary written: {summary_path}")
-    except Exception as e:
-        print(f"Fehler beim Schreiben der Run-Summary: {e}")
-
     print("\n" + "=" * 60)
     print("   ✅ Optimierung abgeschlossen!")
     print("=" * 60 + "\n")

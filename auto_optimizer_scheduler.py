@@ -180,24 +180,10 @@ def run_optimization() -> bool:
     
     symbols = extract_symbols_timeframes(settings, "symbols")
     timeframes = extract_symbols_timeframes(settings, "timeframes")
-    raw_lookback = opt_settings.get("lookback_days", 365)
+    lookback_days = opt_settings.get("lookback_days", 365)
     start_capital = opt_settings.get("start_capital", 1000)
     n_cores = opt_settings.get("cpu_cores", -1)
     n_trials = opt_settings.get("num_trials", 500)
-
-    # Automatic lookback: when set to "auto" use recommended defaults per timeframe.
-    if isinstance(raw_lookback, str) and raw_lookback.lower() in ("auto", "a"):
-        tf_defaults = {
-            "15m": 60, "30m": 60,
-            "1h": 365, "2h": 365,
-            "4h": 730, "6h": 730,
-            "1d": 1095, "1w": 1095
-        }
-        lookback_candidates = [tf_defaults.get(tf, 365) for tf in timeframes]
-        lookback_days = max(lookback_candidates) if lookback_candidates else 365
-        log(f"Auto lookback selected: {lookback_days} days (timeframes: {', '.join(timeframes)})")
-    else:
-        lookback_days = int(raw_lookback)
     
     constraints = opt_settings.get("constraints", {})
     max_dd = constraints.get("max_drawdown_pct", 30)
@@ -229,6 +215,7 @@ def run_optimization() -> bool:
         "--trials", str(n_trials),
         "--min_pnl", str(min_pnl),
         "--mode", "strict",
+        "--threshold", "0.6"
     ]
     
     log(f"")
@@ -239,108 +226,20 @@ def run_optimization() -> bool:
     log(f"║  Trials pro Kombination: {n_trials}")
     log(f"╚══════════════════════════════════════════════════════════════╝")
     log(f"")
-
-    # Prevent concurrent optimizer runs by using an atomic lock file create
-    lock_file = LAST_RUN_FILE.parent / ".optimization_lock"
-    try:
-        lock_file.parent.mkdir(parents=True, exist_ok=True)
-        # Try to create lock file atomically; fail if exists
-        fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        with os.fdopen(fd, 'w') as f:
-            f.write(str(os.getpid()))
-        got_lock = True
-        log(f"Info: Lock-File erstellt (Scheduler PID: {os.getpid()}). Ich starte Optimizer.")
-    except FileExistsError:
-        got_lock = False
-        try:
-            with open(lock_file, 'r') as f:
-                pid = int(f.read().strip())
-            os.kill(pid, 0)
-            log(f"Info: Optimizer läuft bereits (PID: {pid}). Überspringe neuen Start.")
-            return False
-        except OSError:
-            log("Info: Gefundene Lock-Datei veraltet. Entferne und versuche erneut.")
-            try:
-                lock_file.unlink()
-            except Exception:
-                pass
-            # Retry once
-            try:
-                fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                with os.fdopen(fd, 'w') as f:
-                    f.write(str(os.getpid()))
-                got_lock = True
-                log(f"Info: Lock-File erstellt nach Entfernen (Scheduler PID: {os.getpid()}).")
-            except Exception:
-                log("Warnung: Konnte Lock-File nicht erstellen. Überspringe Start.")
-                return False
-
-    # Only the process holding the lock sends the start notification
-    if got_lock:
-        try:
-            if opt_settings.get("notify_on_start", True):
-                msg = (
-                    f"🔄 KBot Auto-Optimierung START\n"
-                    f"Symbole: {', '.join(symbols)}\n"
-                    f"Timeframes: {', '.join(timeframes)}\n"
-                    f"Trials pro Kombination: {n_trials}\n"
-                    f"Zeitraum: {start_date} bis {end_date}"
-                )
-                send_telegram(msg)
-        except Exception as e:
-            log(f"Warnung: Konnte Start-Nachricht nicht senden: {e}")
-
+    
     try:
         process = subprocess.Popen(cmd, cwd=str(SCRIPT_DIR))
-        # write child pid to lock file (overwrite with child PID)
-        try:
-            with open(lock_file, 'w') as f:
-                f.write(str(process.pid))
-        except Exception:
-            pass
-
         process.wait()
         returncode = process.returncode
-        # remove lock file
-        try:
-            if lock_file.exists():
-                lock_file.unlink()
-        except Exception:
-            pass
-
+        
         duration = int((time.time() - start_time) / 60)
         save_last_run_time()
-
-        # On success, try to load latest optimizer summary and send single Telegram
+        
         if returncode == 0:
             log(f"✅ OPTIMIERUNG ERFOLGREICH ({duration} Minuten)")
-            # try to find latest summary file
-            try:
-                runs_dir = SCRIPT_DIR / 'artifacts' / 'optimizer_runs'
-                latest = None
-                if runs_dir.exists():
-                    files = sorted(runs_dir.glob('optimizer_summary_*.json'), key=os.path.getmtime, reverse=True)
-                    if files:
-                        latest = files[0]
-                saved_count = skipped_worse = skipped_zero = 0
-                saved_files = []
-                if latest:
-                    with open(latest, 'r', encoding='utf-8') as f:
-                        summary = json.load(f)
-                        saved = summary.get('saved', [])
-                        skipped_worse_list = summary.get('skipped_worse', [])
-                        skipped_zero_list = summary.get('skipped_zero_trades', [])
-                        saved_count = len(saved)
-                        skipped_worse = len(skipped_worse_list)
-                        skipped_zero = len(skipped_zero_list)
-                        saved_files = [s.get('file') for s in saved]
-                if opt_settings.get("send_telegram_on_completion", True):
-                    msg = f"✅ KBot Auto-Optimierung ABGESCHLOSSEN\n\nDauer: {duration} Minuten\nSymbole: {', '.join(symbols)}\nTimeframes: {', '.join(timeframes)}\nSaved: {saved_count} configs, Skipped (worse): {skipped_worse}, Skipped (0 trades): {skipped_zero}"
-                    if saved_files:
-                        msg += f"\nBeispiele: {', '.join(saved_files[:3])}"
-                    send_telegram(msg)
-            except Exception as e:
-                log(f"Warnung: Konnte Summary nicht laden: {e}")
+            if opt_settings.get("send_telegram_on_completion", True):
+                interval_days = opt_settings.get("schedule", {}).get("interval_days", 7)
+                send_telegram(f"✅ KBot Auto-Optimierung ABGESCHLOSSEN\n\nDauer: {duration} Minuten\nSymbole: {', '.join(symbols)}\nTimeframes: {', '.join(timeframes)}")
             return True
         else:
             log(f"❌ OPTIMIERUNG FEHLGESCHLAGEN (Exit-Code: {returncode})")

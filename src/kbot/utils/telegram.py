@@ -12,8 +12,7 @@ def send_message(bot_token, chat_id, message):
         return
 
     api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    # Send plain text (no HTML parsing) to avoid 'Unsupported start tag' errors
-    payload = {'chat_id': chat_id, 'text': message}
+    payload = {'chat_id': chat_id, 'text': message, 'parse_mode': 'HTML'}
 
     try:
         response = requests.post(api_url, data=payload, timeout=10)

@@ -32,8 +32,8 @@ def test_core_script_imports():
         from kbot.utils.trade_manager import housekeeper_routine, check_and_open_new_position, full_trade_cycle
         from kbot.utils.exchange import Exchange
 
-        # Volume Channel Flow Engine
-        from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+        # Peak/Trough Engine (replaces old Volume Channel Flow)
+        from kbot.strategy.peak_trough_engine import PeakTroughEngine as VolumeChannelEngine
 
         # Backtester und Optimizer Imports
         from kbot.analysis.backtester import run_backtest, load_data

@@ -1,6 +1,6 @@
 # src/kbot/analysis/show_results.py
 # =============================================================================
-# KBot: Backtest-Ergebnisse anzeigen (Volume Channel Flow)
+# KBot: Backtest-Ergebnisse anzeigen (Peak/Trough Reversal)
 # Interaktive Abfragen wie bei JaegerBot/DBot
 # =============================================================================
 
@@ -16,15 +16,16 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from kbot.analysis.backtester import load_data, run_backtest
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+from kbot.strategy.peak_trough_engine import PeakTroughEngine
+# Backwards-compat: old VolumeChannelEngine removed; use PeakTroughEngine
 
 
 def show_channel_summary(symbol: str, timeframe: str, data: pd.DataFrame, 
                           params: dict) -> dict:
-    """Zeigt eine Zusammenfassung des Volume Channel Flow."""
+    """Zeigt eine Zusammenfassung des Peak/Trough Reversal."""
     strategy = params.get('strategy', {})
     
-    engine = VolumeChannelEngine(settings=strategy)
+    engine = PeakTroughEngine(settings=strategy)
     df = engine.process_dataframe(data)
     
     if df.empty or df['channel_top'].isna().all():
@@ -54,7 +55,7 @@ def show_channel_summary(symbol: str, timeframe: str, data: pd.DataFrame,
     
     trend_str = "🟢 BULLISH" if trend == 1 else "🔴 BEARISH" if trend == -1 else "⚪ NEUTRAL"
     
-    print(f"\n  📊 Volume Channel Flow für {symbol} ({timeframe}):")
+    print(f"\n  📊 Peak/Trough Reversal für {symbol} ({timeframe}):")
     print(f"     Channel Top:         {channel_top:.2f}")
     print(f"     Channel Avg:         {channel_avg:.2f}")
     print(f"     Channel Bot:         {channel_bot:.2f}")

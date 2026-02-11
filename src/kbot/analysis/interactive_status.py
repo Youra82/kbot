@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # =============================================================================
-# KBot: Interactive Charts für Volume Channel Flow
+# KBot: Interactive Charts für Peak/Trough Reversal
 # =============================================================================
 # Zeigt Candlestick-Chart mit Trade-Signalen (Entry/Exit Long/Short)
-# und Volume Channel Flow Visualisierung
+# und Peak/Trough Visualisierung
 # Generiert HTML-Dateien für Telegram-Versand
 # =============================================================================
 
@@ -24,9 +24,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from kbot.analysis.backtester import load_data, run_backtest
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+from kbot.strategy.peak_trough_engine import PeakTroughEngine
+# Volume Channel Flow removed; using PeakTroughEngine instead
 
-OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "vcf_plots"
+OUTPUT_DIR = PROJECT_ROOT / "artifacts" / "pt_plots"
 
 
 def load_config_strategies(config_dir: Path) -> List[Dict]:
@@ -108,9 +109,9 @@ def make_plot(symbol: str, timeframe: str, config: dict,
     if data.empty or len(data) < 50:
         raise RuntimeError(f"Zu wenige Daten für {symbol} ({timeframe}).")
     
-    # Berechne Volume Channel Flow
-    print(f"   🔄 Berechne Volume Channel Flow...")
-    engine = VolumeChannelEngine(settings=config.get('strategy', {}))
+    # Berechne Peak/Trough Signale
+    print(f"   🔄 Berechne Peak/Trough...")
+    engine = PeakTroughEngine(settings=config.get('strategy', {}))
     df = engine.process_dataframe(data.copy())
     
     # Führe Backtest durch
@@ -279,7 +280,7 @@ def make_plot(symbol: str, timeframe: str, config: dict,
     
     # Speichere HTML
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    fname = f"vcf_{sanitize(symbol)}_{sanitize(timeframe)}.html"
+    fname = f"ptf_{sanitize(symbol)}_{sanitize(timeframe)}.html"
     out_path = OUTPUT_DIR / fname
     fig.write_html(out_path, include_plotlyjs="cdn")
     
@@ -299,7 +300,7 @@ def make_plot(symbol: str, timeframe: str, config: dict,
 def main():
     """Hauptfunktion"""
     print("\n" + "="*60)
-    print("   KBot Interactive Charts - Volume Channel Flow")
+    print("   KBot Interactive Charts - Peak/Trough")
     print("="*60)
     
     # Lade Strategien

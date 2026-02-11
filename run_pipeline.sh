@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
-# KBot: Volume Channel Flow - Pipeline
+# KBot: Peak/Trough - Pipeline
 # =============================================================================
-# Diese Pipeline optimiert die Parameter der Volume Channel Flow Strategie.
+# Diese Pipeline optimiert die Parameter der Peak/Trough Strategie.
 # Kein ML-Training nötig - nur Parameter-Optimierung!
 # =============================================================================
 
@@ -16,7 +16,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo -e "${BLUE}======================================================="
-echo "   KBot Volume Channel Flow - Parameter Optimierung"
+echo "   KBot Peak/Trough - Parameter Optimierung"
 echo -e "=======================================================${NC}"
 
 # --- Pfade definieren ---

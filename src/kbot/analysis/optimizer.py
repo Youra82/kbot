@@ -1,6 +1,6 @@
 # src/kbot/analysis/optimizer.py
 # =============================================================================
-# KBot: Parameter-Optimierung für Volume Channel Flow Strategie
+# KBot: Parameter-Optimierung für Peak/Trough Strategie
 # =============================================================================
 
 import os
@@ -14,7 +14,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from kbot.analysis.backtester import load_data, run_backtest
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+# Legacy Volume Channel Flow has been removed; use peak_trough strategy instead
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -110,20 +110,8 @@ def objective(trial):
         params['behavior']['use_longs'] = True
         params['behavior']['use_shorts'] = True
     else:
-        # Volume Channel Flow defaults (legacy)
-        params['strategy'] = {
-            'atr_period': trial.suggest_int('atr_period', 100, 300, step=20),
-            'channel_width': trial.suggest_float('channel_width', 2.0, 5.0, step=0.25),
-            'min_channel_length': trial.suggest_int('min_channel_length', 5, 20),
-            'volume_bins': trial.suggest_int('volume_bins', 15, 50, step=5),
-            'use_volume_confirmation': trial.suggest_categorical('use_volume_confirmation', [True, False]),
-            'risk_reward_ratio': trial.suggest_float('risk_reward_ratio', 1.5, 4.0, step=0.25),
-        }
-        params['risk'] = {
-            'risk_per_trade_pct': trial.suggest_float('risk_per_trade_pct', 0.5, 2.0, step=0.25),
-            'leverage': trial.suggest_int('leverage', 3, 20),
-        }
-        params['behavior'] = {'use_longs': True, 'use_shorts': True}
+        # The legacy 'volume_channel' strategy has been removed. Only 'peak_trough' is supported.
+        raise ValueError(f"Unsupported strategy: {STRATEGY}. Use 'peak_trough'.")
 
     # Backtest durchführen
     result = run_backtest(HISTORICAL_DATA.copy(), params, start_capital=START_CAPITAL, verbose=False)
@@ -174,28 +162,22 @@ def save_config(symbol: str, timeframe: str, best_params: dict,
     config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
     os.makedirs(config_dir, exist_ok=True)
     
+    # Use best_params to populate strategy section directly (supports peak_trough keys)
+    strategy_section = {}
+    for k,v in best_params.items():
+        if k in ('risk_per_trade_pct','leverage'):
+            continue
+        strategy_section[k] = v
+
     config = {
-        "market": {
-            "symbol": symbol,
-            "timeframe": timeframe
-        },
-        "strategy": {
-            "atr_period": best_params.get('atr_period', 200),
-            "channel_width": best_params.get('channel_width', 3.0),
-            "min_channel_length": best_params.get('min_channel_length', 10),
-            "volume_bins": best_params.get('volume_bins', 30),
-            "use_volume_confirmation": best_params.get('use_volume_confirmation', True),
-            "risk_reward_ratio": best_params.get('risk_reward_ratio', 2.0)
-        },
+        "market": {"symbol": symbol, "timeframe": timeframe},
+        "strategy": strategy_section,
         "risk": {
             "margin_mode": "isolated",
             "risk_per_trade_pct": best_params.get('risk_per_trade_pct', 1.0),
             "leverage": best_params.get('leverage', 5)
         },
-        "behavior": {
-            "use_longs": True,
-            "use_shorts": True
-        },
+        "behavior": {"use_longs": True, "use_shorts": True},
         "optimization": {
             "optimized_at": datetime.now().isoformat(),
             "data_range": f"{start_date} to {end_date}",
@@ -221,7 +203,7 @@ def main():
     global STRATEGY, PARAM_SPECS
 
     parser = argparse.ArgumentParser(description="KBot Optimizer")
-    parser.add_argument('--strategy', type=str, default='volume_channel', help="Strategy to optimize (volume_channel or peak_trough)")
+    parser.add_argument('--strategy', type=str, default='peak_trough', help="Strategy to optimize (peak_trough)")
     parser.add_argument('--symbols', required=True, type=str, help="Symbole (z.B. BTC ETH)")
     parser.add_argument('--timeframes', required=True, type=str, help="Timeframes (z.B. 4h 1d)")
     parser.add_argument('--start_date', required=True, type=str, help="Start-Datum")

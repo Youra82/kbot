@@ -12,7 +12,7 @@ fi
 source .venv/bin/activate
 
 # Führe pytest aus
-echo "Führe Pytest aus (Volume Channel Flow Tests)..."
+echo "Führe Pytest aus (Peak/Trough Reversal Tests)..."
 if python3 -m pytest tests/ -v -s; then
     echo "Pytest erfolgreich durchgelaufen. Alle Tests bestanden."
     EXIT_CODE=0

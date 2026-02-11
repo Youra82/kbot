@@ -1,5 +1,5 @@
 #!/bin/bash
-# show_results.sh: KBot Backtest & Analyse (Volume Channel Flow)
+# show_results.sh: KBot Backtest & Analyse (Peak/Trough Reversal)
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -15,7 +15,7 @@ UPDATE_SCRIPT="update_settings_from_optimizer.py"
 source "$VENV_PATH"
 
 echo -e "${BLUE}======================================================="
-echo "   KBot Ergebnisse & Analyse (Volume Channel Flow)"
+echo "   KBot Ergebnisse & Analyse (Peak/Trough Reversal)"
 echo -e "=======================================================${NC}"
 
 # --- MODUS-MENÜ (wie JaegerBot/DBot) ---

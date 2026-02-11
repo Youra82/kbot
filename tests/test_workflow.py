@@ -124,7 +124,7 @@ def test_setup():
 
 def test_full_kbot_workflow_on_bitget(test_setup):
     """
-    Umfassender Live-Workflow-Test für KBot (Volume Channel Flow).
+    Umfassender Live-Workflow-Test für KBot (Peak/Trough Reversal).
     
     Testet:
     1. Trade-Eröffnung mit gemocktem Signal

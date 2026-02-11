@@ -78,6 +78,7 @@ def run_walk_forward(cfg_path, train_frac=0.8, start_date=None, end_date=None, n
         'mean_is_pnl': sum(s['is'].get('total_pnl_pct',0) for s in splits_results)/len(splits_results),
         'mean_oos_pnl': sum(s['oos'].get('total_pnl_pct',0) for s in splits_results)/len(splits_results),
         'mean_oos_win': sum(s['oos'].get('win_rate',0) for s in splits_results)/len(splits_results),
+        'mean_oos_pf': sum(s['oos'].get('profit_factor',0) for s in splits_results)/len(splits_results),
         'total_oos_trades': sum(s['oos'].get('trades_count',0) for s in splits_results)
     }
 

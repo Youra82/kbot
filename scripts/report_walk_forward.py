@@ -80,10 +80,25 @@ def main():
     candidates = summarize_from_configs(cfgs, args.min_oos_trades, args.min_mean_oos_pnl)
     print(f'Filtered {len(candidates)} candidate configs (min_trades={args.min_oos_trades}, min_mean_oos_pnl={args.min_mean_oos_pnl})')
 
+    # augment with mean_oos_pf filter if requested
+    if args.min_mean_oos_pf is not None:
+        before = len(candidates)
+        candidates = [c for c in candidates if c['agg'].get('mean_oos_pf', 0) >= args.min_mean_oos_pf]
+        print(f'Applied PF filter: {before} -> {len(candidates)} (min_mean_oos_pf={args.min_mean_oos_pf})')
+
     with open(args.output, 'w') as f:
         json.dump({'filtered': candidates}, f, indent=2)
 
-    print('Wrote filtered report to', args.output)
+    # also write a human-readable markdown report
+    md = ['# Walk-Forward Report\n']
+    md.append('| Symbol | Timeframe | mean_oos_pnl | mean_oos_pf | total_oos_trades | mean_oos_win | config |')
+    md.append('|---|---:|---:|---:|---:|---:|---|')
+    for c in candidates:
+        md.append(f"| {c['symbol']} | {c['timeframe']} | {c['agg'].get('mean_oos_pnl',0):.2f}% | {c['agg'].get('mean_oos_pf',0):.2f} | {c['agg'].get('total_oos_trades',0)} | {c['agg'].get('mean_oos_win',0):.1f}% | {c['config']} |")
+    md_path = os.path.join(OUT_DIR, 'report_filtered_configs.md')
+    with open(md_path, 'w') as f:
+        f.write('\n'.join(md))
+    print('Wrote filtered report to', args.output, 'and', md_path)
 
 
 if __name__ == '__main__':

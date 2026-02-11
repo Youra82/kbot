@@ -225,6 +225,18 @@ if [ $? -eq 0 ]; then
     # post-processing: pick ensemble and quick simulate
     echo -e "\n${CYAN}📋 Picking ensemble based on thresholds: trades>=${MIN_TRADES}, pnl>=${MIN_PNL}, pf>=${MIN_PF}${NC}"
     python3 scripts/pick_and_simulate.py --min_trades ${MIN_TRADES} --min_pnl ${MIN_PNL} --min_pf ${MIN_PF} --ensemble_size ${ENSEMBLE_SIZE} --output artifacts/ensemble.json ${AUTO_PUSH:+--auto_push}
+
+    # Optional: automated report + selection + quick simulate + (optional) long optimize
+    if [[ "$AUTO_REPORT" == "1" || "$AUTO_ENSEMBLE" == "1" ]]; then
+        echo -e "\n${CYAN}🔎 Running automated report & selection...${NC}"
+        python3 scripts/report_walk_forward.py --min_oos_trades ${MIN_TRADES} --min_mean_oos_pnl ${MIN_PNL} --output artifacts/report_filtered_configs.json
+        python3 scripts/select_and_build_ensemble.py --report artifacts/report_filtered_configs.json --output artifacts/ensemble_selected.json --min_pf ${MIN_PF} ${AUTO_PUSH:+--auto_push}
+        python3 scripts/quick_simulate_ensemble.py
+        if [[ "$AUTO_LONG" == "1" ]]; then
+            echo "Starting long optimizations (this may take a while)..."
+            python3 scripts/long_optimize.py --trials ${LONG_TRIALS:-200}
+        fi
+    fi
 else
     echo -e "\n${RED}❌ Fehler bei der Optimierung.${NC}"
 fi

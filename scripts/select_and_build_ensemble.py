@@ -18,6 +18,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--report', default=REPORT_FILE)
     ap.add_argument('--output', default=OUTPUT)
+    ap.add_argument('--min_pf', type=float, default=1.0, help='Minimum mean OOS profit factor')
     ap.add_argument('--auto_push', action='store_true')
     args = ap.parse_args()
 
@@ -27,6 +28,9 @@ def main():
 
     r = json.loads(Path(args.report).read_text())
     filtered = r.get('filtered', [])
+    # apply PF filter
+    filtered = [c for c in filtered if c['agg'].get('mean_oos_pf', 0) >= args.min_pf]
+
     ensemble = []
     for c in filtered:
         ensemble.append({'file': c['config'], 'symbol': c['symbol'], 'timeframe': c['timeframe'], 'agg': c['agg']})

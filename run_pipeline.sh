@@ -47,7 +47,7 @@ fi
 # --- Interaktive Abfrage (oder non-interactive flags) ---
 # If running in non-interactive mode, pass --non-interactive and other flags.
 if [[ "$1" == "--non-interactive" ]]; then
-    # parse simple args in the form: --min_trades 20 --min_pnl 20 --min_pf 1.2 --ensemble_size 5
+    # parse simple args and param flags
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --min_trades)
@@ -62,6 +62,11 @@ if [[ "$1" == "--non-interactive" ]]; then
                 AUTO_PUSH=1; shift;;
             --non-interactive)
                 NONINTERACTIVE=1; shift;;
+            --strategy)
+                STRATEGY="$2"; shift 2;;
+            --param)
+                # collect raw param specs in PARAMS_RAW
+                PARAMS_RAW="${PARAMS_RAW} $2"; shift 2;;
             *)
                 shift;;
         esac
@@ -185,7 +190,19 @@ read -p "Starten? (Enter zum Fortfahren, Ctrl+C zum Abbrechen): " _
 # --- Optimierung starten ---
 echo -e "\n${GREEN}🚀 Starte Optimierung...${NC}\n"
 
+# Prepare strategy & param flags
+STRATEGY=${STRATEGY:-volume_channel}
+PARAM_FLAGS=""
+# If non-interactive, PARAMS may have been set via --param flags parsing earlier
+# Additional parsing from environment-style variables is supported
+if [[ -n "$PARAMS_RAW" ]]; then
+    for p in $PARAMS_RAW; do
+        PARAM_FLAGS+=" --param $p"
+    done
+fi
+
 python3 "$OPTIMIZER" \
+    --strategy "$STRATEGY" \
     --symbols "$SYMBOLS" \
     --timeframes "$TIMEFRAMES" \
     --start_date "$START_DATE" \
@@ -195,8 +212,9 @@ python3 "$OPTIMIZER" \
     --max_drawdown "$MAX_DD" \
     --min_win_rate "$MIN_WR" \
     --min_pnl "$MIN_PNL" \
+    --min_trades "$MIN_TRADES" \
     --start_capital "$START_CAPITAL" \
-    --mode "$OPTIM_MODE_ARG"
+    --mode "$OPTIM_MODE_ARG" $PARAM_FLAGS
 
 if [ $? -eq 0 ]; then
     echo -e "\n${GREEN}✅ Optimierung erfolgreich abgeschlossen!${NC}"

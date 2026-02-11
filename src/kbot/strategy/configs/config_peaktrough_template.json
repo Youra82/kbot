@@ -1,0 +1,24 @@
+{
+  "market": {
+    "symbol": "BTC/USDT:USDT",
+    "timeframe": "1h"
+  },
+  "strategy": {
+    "lookback_n": 5,
+    "reversal_threshold_pct": 0.2,
+    "atr_period": 14,
+    "atr_mult": 1.5,
+    "risk_reward_ratio": 2.0,
+    "risk_per_trade_pct": 1.0,
+    "use_volume_confirmation": false
+  },
+  "risk": {
+    "margin_mode": "isolated",
+    "risk_per_trade_pct": 1.0,
+    "leverage": 5
+  },
+  "behavior": {
+    "use_longs": true,
+    "use_shorts": true
+  }
+}

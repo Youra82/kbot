@@ -17,7 +17,7 @@
 
 ## 📊 Übersicht
 
-KBot ist ein Trend-Following Breakout-System, das **Volume Channel Flow** nutzt. Der Bot berechnet dynamische Kanäle basierend auf ATR und analysiert das Volume-Profil sowie Volume-Delta für robuste Einstiege. Die Strategie funktioniert auf allen Timeframes und handelt Long/Short bei Ausbrüchen aus dem Kanal.
+KBot enthält jetzt eine neue **Peak/Trough Reversal** Strategie. Die alte Volume Channel Flow Implementierung wurde entfernt per Projektentscheid. Die neue Strategie erkennt lokale Spitzen und Böden über die letzten n Perioden und eröffnet Reversal-/Pullback-Trades basierend auf konfigurierbaren Regeln (lookback, ATR-basierter SL, RR, optionales Volumenbestätigung).
 
 ### 🧭 Trading-Logik (Kurzfassung)
 - **ATR-Kanal**: Dynamische obere/untere Grenzen (ATR × Channel_Width um HL2 = Typical Price)

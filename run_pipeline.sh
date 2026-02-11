@@ -179,6 +179,7 @@ echo -e "${BLUE}=======================================================${NC}"
 echo -e "  Symbole:       ${CYAN}$SYMBOLS${NC}"
 echo -e "  Timeframes:    ${CYAN}$TIMEFRAMES${NC}"
 echo -e "  Zeitraum:      ${CYAN}$START_DATE bis $END_DATE${NC}"
+echo -e "  Strategie:     ${CYAN}$STRATEGY${NC}"
 echo -e "  Startkapital:  ${CYAN}$START_CAPITAL USDT${NC}"
 echo -e "  Trials:        ${CYAN}$N_TRIALS${NC}"
 echo -e "  Modus:         ${CYAN}$OPTIM_MODE_ARG${NC}"
@@ -190,8 +191,28 @@ read -p "Starten? (Enter zum Fortfahren, Ctrl+C zum Abbrechen): " _
 # --- Optimierung starten ---
 echo -e "\n${GREEN}🚀 Starte Optimierung...${NC}\n"
 
-# Prepare strategy & param flags
-STRATEGY=${STRATEGY:-volume_channel}
+# Prepare default strategy from settings.json or fallback to peak_trough
+if [ -f settings.json ]; then
+    DEFAULT_STRAT=$(python3 - <<'PY'
+import json
+try:
+    s=json.load(open('settings.json'))
+    print(s.get('optimization_settings',{}).get('strategy','peak_trough'))
+except Exception:
+    print('peak_trough')
+PY
+)
+else
+    DEFAULT_STRAT="peak_trough"
+fi
+STRATEGY=${STRATEGY:-$DEFAULT_STRAT}
+
+# Interactive strategy selection (skipped in non-interactive mode)
+if [[ -z "$NONINTERACTIVE" ]]; then
+    read -p "Strategie (volume_channel/peak_trough) [${STRATEGY}]: " STRATEGY_INPUT
+    STRATEGY=${STRATEGY_INPUT:-$STRATEGY}
+fi
+
 PARAM_FLAGS=""
 # If non-interactive, PARAMS may have been set via --param flags parsing earlier
 # Additional parsing from environment-style variables is supported

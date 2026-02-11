@@ -202,8 +202,12 @@ def run_optimization() -> bool:
     python_exe = get_python_executable()
     log(f"Python: {python_exe}")
     
+    strategy_name = opt_settings.get('strategy', 'peak_trough')
+    mode = opt_settings.get('mode', 'strict')
+
     cmd = [
         python_exe, str(optimizer_path),
+        "--strategy", strategy_name,
         "--symbols", " ".join(symbols),
         "--timeframes", " ".join(timeframes),
         "--start_date", start_date,
@@ -214,8 +218,7 @@ def run_optimization() -> bool:
         "--min_win_rate", str(min_wr),
         "--trials", str(n_trials),
         "--min_pnl", str(min_pnl),
-        "--mode", "strict",
-        "--threshold", "0.6"
+        "--mode", str(mode)
     ]
     
     log(f"")
@@ -238,8 +241,12 @@ def run_optimization() -> bool:
         if returncode == 0:
             log(f"✅ OPTIMIERUNG ERFOLGREICH ({duration} Minuten)")
             if opt_settings.get("send_telegram_on_completion", True):
-                interval_days = opt_settings.get("schedule", {}).get("interval_days", 7)
-                send_telegram(f"✅ KBot Auto-Optimierung ABGESCHLOSSEN\n\nDauer: {duration} Minuten\nSymbole: {', '.join(symbols)}\nTimeframes: {', '.join(timeframes)}")
+                msg = (
+                    f"✅ KBot Auto-Optimierung ABGESCHLOSSEN\n\n"
+                    f"Dauer: {duration} Minuten\nSymbole: {', '.join(symbols)}\nTimeframes: {', '.join(timeframes)}\n"
+                    f"Trials pro Kombi: {n_trials}\nMode: {mode}\nStrategy: {strategy_name}"
+                )
+                send_telegram(msg)
             return True
         else:
             log(f"❌ OPTIMIERUNG FEHLGESCHLAGEN (Exit-Code: {returncode})")

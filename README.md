@@ -1,4 +1,4 @@
-# 📊 KBot - Volume Channel Flow Trading Bot
+# 📊 KBot - Peak/Trough Reversal Trading Bot
 
 <div align="center">
 
@@ -17,7 +17,7 @@
 
 ## 📊 Übersicht
 
-KBot ist ein Trend-Following Breakout-System, das **Volume Channel Flow** nutzt. Der Bot berechnet dynamische Kanäle basierend auf ATR und analysiert das Volume-Profil sowie Volume-Delta für robuste Einstiege. Die Strategie funktioniert auf allen Timeframes und handelt Long/Short bei Ausbrüchen aus dem Kanal.
+KBot enthält jetzt eine neue **Peak/Trough Reversal** Strategie. Die alte Volume Channel Flow Implementierung wurde entfernt per Projektentscheid. Die neue Strategie erkennt lokale Spitzen und Böden über die letzten n Perioden und eröffnet Reversal-/Pullback-Trades basierend auf konfigurierbaren Regeln (lookback, ATR-basierter SL, RR, optionales Volumenbestätigung).
 
 ### 🧭 Trading-Logik (Kurzfassung)
 - **ATR-Kanal**: Dynamische obere/untere Grenzen (ATR × Channel_Width um HL2 = Typical Price)
@@ -64,7 +64,7 @@ flowchart LR
 ## 🚀 Features
 
 ### Trading Features
-- ✅ **Volume Channel Flow** Strategie - ATR-basierte dynamische Kanäle
+- ✅ **Peak/Trough Reversal** Strategie - ATR-basierte dynamische Kanäle
 - ✅ **Volume Profile Integration** - POC (Point of Control), Value Area
 - ✅ **Volume Delta Confirmation** - Bullish/Bearish Volumen-Akkumulation
 - ✅ **Breakout-Trading** - Long bei Kanal-Ausbruch nach oben, Short nach unten
@@ -84,7 +84,7 @@ flowchart LR
 - ✅ Robust Error-Handling und Logging
 - ✅ Pipeline-Automation mit fortlaufender Optimierung
 
-### Volume Channel Flow - Parameter
+### Peak/Trough - Parameter
 
 | Parameter | Beschreibung | Default | Bereich |
 |-----------|-------------|---------|---------|
@@ -165,7 +165,7 @@ bash ./run_pipeline.sh
 
 ### Parameter-Optimierung (run_pipeline.sh)
 
-Die Pipeline optimiert die Volume Channel Flow Parameter automatisch:
+Die Pipeline optimiert die Peak/Trough Parameter automatisch:
 
 ```bash
 bash ./run_pipeline.sh

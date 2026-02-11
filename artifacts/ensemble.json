@@ -1,0 +1,16 @@
+{
+  "ensemble": [
+    {
+      "file": "src\\kbot\\strategy\\configs\\config_ETHUSDTUSDT_2h.json",
+      "trades": 76,
+      "pnl": 723.99,
+      "pf": 1.19
+    }
+  ],
+  "metrics": {
+    "n": 1,
+    "mean_pnl": 723.99,
+    "weighted_pnl": 723.99,
+    "total_trades": 76
+  }
+}

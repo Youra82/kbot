@@ -1,6 +1,6 @@
 # src/kbot/analysis/optimizer.py
 # =============================================================================
-# KBot: Parameter-Optimierung für Volume Channel Flow Strategie
+# KBot: Parameter-Optimierung für Peak/Trough Strategie
 # =============================================================================
 
 import os
@@ -14,7 +14,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from kbot.analysis.backtester import load_data, run_backtest
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+# Legacy Volume Channel Flow has been removed; use peak_trough strategy instead
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -28,30 +28,91 @@ START_CAPITAL = 1000
 OPTIM_MODE = "strict"
 
 
+def parse_param_spec(spec: str):
+    """Parse a param spec string.
+
+    Supported formats:
+      - name:start:end:step    (numeric range, int if step is int)
+      - name:val1,val2,...     (categorical)
+      - name:0:1                (boolean as 0/1)
+    Returns a tuple (name, kind, args)
+    kind in {'int_range','float_range','categorical'}
+    """
+    if ':' not in spec:
+        return None
+    name, rest = spec.split(':', 1)
+    if ',' in rest:
+        # categorical list
+        vals = [v.strip() for v in rest.split(',')]
+        # convert numbers
+        converted = []
+        for v in vals:
+            if v.lower() in ('true','false'):
+                converted.append(v.lower()=='true')
+            else:
+                try:
+                    if '.' in v:
+                        converted.append(float(v))
+                    else:
+                        converted.append(int(v))
+                except Exception:
+                    converted.append(v)
+        return (name, 'categorical', converted)
+    parts = rest.split(':')
+    if len(parts) == 3:
+        a,b,c = parts
+        try:
+            # integer steps
+            ia, ib, ic = int(a), int(b), int(c)
+            return (name, 'int_range', (ia, ib, ic))
+        except Exception:
+            fa, fb, fc = float(a), float(b), float(c)
+            return (name, 'float_range', (fa, fb, fc))
+    return None
+
+
 def objective(trial):
-    """Optuna Objective für Volume Channel Flow Parameter."""
-    global HISTORICAL_DATA
-    
-    # Volume Channel Flow Parameter zum Optimieren
-    params = {
-        'strategy': {
-            'atr_period': trial.suggest_int('atr_period', 100, 300, step=20),
-            'channel_width': trial.suggest_float('channel_width', 2.0, 5.0, step=0.25),
-            'min_channel_length': trial.suggest_int('min_channel_length', 5, 20),
-            'volume_bins': trial.suggest_int('volume_bins', 15, 50, step=5),
-            'use_volume_confirmation': trial.suggest_categorical('use_volume_confirmation', [True, False]),
-            'risk_reward_ratio': trial.suggest_float('risk_reward_ratio', 1.5, 4.0, step=0.25),
-        },
-        'risk': {
-            'risk_per_trade_pct': trial.suggest_float('risk_per_trade_pct', 0.5, 2.0, step=0.25),
-            'leverage': trial.suggest_int('leverage', 3, 20),
-        },
-        'behavior': {
-            'use_longs': True,
-            'use_shorts': True,
+    """Optuna Objective für verschiedene Strategien (dynamisch)."""
+    global HISTORICAL_DATA, STRATEGY, PARAM_SPECS
+
+    params = {'strategy':{}, 'risk':{}, 'behavior':{}}
+
+    # If PARAM_SPECS provided, create suggestions dynamically
+    if STRATEGY == 'peak_trough':
+        # default ranges if not specified
+        default_specs = {
+            'lookback_n': ('int_range', (3, 10, 1)),
+            'reversal_threshold_pct': ('float_range', (0.1, 1.0, 0.1)),
+            'atr_period': ('int_range', (7, 21, 2)),
+            'atr_mult': ('float_range', (1.0, 2.0, 0.1)),
+            'risk_reward_ratio': ('float_range', (1.0, 3.0, 0.1)),
+            'risk_per_trade_pct': ('float_range', (0.5, 2.0, 0.25)),
+            'use_volume_confirmation': ('categorical', [False, True]),
         }
-    }
-    
+        specs = {k:v for k,v in default_specs.items()}
+        # override with user supplied PARAM_SPECS
+        for spec in PARAM_SPECS:
+            parsed = parse_param_spec(spec)
+            if parsed:
+                name, kind, args = parsed
+                specs[name] = (kind, args)
+        # suggest params
+        for name, (kind,args) in specs.items():
+            if kind == 'int_range':
+                lo, hi, step = args
+                params['strategy'][name] = trial.suggest_int(name, lo, hi, step=step)
+            elif kind == 'float_range':
+                lo, hi, step = args
+                params['strategy'][name] = round(trial.suggest_float(name, lo, hi, step=step), 8)
+            elif kind == 'categorical':
+                params['strategy'][name] = trial.suggest_categorical(name, args)
+        # behavior defaults
+        params['behavior']['use_longs'] = True
+        params['behavior']['use_shorts'] = True
+    else:
+        # The legacy 'volume_channel' strategy has been removed. Only 'peak_trough' is supported.
+        raise ValueError(f"Unsupported strategy: {STRATEGY}. Use 'peak_trough'.")
+
     # Backtest durchführen
     result = run_backtest(HISTORICAL_DATA.copy(), params, start_capital=START_CAPITAL, verbose=False)
     
@@ -101,28 +162,22 @@ def save_config(symbol: str, timeframe: str, best_params: dict,
     config_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
     os.makedirs(config_dir, exist_ok=True)
     
+    # Use best_params to populate strategy section directly (supports peak_trough keys)
+    strategy_section = {}
+    for k,v in best_params.items():
+        if k in ('risk_per_trade_pct','leverage'):
+            continue
+        strategy_section[k] = v
+
     config = {
-        "market": {
-            "symbol": symbol,
-            "timeframe": timeframe
-        },
-        "strategy": {
-            "atr_period": best_params.get('atr_period', 200),
-            "channel_width": best_params.get('channel_width', 3.0),
-            "min_channel_length": best_params.get('min_channel_length', 10),
-            "volume_bins": best_params.get('volume_bins', 30),
-            "use_volume_confirmation": best_params.get('use_volume_confirmation', True),
-            "risk_reward_ratio": best_params.get('risk_reward_ratio', 2.0)
-        },
+        "market": {"symbol": symbol, "timeframe": timeframe},
+        "strategy": strategy_section,
         "risk": {
             "margin_mode": "isolated",
             "risk_per_trade_pct": best_params.get('risk_per_trade_pct', 1.0),
             "leverage": best_params.get('leverage', 5)
         },
-        "behavior": {
-            "use_longs": True,
-            "use_shorts": True
-        },
+        "behavior": {"use_longs": True, "use_shorts": True},
         "optimization": {
             "optimized_at": datetime.now().isoformat(),
             "data_range": f"{start_date} to {end_date}",
@@ -145,8 +200,10 @@ def save_config(symbol: str, timeframe: str, best_params: dict,
 def main():
     global HISTORICAL_DATA, MAX_DRAWDOWN_CONSTRAINT, MIN_WIN_RATE_CONSTRAINT
     global MIN_PNL_CONSTRAINT, MIN_TRADES, START_CAPITAL, OPTIM_MODE
-    
-    parser = argparse.ArgumentParser(description="KBot Volume Channel Flow Optimizer")
+    global STRATEGY, PARAM_SPECS
+
+    parser = argparse.ArgumentParser(description="KBot Optimizer")
+    parser.add_argument('--strategy', type=str, default='peak_trough', help="Strategy to optimize (peak_trough)")
     parser.add_argument('--symbols', required=True, type=str, help="Symbole (z.B. BTC ETH)")
     parser.add_argument('--timeframes', required=True, type=str, help="Timeframes (z.B. 4h 1d)")
     parser.add_argument('--start_date', required=True, type=str, help="Start-Datum")
@@ -159,8 +216,13 @@ def main():
     parser.add_argument('--min_trades', type=int, default=10, help="Min Trades")
     parser.add_argument('--start_capital', type=float, default=1000, help="Startkapital")
     parser.add_argument('--mode', type=str, default='strict', choices=['strict', 'best_profit'])
+    parser.add_argument('--param', action='append', help='Parameter spec, e.g. lookback_n:3:10:1 or atr_mult:1.0:2.0:0.1 or use_volume_confirmation:0,1')
     args = parser.parse_args()
-    
+
+    # read strategy and params
+    STRATEGY = args.strategy
+    PARAM_SPECS = args.param or []
+
     # Globale Constraints setzen
     MAX_DRAWDOWN_CONSTRAINT = args.max_drawdown
     MIN_WIN_RATE_CONSTRAINT = args.min_win_rate
@@ -168,111 +230,108 @@ def main():
     MIN_TRADES = args.min_trades
     START_CAPITAL = args.start_capital
     OPTIM_MODE = args.mode
-    
+
     symbols = [f"{s}/USDT:USDT" for s in args.symbols.split()]
     timeframes = args.timeframes.split()
-    
+
     print("\n" + "=" * 60)
-    print("   KBot Volume Channel Flow - Parameter Optimierung")
+    print("   KBot Optimizer")
     print("=" * 60)
+    print(f"   Strategy:     {STRATEGY}")
     print(f"   Symbole:      {', '.join(symbols)}")
     print(f"   Timeframes:   {', '.join(timeframes)}")
     print(f"   Zeitraum:     {args.start_date} bis {args.end_date}")
     print(f"   Trials:       {args.trials}")
     print(f"   Modus:        {args.mode}")
     print("=" * 60)
-    
+
+    # Optimization loop
+    now = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    output_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'optimizer_runs')
+    os.makedirs(output_dir, exist_ok=True)
+
     for symbol in symbols:
         for timeframe in timeframes:
-            print(f"\n{'─' * 50}")
-            print(f"🔍 Optimiere: {symbol} ({timeframe})")
-            print(f"{'─' * 50}")
-            
-            # Daten laden
-            HISTORICAL_DATA = load_data(symbol, timeframe, args.start_date, args.end_date)
-            
-            if HISTORICAL_DATA.empty or len(HISTORICAL_DATA) < 100:
-                print(f"⚠️ Nicht genug Daten für {symbol} ({timeframe}). Überspringe.")
-                continue
-            
-            print(f"📊 Daten geladen: {len(HISTORICAL_DATA)} Kerzen")
-            print(f"📅 Zeitraum: {HISTORICAL_DATA.index.min()} bis {HISTORICAL_DATA.index.max()}")
-            
-            # Optuna Study erstellen
-            safe_filename = create_safe_filename(symbol, timeframe)
-            db_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'db')
-            os.makedirs(db_dir, exist_ok=True)
-            
-            storage_url = f"sqlite:///{db_dir}/optuna_vcf.db?timeout=60"
-            study_name = f"vcf_{safe_filename}_{args.mode}"
-            
-            study = optuna.create_study(
-                storage=storage_url,
-                study_name=study_name,
-                direction="maximize",
-                load_if_exists=True
-            )
-            
-            print(f"\n🚀 Starte Optimierung mit {args.trials} Trials...")
-            
-            study.optimize(
-                objective,
-                n_trials=args.trials,
-                n_jobs=args.jobs if args.jobs > 0 else 1,
-                show_progress_bar=True
-            )
-            
-            # Ergebnisse auswerten
-            valid_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-            
-            if not valid_trials:
-                print(f"\n❌ Keine gültigen Parameter gefunden für {symbol} ({timeframe})")
-                continue
-            
-            best = study.best_trial
-            print(f"\n✅ Beste Parameter gefunden (Score: {best.value:.2f}):")
-            for key, value in best.params.items():
-                print(f"   {key}: {value}")
-            
-            # Finaler Backtest mit besten Parametern
-            final_params = {
-                'strategy': {
-                    'atr_period': best.params.get('atr_period', 200),
-                    'channel_width': best.params.get('channel_width', 3.0),
-                    'min_channel_length': best.params.get('min_channel_length', 10),
-                    'volume_bins': best.params.get('volume_bins', 30),
-                    'use_volume_confirmation': best.params.get('use_volume_confirmation', True),
-                    'risk_reward_ratio': best.params.get('risk_reward_ratio', 2.0),
-                },
-                'risk': {
-                    'risk_per_trade_pct': best.params.get('risk_per_trade_pct', 1.0),
-                    'leverage': best.params.get('leverage', 5),
-                },
-                'behavior': {
-                    'use_longs': True,
-                    'use_shorts': True,
-                }
-            }
-            
-            final_result = run_backtest(HISTORICAL_DATA.copy(), final_params, 
-                                        start_capital=START_CAPITAL, verbose=False)
-            
-            print(f"\n📊 FINALES BACKTEST-ERGEBNIS:")
-            print(f"   Trades:        {final_result['trades_count']}")
-            print(f"   Win-Rate:      {final_result['win_rate']:.1f}%")
-            print(f"   Rendite:       {final_result['total_pnl_pct']:.2f}%")
-            print(f"   Max Drawdown:  {final_result['max_drawdown_pct']:.2f}%")
-            print(f"   Profit Factor: {final_result.get('profit_factor', 0):.2f}")
-            print(f"   Endkapital:    ${final_result['end_capital']:.2f}")
-            
-            # Config speichern
-            save_config(symbol, timeframe, best.params, final_result,
-                       args.start_date, args.end_date)
-    
-    print("\n" + "=" * 60)
-    print("   ✅ Optimierung abgeschlossen!")
-    print("=" * 60 + "\n")
+            safe_name = create_safe_filename(symbol, timeframe)
+            print(f"\n--- Optimizing {symbol} {timeframe} ---")
 
+            # Load data
+            HISTORICAL_DATA = load_data(symbol, timeframe, args.start_date, args.end_date)
+            if HISTORICAL_DATA.empty:
+                print(f"Keine historischen Daten für {symbol} {timeframe} vorhanden. Überspringe.")
+                continue
+
+            # Init study (SQLite per-run to allow resume)
+            db_path = os.path.join(output_dir, f"study_{safe_name}_{now}.db")
+            storage = f"sqlite:///{db_path}"
+            study_name = f"opt_{STRATEGY}_{safe_name}_{now}"
+            print(f"Studie: {study_name} (storage: {db_path})")
+            study = optuna.create_study(direction='maximize', study_name=study_name, storage=storage, load_if_exists=True, sampler=optuna.samplers.TPESampler())
+
+            # Run optimization
+            try:
+                study.optimize(objective, n_trials=args.trials, n_jobs=args.jobs)
+            except Exception as e:
+                print(f"Fehler während der Optimierung: {e}")
+
+            # Summarize
+            try:
+                best_trial = study.best_trial
+            except ValueError:
+                print("Keine gültigen Trials gefunden.")
+                continue
+            if best_trial is None:
+                print("Keine gültigen Trials gefunden.")
+                continue
+            print(f"\nBeste Trial: #{best_trial.number} (Value={best_trial.value:.4f})")
+            print(f"Params: {best_trial.params}")
+
+            # Reconstruct hierarchical params for backtest
+            final_params = {'strategy': {}, 'risk': {}, 'behavior': {'use_longs': True, 'use_shorts': True}}
+            risk_keys = {'risk_per_trade_pct', 'leverage'}
+            for k,v in best_trial.params.items():
+                if k in risk_keys:
+                    final_params['risk'][k] = v
+                elif k in ('use_longs','use_shorts'):
+                    final_params['behavior'][k] = v
+                else:
+                    final_params['strategy'][k] = v
+
+            # Evaluate best config
+            result = run_backtest(HISTORICAL_DATA.copy(), final_params, start_capital=START_CAPITAL, verbose=False)
+            print(f"Result: PnL={result.get('total_pnl_pct',0):.2f}%, Trades={result.get('trades_count',0)}, WinRate={result.get('win_rate',0):.1f}%")
+
+            # Save run summary
+            summary = {
+                'strategy': STRATEGY,
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'start_date': args.start_date,
+                'end_date': args.end_date,
+                'best_trial': best_trial.number,
+                'best_value': best_trial.value,
+                'best_params': best_trial.params,
+                'result': result,
+                'trials': study.trials_dataframe().astype(str).to_dict(orient='list')
+            }
+            summary_path = os.path.join(output_dir, f"summary_{safe_name}_{now}.json")
+            with open(summary_path, 'w') as f:
+                json.dump(summary, f, indent=2)
+            print(f"Saved summary: {summary_path}")
+
+            # Save config only if it meets trade/pnl thresholds
+            if result.get('trades_count',0) >= args.min_trades and result.get('total_pnl_pct',0) >= args.min_pnl:
+                merged_best = {}
+                merged_best.update(final_params.get('strategy', {}))
+                merged_best.update(final_params.get('risk', {}))
+                save_config(symbol, timeframe, merged_best, result, args.start_date, args.end_date)
+            else:
+                print("Beste Konfiguration erfüllt nicht die Mindestanforderungen (Trades/PnL). Nicht gespeichert.")
+
+    print("\nOptimierung abgeschlossen.")
+    
+    
+# Optimization is executed inside main() to avoid argparse on import. Use main() when running as script.
 
 if __name__ == "__main__":
     main()

@@ -17,13 +17,17 @@ sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 # Importiere die KBot-Funktionen
 from kbot.utils.exchange import Exchange
 from kbot.utils.trade_manager import check_and_open_new_position, housekeeper_routine, clear_trade_lock
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+from kbot.strategy.peak_trough_engine import PeakTroughEngine as VolumeChannelEngine  # use new Peak/Trough engine for live workflow tests
 
 
 @pytest.fixture(scope="module")
 def test_setup():
     print("\n--- Starte umfassenden LIVE KBot-Workflow-Test (PEPE) ---")
     print("\n[Setup] Bereite Testumgebung vor...")
+
+    # For CI and local dev safety: skip live tests unless explicitly enabled
+    if os.environ.get('KBOT_RUN_LIVE_TESTS', '0') != '1':
+        pytest.skip("Live-Tests deaktiviert. Setze KBOT_RUN_LIVE_TESTS=1 um sie zu aktivieren.")
 
     secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
     if not os.path.exists(secret_path):
@@ -120,7 +124,7 @@ def test_setup():
 
 def test_full_kbot_workflow_on_bitget(test_setup):
     """
-    Umfassender Live-Workflow-Test für KBot (Volume Channel Flow).
+    Umfassender Live-Workflow-Test für KBot (Peak/Trough Reversal).
     
     Testet:
     1. Trade-Eröffnung mit gemocktem Signal

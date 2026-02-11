@@ -1,6 +1,6 @@
 # src/kbot/utils/trade_manager.py
 # =============================================================================
-# KBot Trade Manager: Volume Channel Flow Strategy
+# KBot Trade Manager: Peak/Trough Reversal Strategy
 # =============================================================================
 
 import logging
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from kbot.utils.telegram import send_message
 from kbot.utils.exchange import Exchange
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+from kbot.strategy.peak_trough_engine import PeakTroughEngine
 
 # --------------------------------------------------------------------------- #
 # Pfade
@@ -136,7 +136,7 @@ def housekeeper_routine(exchange: Exchange, symbol: str, logger: logging.Logger)
 # --------------------------------------------------------------------------- #
 # Signal-Analyse und Logging
 # --------------------------------------------------------------------------- #
-def analyze_and_log_signal(engine: VolumeChannelEngine, df, params: dict, logger: logging.Logger):
+def analyze_and_log_signal(engine, df, params: dict, logger: logging.Logger):
     """
     Analysiert das aktuelle Signal und gibt detaillierte Logs aus.
     
@@ -159,7 +159,7 @@ def analyze_and_log_signal(engine: VolumeChannelEngine, df, params: dict, logger
     
     # Detailliertes Logging (für cron.log sichtbar)
     print("\n" + "=" * 60)
-    print("📊 KBOT VOLUME CHANNEL FLOW ANALYSE")
+    print("📊 KBOT PEAK/TROUGH REVERSAL ANALYSE")
     print("=" * 60)
     print(f"Symbol:         {params['market']['symbol']}")
     print(f"Timeframe:      {params['market']['timeframe']}")
@@ -188,7 +188,7 @@ def analyze_and_log_signal(engine: VolumeChannelEngine, df, params: dict, logger
 # --------------------------------------------------------------------------- #
 # Position eröffnen
 # --------------------------------------------------------------------------- #
-def open_position(exchange: Exchange, engine: VolumeChannelEngine, df,
+def open_position(exchange: Exchange, engine, df,
                   side: str, params: dict, telegram_config: dict, 
                   logger: logging.Logger) -> bool:
     """
@@ -357,8 +357,8 @@ def check_and_open_new_position(exchange: Exchange, params: dict,
             logger.warning(f"Nicht genug Daten: {len(data)} < {atr_period + 10}")
             return
         
-        # Volume Channel Engine initialisieren
-        engine = VolumeChannelEngine(settings=strategy_params)
+        # Peak/Trough Engine initialisieren
+        engine = PeakTroughEngine(settings=strategy_params)
         
         # Daten verarbeiten
         processed_data = engine.process_dataframe(data)

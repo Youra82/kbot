@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
-# KBot: Volume Channel Flow - Pipeline
+# KBot: Peak/Trough - Pipeline
 # =============================================================================
-# Diese Pipeline optimiert die Parameter der Volume Channel Flow Strategie.
+# Diese Pipeline optimiert die Parameter der Peak/Trough Strategie.
 # Kein ML-Training nötig - nur Parameter-Optimierung!
 # =============================================================================
 
@@ -16,7 +16,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 echo -e "${BLUE}======================================================="
-echo "   KBot Volume Channel Flow - Parameter Optimierung"
+echo "   KBot Peak/Trough - Parameter Optimierung"
 echo -e "=======================================================${NC}"
 
 # --- Pfade definieren ---
@@ -47,7 +47,7 @@ fi
 # --- Interaktive Abfrage (oder non-interactive flags) ---
 # If running in non-interactive mode, pass --non-interactive and other flags.
 if [[ "$1" == "--non-interactive" ]]; then
-    # parse simple args in the form: --min_trades 20 --min_pnl 20 --min_pf 1.2 --ensemble_size 5
+    # parse simple args and param flags
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --min_trades)
@@ -62,6 +62,11 @@ if [[ "$1" == "--non-interactive" ]]; then
                 AUTO_PUSH=1; shift;;
             --non-interactive)
                 NONINTERACTIVE=1; shift;;
+            --strategy)
+                STRATEGY="$2"; shift 2;;
+            --param)
+                # collect raw param specs in PARAMS_RAW
+                PARAMS_RAW="${PARAMS_RAW} $2"; shift 2;;
             *)
                 shift;;
         esac
@@ -174,6 +179,7 @@ echo -e "${BLUE}=======================================================${NC}"
 echo -e "  Symbole:       ${CYAN}$SYMBOLS${NC}"
 echo -e "  Timeframes:    ${CYAN}$TIMEFRAMES${NC}"
 echo -e "  Zeitraum:      ${CYAN}$START_DATE bis $END_DATE${NC}"
+echo -e "  Strategie:     ${CYAN}$STRATEGY${NC}"
 echo -e "  Startkapital:  ${CYAN}$START_CAPITAL USDT${NC}"
 echo -e "  Trials:        ${CYAN}$N_TRIALS${NC}"
 echo -e "  Modus:         ${CYAN}$OPTIM_MODE_ARG${NC}"
@@ -185,7 +191,39 @@ read -p "Starten? (Enter zum Fortfahren, Ctrl+C zum Abbrechen): " _
 # --- Optimierung starten ---
 echo -e "\n${GREEN}🚀 Starte Optimierung...${NC}\n"
 
+# Prepare default strategy from settings.json or fallback to peak_trough
+if [ -f settings.json ]; then
+    DEFAULT_STRAT=$(python3 - <<'PY'
+import json
+try:
+    s=json.load(open('settings.json'))
+    print(s.get('optimization_settings',{}).get('strategy','peak_trough'))
+except Exception:
+    print('peak_trough')
+PY
+)
+else
+    DEFAULT_STRAT="peak_trough"
+fi
+STRATEGY=${STRATEGY:-$DEFAULT_STRAT}
+
+# Interactive strategy selection (skipped in non-interactive mode)
+if [[ -z "$NONINTERACTIVE" ]]; then
+    read -p "Strategie (volume_channel/peak_trough) [${STRATEGY}]: " STRATEGY_INPUT
+    STRATEGY=${STRATEGY_INPUT:-$STRATEGY}
+fi
+
+PARAM_FLAGS=""
+# If non-interactive, PARAMS may have been set via --param flags parsing earlier
+# Additional parsing from environment-style variables is supported
+if [[ -n "$PARAMS_RAW" ]]; then
+    for p in $PARAMS_RAW; do
+        PARAM_FLAGS+=" --param $p"
+    done
+fi
+
 python3 "$OPTIMIZER" \
+    --strategy "$STRATEGY" \
     --symbols "$SYMBOLS" \
     --timeframes "$TIMEFRAMES" \
     --start_date "$START_DATE" \
@@ -195,8 +233,9 @@ python3 "$OPTIMIZER" \
     --max_drawdown "$MAX_DD" \
     --min_win_rate "$MIN_WR" \
     --min_pnl "$MIN_PNL" \
+    --min_trades "$MIN_TRADES" \
     --start_capital "$START_CAPITAL" \
-    --mode "$OPTIM_MODE_ARG"
+    --mode "$OPTIM_MODE_ARG" $PARAM_FLAGS
 
 if [ $? -eq 0 ]; then
     echo -e "\n${GREEN}✅ Optimierung erfolgreich abgeschlossen!${NC}"
@@ -207,6 +246,18 @@ if [ $? -eq 0 ]; then
     # post-processing: pick ensemble and quick simulate
     echo -e "\n${CYAN}📋 Picking ensemble based on thresholds: trades>=${MIN_TRADES}, pnl>=${MIN_PNL}, pf>=${MIN_PF}${NC}"
     python3 scripts/pick_and_simulate.py --min_trades ${MIN_TRADES} --min_pnl ${MIN_PNL} --min_pf ${MIN_PF} --ensemble_size ${ENSEMBLE_SIZE} --output artifacts/ensemble.json ${AUTO_PUSH:+--auto_push}
+
+    # Optional: automated report + selection + quick simulate + (optional) long optimize
+    if [[ "$AUTO_REPORT" == "1" || "$AUTO_ENSEMBLE" == "1" ]]; then
+        echo -e "\n${CYAN}🔎 Running automated report & selection...${NC}"
+        python3 scripts/report_walk_forward.py --min_oos_trades ${MIN_TRADES} --min_mean_oos_pnl ${MIN_PNL} --output artifacts/report_filtered_configs.json
+        python3 scripts/select_and_build_ensemble.py --report artifacts/report_filtered_configs.json --output artifacts/ensemble_selected.json --min_pf ${MIN_PF} ${AUTO_PUSH:+--auto_push}
+        python3 scripts/quick_simulate_ensemble.py
+        if [[ "$AUTO_LONG" == "1" ]]; then
+            echo "Starting long optimizations (this may take a while)..."
+            python3 scripts/long_optimize.py --trials ${LONG_TRIALS:-200}
+        fi
+    fi
 else
     echo -e "\n${RED}❌ Fehler bei der Optimierung.${NC}"
 fi

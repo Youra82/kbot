@@ -1,6 +1,6 @@
 # src/kbot/analysis/backtester.py
 # =============================================================================
-# KBot Backtester: Volume Channel Flow Strategy
+# KBot Backtester: Peak/Trough Reversal Strategy
 # =============================================================================
 
 import os
@@ -14,7 +14,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from kbot.utils.exchange import Exchange
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+from kbot.strategy.peak_trough_engine import PeakTroughEngine
 
 
 # =============================================================================
@@ -80,7 +80,7 @@ def load_data(symbol: str, timeframe: str, start_date: str, end_date: str) -> pd
 def run_backtest(data: pd.DataFrame, params: dict, start_capital: float = 1000,
                  verbose: bool = False, return_equity: bool = False):
     """
-    Führt einen Backtest der Volume Channel Flow Strategie durch.
+    Führt einen Backtest der Peak/Trough Strategie durch.
     
     Args:
         data: OHLCV DataFrame
@@ -111,7 +111,7 @@ def run_backtest(data: pd.DataFrame, params: dict, start_capital: float = 1000,
     fee_pct = 0.05 / 100  # 0.05% pro Trade
     
     # Engine initialisieren
-    engine = VolumeChannelEngine(settings=strategy)
+    engine = PeakTroughEngine(settings=strategy)
     
     # Daten verarbeiten
     df = engine.process_dataframe(data)
@@ -314,6 +314,6 @@ def run_backtest(data: pd.DataFrame, params: dict, start_capital: float = 1000,
 # MAIN
 # =============================================================================
 if __name__ == "__main__":
-    print("KBot Backtester - Volume Channel Flow Strategy")
+    print("KBot Backtester - Peak/Trough Strategy")
     print("=" * 50)
     print("Verwendung: Importiere run_backtest() und übergebe OHLCV-Daten")

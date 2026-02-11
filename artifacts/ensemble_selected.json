@@ -1,0 +1,16 @@
+{
+  "ensemble": [
+    {
+      "file": "C:\\Users\\matol\\Desktop\\kbot\\src\\kbot\\strategy\\configs\\config_ETHUSDTUSDT_2h.json",
+      "symbol": "ETH",
+      "timeframe": "2h",
+      "agg": {
+        "n_splits": 4,
+        "mean_is_pnl": -18.391417946910565,
+        "mean_oos_pnl": 3.7755570207676135,
+        "mean_oos_win": 32.09586466165413,
+        "total_oos_trades": 44
+      }
+    }
+  ]
+}

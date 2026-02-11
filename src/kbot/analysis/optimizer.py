@@ -9,6 +9,19 @@ import json
 import optuna
 import argparse
 from datetime import datetime
+import threading
+import time
+
+# Optional imports for progress bars
+try:
+    from optuna.integration import TqdmProgressBarCallback
+except Exception:
+    TqdmProgressBarCallback = None
+
+try:
+    from tqdm import tqdm
+except Exception:
+    tqdm = None
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
@@ -268,9 +281,45 @@ def main():
             print(f"Studie: {study_name} (storage: {db_path})")
             study = optuna.create_study(direction='maximize', study_name=study_name, storage=storage, load_if_exists=True, sampler=optuna.samplers.TPESampler())
 
-            # Run optimization
+            # Run optimization with progress feedback
             try:
-                study.optimize(objective, n_trials=args.trials, n_jobs=args.jobs)
+                # Single-process: use Optuna's TqdmProgressBarCallback if available
+                if args.jobs == 1 and TqdmProgressBarCallback is not None:
+                    callbacks = [TqdmProgressBarCallback()]
+                    study.optimize(objective, n_trials=args.trials, n_jobs=1, callbacks=callbacks)
+                # Multi-process or callback not available: use a polling tqdm progress bar if tqdm is present
+                elif args.jobs != 1 and tqdm is not None:
+                    def _run_opt():
+                        try:
+                            study.optimize(objective, n_trials=args.trials, n_jobs=args.jobs)
+                        except Exception as e:
+                            # exceptions will be surfaced after thread joins
+                            _run_opt._exc = e
+
+                    # Start optimization in background thread and poll trial completion
+                    t = threading.Thread(target=_run_opt, daemon=True)
+                    t.start()
+
+                    with tqdm(total=args.trials, desc=f"{study_name}") as pbar:
+                        prev_completed = 0
+                        while t.is_alive():
+                            df = study.trials_dataframe()
+                            completed = len(df[df['state'] == 'COMPLETE']) if not df.empty else 0
+                            if completed > prev_completed:
+                                pbar.update(completed - prev_completed)
+                                prev_completed = completed
+                            time.sleep(0.8)
+                        # final update
+                        df = study.trials_dataframe()
+                        completed = len(df[df['state'] == 'COMPLETE']) if not df.empty else 0
+                        if completed > prev_completed:
+                            pbar.update(completed - prev_completed)
+                        # re-raise any exception from thread
+                        if hasattr(_run_opt, '_exc'):
+                            raise _run_opt._exc
+                else:
+                    # fallback: no progress bar available
+                    study.optimize(objective, n_trials=args.trials, n_jobs=args.jobs)
             except Exception as e:
                 print(f"Fehler während der Optimierung: {e}")
 

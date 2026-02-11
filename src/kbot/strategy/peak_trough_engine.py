@@ -34,6 +34,26 @@ class PeakTroughEngine:
         # breakout signal placeholder
         df['breakout_signal'] = None
         df['volume_delta'] = 0
+
+        # Build OHLCV list for signal generation
+        ohlcv = []
+        for idx, row in df.iterrows():
+            ohlcv.append((int(getattr(idx, 'timestamp', lambda: 0)()), float(row['open']), float(row['high']), float(row['low']), float(row['close']), float(row.get('volume', 0))))
+
+        # For each candle, compute if a reversal signal exists on the latest candle and
+        # mark breakout_signal on the previous candle so backtester can act on the next candle.
+        breakout_list = [None] * len(df)
+        for i in range(1, len(ohlcv)):
+            sub = ohlcv[:i+1]
+            sig = generate_signal(sub, self.settings)
+            if sig:
+                if sig['signal'] == 'long':
+                    breakout_list[i-1] = 1
+                elif sig['signal'] == 'short':
+                    breakout_list[i-1] = -1
+
+        # Assign computed breakout signals back to dataframe
+        df['breakout_signal'] = breakout_list
         return df
 
     def get_signal(self, df: pd.DataFrame, use_volume_confirmation: bool = False) -> Tuple[str, str]:

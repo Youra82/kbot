@@ -218,6 +218,7 @@ def save_config(symbol: str, timeframe: str, best_params: dict,
 def main():
     global HISTORICAL_DATA, MAX_DRAWDOWN_CONSTRAINT, MIN_WIN_RATE_CONSTRAINT
     global MIN_PNL_CONSTRAINT, MIN_TRADES, START_CAPITAL, OPTIM_MODE
+    global STRATEGY, PARAM_SPECS
 
     parser = argparse.ArgumentParser(description="KBot Optimizer")
     parser.add_argument('--strategy', type=str, default='volume_channel', help="Strategy to optimize (volume_channel or peak_trough)")
@@ -262,6 +263,90 @@ def main():
     print(f"   Modus:        {args.mode}")
     print("=" * 60)
 
+    # Optimization loop
+    now = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    output_dir = os.path.join(PROJECT_ROOT, 'artifacts', 'optimizer_runs')
+    os.makedirs(output_dir, exist_ok=True)
+
+    for symbol in symbols:
+        for timeframe in timeframes:
+            safe_name = create_safe_filename(symbol, timeframe)
+            print(f"\n--- Optimizing {symbol} {timeframe} ---")
+
+            # Load data
+            HISTORICAL_DATA = load_data(symbol, timeframe, args.start_date, args.end_date)
+            if HISTORICAL_DATA.empty:
+                print(f"Keine historischen Daten für {symbol} {timeframe} vorhanden. Überspringe.")
+                continue
+
+            # Init study (SQLite per-run to allow resume)
+            db_path = os.path.join(output_dir, f"study_{safe_name}_{now}.db")
+            storage = f"sqlite:///{db_path}"
+            study_name = f"opt_{STRATEGY}_{safe_name}_{now}"
+            print(f"Studie: {study_name} (storage: {db_path})")
+            study = optuna.create_study(direction='maximize', study_name=study_name, storage=storage, load_if_exists=True, sampler=optuna.samplers.TPESampler())
+
+            # Run optimization
+            try:
+                study.optimize(objective, n_trials=args.trials, n_jobs=args.jobs)
+            except Exception as e:
+                print(f"Fehler während der Optimierung: {e}")
+
+            # Summarize
+            try:
+                best_trial = study.best_trial
+            except ValueError:
+                print("Keine gültigen Trials gefunden.")
+                continue
+            if best_trial is None:
+                print("Keine gültigen Trials gefunden.")
+                continue
+            print(f"\nBeste Trial: #{best_trial.number} (Value={best_trial.value:.4f})")
+            print(f"Params: {best_trial.params}")
+
+            # Reconstruct hierarchical params for backtest
+            final_params = {'strategy': {}, 'risk': {}, 'behavior': {'use_longs': True, 'use_shorts': True}}
+            risk_keys = {'risk_per_trade_pct', 'leverage'}
+            for k,v in best_trial.params.items():
+                if k in risk_keys:
+                    final_params['risk'][k] = v
+                elif k in ('use_longs','use_shorts'):
+                    final_params['behavior'][k] = v
+                else:
+                    final_params['strategy'][k] = v
+
+            # Evaluate best config
+            result = run_backtest(HISTORICAL_DATA.copy(), final_params, start_capital=START_CAPITAL, verbose=False)
+            print(f"Result: PnL={result.get('total_pnl_pct',0):.2f}%, Trades={result.get('trades_count',0)}, WinRate={result.get('win_rate',0):.1f}%")
+
+            # Save run summary
+            summary = {
+                'strategy': STRATEGY,
+                'symbol': symbol,
+                'timeframe': timeframe,
+                'start_date': args.start_date,
+                'end_date': args.end_date,
+                'best_trial': best_trial.number,
+                'best_value': best_trial.value,
+                'best_params': best_trial.params,
+                'result': result,
+                'trials': study.trials_dataframe().astype(str).to_dict(orient='list')
+            }
+            summary_path = os.path.join(output_dir, f"summary_{safe_name}_{now}.json")
+            with open(summary_path, 'w') as f:
+                json.dump(summary, f, indent=2)
+            print(f"Saved summary: {summary_path}")
+
+            # Save config only if it meets trade/pnl thresholds
+            if result.get('trades_count',0) >= args.min_trades and result.get('total_pnl_pct',0) >= args.min_pnl:
+                merged_best = {}
+                merged_best.update(final_params.get('strategy', {}))
+                merged_best.update(final_params.get('risk', {}))
+                save_config(symbol, timeframe, merged_best, result, args.start_date, args.end_date)
+            else:
+                print("Beste Konfiguration erfüllt nicht die Mindestanforderungen (Trades/PnL). Nicht gespeichert.")
+
+    print("\nOptimierung abgeschlossen.")
     
     
 # Optimization is executed inside main() to avoid argparse on import. Use main() when running as script.

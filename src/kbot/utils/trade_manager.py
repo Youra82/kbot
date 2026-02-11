@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from kbot.utils.telegram import send_message
 from kbot.utils.exchange import Exchange
-from kbot.strategy.volume_channel_engine import VolumeChannelEngine
+from kbot.strategy.peak_trough_engine import PeakTroughEngine as VolumeChannelEngine  # adapter to new Peak/Trough strategy
 
 # --------------------------------------------------------------------------- #
 # Pfade

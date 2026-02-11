@@ -1,0 +1,23 @@
+{
+    "market":  {
+                   "symbol":  "ETH/USDT:USDT",
+                   "timeframe":  "2h"
+               },
+    "strategy":  {
+                     "atr_period":  200,
+                     "channel_width":  3,
+                     "use_volume_confirmation":  true,
+                     "min_channel_length":  10,
+                     "volume_bins":  30,
+                     "risk_reward_ratio":  2
+                 },
+    "risk":  {
+                 "margin_mode":  "isolated",
+                 "risk_per_trade_pct":  1.0,
+                 "leverage":  5
+             },
+    "behavior":  {
+                     "use_longs":  true,
+                     "use_shorts":  true
+                 }
+}

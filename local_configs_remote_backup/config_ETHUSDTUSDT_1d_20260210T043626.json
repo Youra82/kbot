@@ -1,0 +1,32 @@
+{
+    "market": {
+        "symbol": "ETH/USDT:USDT",
+        "timeframe": "1d"
+    },
+    "strategy": {
+        "atr_period": 240,
+        "channel_width": 3.75,
+        "min_channel_length": 20,
+        "volume_bins": 35,
+        "use_volume_confirmation": true,
+        "risk_reward_ratio": 1.5
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 0.75,
+        "leverage": 19
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-10T04:36:26.901839",
+        "data_range": "2023-02-10 to 2026-02-09",
+        "backtest_pnl_pct": 322.5,
+        "backtest_win_rate": 65.0,
+        "backtest_max_dd_pct": 26.48,
+        "backtest_trades": 20,
+        "backtest_profit_factor": 2.32
+    }
+}

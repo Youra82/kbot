@@ -294,7 +294,7 @@ def run_portfolio_optimizer(start_date: str, end_date: str, start_capital: float
             })
     
     if not results:
-        safe_print(f"\nKeine Strategien gefunden, die den Drawdown-Constraint von {max_drawdown}% erfüllen.")
+        print(f"\nKeine Strategien gefunden, die den Drawdown-Constraint von {max_drawdown}% erfüllen.")
         return
     
     # Nach PnL/DD-Verhältnis sortieren (Risk-adjusted Return)

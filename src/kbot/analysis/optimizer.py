@@ -17,7 +17,17 @@ from kbot.analysis.backtester import load_data, run_backtest
 # Stoch‑RSI verwendet eigene Engine (siehe src/kbot/strategy/stochrsi_engine.py) -- Optimizer nutzt run_backtest() direkt
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
-from optuna.integration import TQDMProgressBar
+# Prefer Optuna's TQDMProgressBar when available; provide a robust fallback otherwise.
+try:
+    from optuna.integration import TQDMProgressBar  # recent Optuna versions
+    _has_optuna_tqdm = True
+except Exception:
+    _has_optuna_tqdm = False
+
+# Fallback utilities (used when TQDMProgressBar is not available)
+from tqdm.auto import tqdm
+import threading, time
+from optuna.trial import TrialState
 
 # Globale Variablen
 HISTORICAL_DATA = None
@@ -202,15 +212,78 @@ def main():
             )
             
             print(f"\n🚀 Starte Optimierung mit {args.trials} Trials...")
-            
-            # Use a single, consolidated progress bar even when running in parallel (n_jobs > 1)
-            progress = TQDMProgressBar()
-            study.optimize(
-                objective,
-                n_trials=args.trials,
-                n_jobs=args.jobs if args.jobs > 0 else 1,
-                callbacks=[progress]
-            )
+
+            n_jobs = args.jobs if args.jobs > 0 else 1
+
+            # Use Optuna integration when available, otherwise run a storage‑polling monitor
+            if _has_optuna_tqdm:
+                progress = TQDMProgressBar()
+                study.optimize(
+                    objective,
+                    n_trials=args.trials,
+                    n_jobs=n_jobs,
+                    callbacks=[progress]
+                )
+            else:
+                # Fallback: start a background monitor that polls the Study storage and
+                # updates a single tqdm bar in the main process. This works with
+                # parallel workers because the storage is updated centrally (RDB).
+                class _StudyProgressMonitor(threading.Thread):
+                    def __init__(self, study, total, interval=0.5, desc='Optuna'):
+                        super().__init__(daemon=True)
+                        self.study = study
+                        self.total = int(total)
+                        self.interval = float(interval)
+                        self._stop = threading.Event()
+                        self._pbar = tqdm(total=self.total, desc=desc, unit='trial')
+                        self._last = 0
+
+                    def run(self):
+                        while not self._stop.is_set():
+                            try:
+                                trials = self.study._storage.get_all_trials(self.study._study_id)
+                                completed = sum(1 for t in trials if t.state == TrialState.COMPLETE)
+                                delta = completed - self._last
+                                if delta > 0:
+                                    self._pbar.update(delta)
+                                    self._last = completed
+                                if completed >= self.total:
+                                    break
+                            except Exception:
+                                # be robust to transient storage errors
+                                pass
+                            time.sleep(self.interval)
+                        try:
+                            self._pbar.close()
+                        except Exception:
+                            pass
+
+                    def stop(self):
+                        self._stop.set()
+                        self.join(timeout=2)
+                        try:
+                            trials = self.study._storage.get_all_trials(self.study._study_id)
+                            completed = sum(1 for t in trials if t.state == TrialState.COMPLETE)
+                            if completed > self._last:
+                                self._pbar.update(completed - self._last)
+                        except Exception:
+                            pass
+                        try:
+                            self._pbar.close()
+                        except Exception:
+                            pass
+
+                monitor = _StudyProgressMonitor(study, args.trials)
+                monitor.start()
+                try:
+                    study.optimize(
+                        objective,
+                        n_trials=args.trials,
+                        n_jobs=n_jobs,
+                        show_progress_bar=False
+                    )
+                finally:
+                    monitor.stop()
             
             # Ergebnisse auswerten
             valid_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]

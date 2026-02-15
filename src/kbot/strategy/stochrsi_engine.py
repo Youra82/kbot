@@ -1,7 +1,7 @@
 # src/kbot/strategy/stochrsi_engine.py
 """
 StochRSIEngine
-- Einfacher, gut dokumentierter Stoch‑RSI Signal-Generator für KBot
+- Einfacher, gut dokumentierter Stoch-RSI Signal-Generator für KBot
 - API-kompatible Hilfsfunktionen, sodass `trade_manager` weiterverwendet werden kann
 """
 from dataclasses import dataclass

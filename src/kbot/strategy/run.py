@@ -1,6 +1,6 @@
 # src/kbot/strategy/run.py
 # =============================================================================
-# KBot: Stoch‑RSI Trading Bot
+# KBot: Stoch-RSI Trading Bot
 # =============================================================================
 
 import os
@@ -66,7 +66,7 @@ def run_for_account(account: dict, telegram_config: dict, params: dict,
     timeframe = params['market']['timeframe']
     
     print(f"\n{'=' * 60}")
-    print(f"🤖 KBot Stoch‑RSI")
+    print(f"🤖 KBot Stoch-RSI")
     print(f"   Symbol: {symbol} | Timeframe: {timeframe}")
     print(f"   Account: {account_name}")
     print(f"{'=' * 60}")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Interactive Charts für KBot - Stoch‑RSI
+Interactive Charts für KBot - Stoch-RSI
 Verhält sich wie `stbot`'s interactive_status.py, aber verwendet ausschließlich KBot-Strategien/Backtester.
 Zeigt Candlestick-Chart mit Entry/Exit-Signalen und Equity-Curve.
 """

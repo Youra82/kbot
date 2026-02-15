@@ -1,6 +1,6 @@
 # src/kbot/analysis/optimizer.py
 # =============================================================================
-# KBot: Parameter-Optimierung für Stoch‑RSI Strategie
+# KBot: Parameter-Optimierung für Stoch-RSI Strategie
 # =============================================================================
 
 import os
@@ -9,6 +9,28 @@ import json
 import optuna
 import argparse
 from datetime import datetime
+import sys
+
+
+def safe_print(*args, **kwargs):
+    """Print wrapper that falls back on replacement encoding when stdout can't
+    handle some Unicode characters (helps Windows CI)."""
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, 'encoding', 'utf-8') or 'utf-8'
+        safe_parts = []
+        for a in args:
+            try:
+                if isinstance(a, str):
+                    _ = a.encode(enc)
+                    safe_parts.append(a)
+                else:
+                    safe_parts.append(str(a))
+            except Exception:
+                # replace unencodable chars
+                safe_parts.append(a.encode(enc, errors='replace').decode(enc))
+        print(' '.join(safe_parts), **kwargs)
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
@@ -17,17 +39,6 @@ from kbot.analysis.backtester import load_data, run_backtest
 # Stoch‑RSI verwendet eigene Engine (siehe src/kbot/strategy/stochrsi_engine.py) -- Optimizer nutzt run_backtest() direkt
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
-# Prefer Optuna's TQDMProgressBar when available; provide a robust fallback otherwise.
-try:
-    from optuna.integration import TQDMProgressBar  # recent Optuna versions
-    _has_optuna_tqdm = True
-except Exception:
-    _has_optuna_tqdm = False
-
-# Fallback utilities (used when TQDMProgressBar is not available)
-from tqdm.auto import tqdm
-import threading, time
-from optuna.trial import TrialState
 
 # Globale Variablen
 HISTORICAL_DATA = None
@@ -144,7 +155,7 @@ def main():
     global HISTORICAL_DATA, MAX_DRAWDOWN_CONSTRAINT, MIN_WIN_RATE_CONSTRAINT
     global MIN_PNL_CONSTRAINT, MIN_TRADES, START_CAPITAL, OPTIM_MODE
     
-    parser = argparse.ArgumentParser(description="KBot Stoch‑RSI Optimizer")
+    parser = argparse.ArgumentParser(description="KBot Stoch-RSI Optimizer")
     parser.add_argument('--symbols', required=True, type=str, help="Symbole (z.B. BTC ETH)")
     parser.add_argument('--timeframes', required=True, type=str, help="Timeframes (z.B. 4h 1d)")
     parser.add_argument('--start_date', required=True, type=str, help="Start-Datum")
@@ -170,31 +181,31 @@ def main():
     symbols = [f"{s}/USDT:USDT" for s in args.symbols.split()]
     timeframes = args.timeframes.split()
     
-    print("\n" + "=" * 60)
-    print("   KBot Stoch‑RSI - Parameter Optimierung")
-    print("=" * 60)
-    print(f"   Symbole:      {', '.join(symbols)}")
-    print(f"   Timeframes:   {', '.join(timeframes)}")
-    print(f"   Zeitraum:     {args.start_date} bis {args.end_date}")
-    print(f"   Trials:       {args.trials}")
-    print(f"   Modus:        {args.mode}")
-    print("=" * 60)
+    safe_print("\n" + "=" * 60)
+    safe_print("   KBot Stoch-RSI - Parameter Optimierung")
+    safe_print("=" * 60)
+    safe_print(f"   Symbole:      {', '.join(symbols)}")
+    safe_print(f"   Timeframes:   {', '.join(timeframes)}")
+    safe_print(f"   Zeitraum:     {args.start_date} bis {args.end_date}")
+    safe_print(f"   Trials:       {args.trials}")
+    safe_print(f"   Modus:        {args.mode}")
+    safe_print("=" * 60)
     
     for symbol in symbols:
         for timeframe in timeframes:
-            print(f"\n{'─' * 50}")
-            print(f"🔍 Optimiere: {symbol} ({timeframe})")
-            print(f"{'─' * 50}")
+            safe_print(f"\n{'-' * 50}")
+            safe_print(f"[SEARCH] Optimiere: {symbol} ({timeframe})")
+            safe_print(f"{'-' * 50}")
             
             # Daten laden
             HISTORICAL_DATA = load_data(symbol, timeframe, args.start_date, args.end_date)
             
             if HISTORICAL_DATA.empty or len(HISTORICAL_DATA) < 100:
-                print(f"⚠️ Nicht genug Daten für {symbol} ({timeframe}). Überspringe.")
+                safe_print(f"[WARN] Nicht genug Daten für {symbol} ({timeframe}). Überspringe.")
                 continue
             
-            print(f"📊 Daten geladen: {len(HISTORICAL_DATA)} Kerzen")
-            print(f"📅 Zeitraum: {HISTORICAL_DATA.index.min()} bis {HISTORICAL_DATA.index.max()}")
+            safe_print(f"Daten geladen: {len(HISTORICAL_DATA)} Kerzen")
+            safe_print(f"Zeitraum: {HISTORICAL_DATA.index.min()} bis {HISTORICAL_DATA.index.max()}")
             
             # Optuna Study erstellen
             safe_filename = create_safe_filename(symbol, timeframe)
@@ -211,91 +222,30 @@ def main():
                 load_if_exists=True
             )
             
-            print(f"\n🚀 Starte Optimierung mit {args.trials} Trials...")
+            safe_print(f"\nStarte Optimierung mit {args.trials} Trials...")
 
             n_jobs = args.jobs if args.jobs > 0 else 1
 
-            # Use Optuna integration when available, otherwise run a storage‑polling monitor
-            if _has_optuna_tqdm:
-                progress = TQDMProgressBar()
-                study.optimize(
-                    objective,
-                    n_trials=args.trials,
-                    n_jobs=n_jobs,
-                    callbacks=[progress]
-                )
-            else:
-                # Fallback: start a background monitor that polls the Study storage and
-                # updates a single tqdm bar in the main process. This works with
-                # parallel workers because the storage is updated centrally (RDB).
-                class _StudyProgressMonitor(threading.Thread):
-                    def __init__(self, study, total, interval=0.5, desc='Optuna'):
-                        super().__init__(daemon=True)
-                        self.study = study
-                        self.total = int(total)
-                        self.interval = float(interval)
-                        self._stop = threading.Event()
-                        self._pbar = tqdm(total=self.total, desc=desc, unit='trial')
-                        self._last = 0
-
-                    def run(self):
-                        while not self._stop.is_set():
-                            try:
-                                trials = self.study._storage.get_all_trials(self.study._study_id)
-                                completed = sum(1 for t in trials if t.state == TrialState.COMPLETE)
-                                delta = completed - self._last
-                                if delta > 0:
-                                    self._pbar.update(delta)
-                                    self._last = completed
-                                if completed >= self.total:
-                                    break
-                            except Exception:
-                                # be robust to transient storage errors
-                                pass
-                            time.sleep(self.interval)
-                        try:
-                            self._pbar.close()
-                        except Exception:
-                            pass
-
-                    def stop(self):
-                        self._stop.set()
-                        self.join(timeout=2)
-                        try:
-                            trials = self.study._storage.get_all_trials(self.study._study_id)
-                            completed = sum(1 for t in trials if t.state == TrialState.COMPLETE)
-                            if completed > self._last:
-                                self._pbar.update(completed - self._last)
-                        except Exception:
-                            pass
-                        try:
-                            self._pbar.close()
-                        except Exception:
-                            pass
-
-                monitor = _StudyProgressMonitor(study, args.trials)
-                monitor.start()
-                try:
-                    study.optimize(
-                        objective,
-                        n_trials=args.trials,
-                        n_jobs=n_jobs,
-                        show_progress_bar=False
-                    )
-                finally:
-                    monitor.stop()
+            # Match StBot/JaegerBot behavior: let Optuna display a single consolidated
+            # progress bar via the built-in `show_progress_bar=True` even for parallel runs.
+            study.optimize(
+                objective,
+                n_trials=args.trials,
+                n_jobs=n_jobs,
+                show_progress_bar=True
+            )
             
             # Ergebnisse auswerten
             valid_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
             
             if not valid_trials:
-                print(f"\n❌ Keine gültigen Parameter gefunden für {symbol} ({timeframe})")
+                safe_print(f"\nKeine gültigen Parameter gefunden für {symbol} ({timeframe})")
                 continue
             
             best = study.best_trial
-            print(f"\n✅ Beste Parameter gefunden (Score: {best.value:.2f}):")
+            safe_print(f"\nBeste Parameter gefunden (Score: {best.value:.2f}):")
             for key, value in best.params.items():
-                print(f"   {key}: {value}")
+                safe_print(f"   {key}: {value}")
             
             # Finaler Backtest mit besten Parametern
             final_params = {
@@ -320,20 +270,20 @@ def main():
             final_result = run_backtest(HISTORICAL_DATA.copy(), final_params, 
                                         start_capital=START_CAPITAL, verbose=False)
             
-            print(f"\n📊 FINALES BACKTEST-ERGEBNIS:")
-            print(f"   Trades:        {final_result['trades_count']}")
-            print(f"   Win-Rate:      {final_result['win_rate']:.1f}%")
-            print(f"   Rendite:       {final_result['total_pnl_pct']:.2f}%")
-            print(f"   Max Drawdown:  {final_result['max_drawdown_pct']:.2f}%")
-            print(f"   Profit Factor: {final_result.get('profit_factor', 0):.2f}")
-            print(f"   Endkapital:    ${final_result['end_capital']:.2f}")
+            safe_print(f"\nFINALES BACKTEST-ERGEBNIS:")
+            safe_print(f"   Trades:        {final_result['trades_count']}")
+            safe_print(f"   Win-Rate:      {final_result['win_rate']:.1f}%")
+            safe_print(f"   Rendite:       {final_result['total_pnl_pct']:.2f}%")
+            safe_print(f"   Max Drawdown:  {final_result['max_drawdown_pct']:.2f}%")
+            safe_print(f"   Profit Factor: {final_result.get('profit_factor', 0):.2f}")
+            safe_print(f"   Endkapital:    ${final_result['end_capital']:.2f}")
             
             # Config speichern
             save_config(symbol, timeframe, best.params, final_result,
                        args.start_date, args.end_date)
     
     print("\n" + "=" * 60)
-    print("   ✅ Optimierung abgeschlossen!")
+    safe_print("   Optimierung abgeschlossen!")
     print("=" * 60 + "\n")
 
 

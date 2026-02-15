@@ -1,6 +1,6 @@
 # src/kbot/utils/trade_manager.py
 # =============================================================================
-# KBot Trade Manager: Stoch‑RSI Strategy
+# KBot Trade Manager: Stoch-RSI Strategy
 # =============================================================================
 
 import logging
@@ -159,7 +159,7 @@ def analyze_and_log_signal(engine: StochRSIEngine, df, params: dict, logger: log
     
     # Detailliertes Logging (für cron.log sichtbar)
     print("\n" + "=" * 60)
-    print("📊 KBOT STOCH‑RSI ANALYSE")
+    print("📊 KBOT STOCH-RSI ANALYSE")
     print("=" * 60)
     print(f"Symbol:         {params['market']['symbol']}")
     print(f"Timeframe:      {params['market']['timeframe']}")

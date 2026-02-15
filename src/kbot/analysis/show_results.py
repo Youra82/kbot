@@ -1,6 +1,6 @@
 # src/kbot/analysis/show_results.py
 # =============================================================================
-# KBot: Backtest-Ergebnisse anzeigen (Stoch‑RSI)
+# KBot: Backtest-Ergebnisse anzeigen (Stoch-RSI)
 # Interaktive Abfragen wie bei JaegerBot/DBot
 # =============================================================================
 
@@ -21,7 +21,7 @@ from kbot.strategy.stochrsi_engine import StochRSIEngine
 
 def show_channel_summary(symbol: str, timeframe: str, data: pd.DataFrame, 
                           params: dict) -> dict:
-    """Zeigt eine Zusammenfassung der Stoch‑RSI Strategie (K/D, OB/OS, ATR-basierte SL/TP)."""
+    """Zeigt eine Zusammenfassung der Stoch-RSI Strategie (K/D, OB/OS, ATR-basierte SL/TP)."""
     strategy = params.get('strategy', {})
     
     engine = StochRSIEngine(settings=strategy)
@@ -294,7 +294,7 @@ def run_portfolio_optimizer(start_date: str, end_date: str, start_capital: float
             })
     
     if not results:
-        print(f"\n❌ Keine Strategien gefunden, die den Drawdown-Constraint von {max_drawdown}% erfüllen.")
+        safe_print(f"\nKeine Strategien gefunden, die den Drawdown-Constraint von {max_drawdown}% erfüllen.")
         return
     
     # Nach PnL/DD-Verhältnis sortieren (Risk-adjusted Return)

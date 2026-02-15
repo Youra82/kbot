@@ -50,7 +50,7 @@ class StochRSIEngine:
         low_close = (df['low'] - df['close'].shift()).abs()
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         atr = tr.rolling(self.atr_period, min_periods=1).mean()
-        return atr.fillna(method='bfill').fillna(0.0)
+        return atr.bfill().fillna(0.0)
 
     def process_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Fügt `stochrsi_k`, `stochrsi_d`, `stochrsi_signal` und `atr` hinzu."""

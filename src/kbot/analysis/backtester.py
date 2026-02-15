@@ -1,6 +1,6 @@
 # src/kbot/analysis/backtester.py
 # =============================================================================
-# KBot Backtester: Stoch RSI Strategy
+# KBot Backtester: Stoch-RSI Strategy
 # =============================================================================
 
 import os

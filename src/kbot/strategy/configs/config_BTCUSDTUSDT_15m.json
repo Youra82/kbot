@@ -1,0 +1,35 @@
+{
+    "market": {
+        "symbol": "BTC/USDT:USDT",
+        "timeframe": "15m"
+    },
+    "strategy": {
+        "rsi_period": 21,
+        "stochrsi_len": 21,
+        "k": 3,
+        "d": 2,
+        "ob": 0.8,
+        "os": 0.05,
+        "atr_period": 26,
+        "sl_atr_mult": 0.9,
+        "risk_reward_ratio": 4.0
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 1.0,
+        "leverage": 6
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-15T21:22:47.912133",
+        "data_range": "2025-12-17 to 2026-02-14",
+        "backtest_pnl_pct": 23.92,
+        "backtest_win_rate": 20.9,
+        "backtest_max_dd_pct": 51.57,
+        "backtest_trades": 115,
+        "backtest_profit_factor": 1.07
+    }
+}

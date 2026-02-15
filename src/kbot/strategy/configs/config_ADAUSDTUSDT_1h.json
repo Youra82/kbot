@@ -1,0 +1,35 @@
+{
+    "market": {
+        "symbol": "ADA/USDT:USDT",
+        "timeframe": "1h"
+    },
+    "strategy": {
+        "rsi_period": 17,
+        "stochrsi_len": 17,
+        "k": 3,
+        "d": 5,
+        "ob": 0.8,
+        "os": 0.15000000000000002,
+        "atr_period": 7,
+        "sl_atr_mult": 2.2,
+        "risk_reward_ratio": 3.5
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 1.25,
+        "leverage": 6
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-15T21:05:38.693836",
+        "data_range": "2025-02-15 to 2026-02-14",
+        "backtest_pnl_pct": 436.83,
+        "backtest_win_rate": 31.0,
+        "backtest_max_dd_pct": 50.69,
+        "backtest_trades": 84,
+        "backtest_profit_factor": 1.29
+    }
+}

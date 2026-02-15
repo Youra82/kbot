@@ -1,0 +1,35 @@
+{
+    "market": {
+        "symbol": "XRP/USDT:USDT",
+        "timeframe": "6h"
+    },
+    "strategy": {
+        "rsi_period": 14,
+        "stochrsi_len": 21,
+        "k": 4,
+        "d": 3,
+        "ob": 0.9,
+        "os": 0.4,
+        "atr_period": 12,
+        "sl_atr_mult": 2.2,
+        "risk_reward_ratio": 3.0
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 1.25,
+        "leverage": 3
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-15T18:19:59.170175",
+        "data_range": "2023-02-16 to 2026-02-14",
+        "backtest_pnl_pct": 176.87,
+        "backtest_win_rate": 31.2,
+        "backtest_max_dd_pct": 30.81,
+        "backtest_trades": 157,
+        "backtest_profit_factor": 1.27
+    }
+}

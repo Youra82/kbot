@@ -1,0 +1,35 @@
+{
+    "market": {
+        "symbol": "ETH/USDT:USDT",
+        "timeframe": "6h"
+    },
+    "strategy": {
+        "rsi_period": 18,
+        "stochrsi_len": 19,
+        "k": 5,
+        "d": 4,
+        "ob": 0.8,
+        "os": 0.3,
+        "atr_period": 8,
+        "sl_atr_mult": 2.6,
+        "risk_reward_ratio": 3.6000000000000005
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 0.5,
+        "leverage": 10
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-15T18:04:23.599867",
+        "data_range": "2023-02-16 to 2026-02-14",
+        "backtest_pnl_pct": -13.17,
+        "backtest_win_rate": 23.1,
+        "backtest_max_dd_pct": 72.43,
+        "backtest_trades": 91,
+        "backtest_profit_factor": 0.97
+    }
+}

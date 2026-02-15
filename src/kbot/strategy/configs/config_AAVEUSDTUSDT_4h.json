@@ -1,0 +1,35 @@
+{
+    "market": {
+        "symbol": "AAVE/USDT:USDT",
+        "timeframe": "4h"
+    },
+    "strategy": {
+        "rsi_period": 18,
+        "stochrsi_len": 13,
+        "k": 3,
+        "d": 5,
+        "ob": 0.9,
+        "os": 0.3,
+        "atr_period": 44,
+        "sl_atr_mult": 2.0,
+        "risk_reward_ratio": 3.1
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 1.5,
+        "leverage": 3
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-15T19:11:00.431763",
+        "data_range": "2023-02-16 to 2026-02-14",
+        "backtest_pnl_pct": -72.16,
+        "backtest_win_rate": 19.6,
+        "backtest_max_dd_pct": 74.77,
+        "backtest_trades": 102,
+        "backtest_profit_factor": 0.73
+    }
+}

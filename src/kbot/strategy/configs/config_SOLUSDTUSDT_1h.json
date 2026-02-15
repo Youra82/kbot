@@ -1,0 +1,35 @@
+{
+    "market": {
+        "symbol": "SOL/USDT:USDT",
+        "timeframe": "1h"
+    },
+    "strategy": {
+        "rsi_period": 13,
+        "stochrsi_len": 18,
+        "k": 4,
+        "d": 3,
+        "ob": 0.8,
+        "os": 0.1,
+        "atr_period": 22,
+        "sl_atr_mult": 1.5,
+        "risk_reward_ratio": 3.8
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 1.75,
+        "leverage": 3
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-15T21:01:21.000968",
+        "data_range": "2025-02-15 to 2026-02-14",
+        "backtest_pnl_pct": -24.99,
+        "backtest_win_rate": 20.0,
+        "backtest_max_dd_pct": 47.4,
+        "backtest_trades": 105,
+        "backtest_profit_factor": 0.9
+    }
+}

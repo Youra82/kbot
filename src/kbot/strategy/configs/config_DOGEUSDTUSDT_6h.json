@@ -1,0 +1,35 @@
+{
+    "market": {
+        "symbol": "DOGE/USDT:USDT",
+        "timeframe": "6h"
+    },
+    "strategy": {
+        "rsi_period": 18,
+        "stochrsi_len": 19,
+        "k": 4,
+        "d": 5,
+        "ob": 0.7,
+        "os": 0.1,
+        "atr_period": 37,
+        "sl_atr_mult": 2.3,
+        "risk_reward_ratio": 2.6
+    },
+    "risk": {
+        "margin_mode": "isolated",
+        "risk_per_trade_pct": 1.0,
+        "leverage": 5
+    },
+    "behavior": {
+        "use_longs": true,
+        "use_shorts": true
+    },
+    "optimization": {
+        "optimized_at": "2026-02-15T19:20:31.850369",
+        "data_range": "2023-02-16 to 2026-02-14",
+        "backtest_pnl_pct": -8.84,
+        "backtest_win_rate": 29.4,
+        "backtest_max_dd_pct": 60.76,
+        "backtest_trades": 153,
+        "backtest_profit_factor": 0.99
+    }
+}

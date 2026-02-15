@@ -17,6 +17,7 @@ from kbot.analysis.backtester import load_data, run_backtest
 # Stoch‑RSI verwendet eigene Engine (siehe src/kbot/strategy/stochrsi_engine.py) -- Optimizer nutzt run_backtest() direkt
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+from optuna.integration import TQDMProgressBar
 
 # Globale Variablen
 HISTORICAL_DATA = None
@@ -202,11 +203,13 @@ def main():
             
             print(f"\n🚀 Starte Optimierung mit {args.trials} Trials...")
             
+            # Use a single, consolidated progress bar even when running in parallel (n_jobs > 1)
+            progress = TQDMProgressBar()
             study.optimize(
                 objective,
                 n_trials=args.trials,
                 n_jobs=args.jobs if args.jobs > 0 else 1,
-                show_progress_bar=True
+                callbacks=[progress]
             )
             
             # Ergebnisse auswerten

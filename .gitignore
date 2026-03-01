@@ -1,4 +1,5 @@
 # Sensible Daten
+secret.json
 
 *.lock
 
@@ -19,7 +20,7 @@ venv/
 # Cache
 data/cache/
 
-# Temporäre Dateien
+# Temporï¿½re Dateien
 *.csv
 open_trades.json
 

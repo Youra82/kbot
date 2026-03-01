@@ -17,7 +17,8 @@ Vor jedem Trade wird ein Sentiment-Check via CryptoPanic durchgefuehrt. Bei nega
 ## Installation
 
 ```bash
-cd /home/ubuntu/kbot
+git clone https://github.com/Youra82/kbot.git
+cd kbot
 chmod +x install.sh
 ./install.sh
 ```

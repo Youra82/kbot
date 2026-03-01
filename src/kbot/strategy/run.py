@@ -8,12 +8,27 @@ Polling-Schleife:
   4. Trade ausfuehren (Bitget)
   5. Telegram-Benachrichtigung
 """
+import csv
 import logging
+import os
 import time
 from datetime import datetime
 
 from kbot.utils.trade_manager import open_long
 from kbot.utils.telegram import send_message
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+SIGNAL_LOG = os.path.join(PROJECT_ROOT, 'logs', 'signals.csv')
+
+
+def _log_signal(row: dict):
+    os.makedirs(os.path.dirname(SIGNAL_LOG), exist_ok=True)
+    write_header = not os.path.exists(SIGNAL_LOG)
+    with open(SIGNAL_LOG, 'a', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=row.keys())
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
 
 logger = logging.getLogger('kbot')
 
@@ -62,6 +77,17 @@ def run_alp_loop(monitor, guard, exchange, settings, telegram_config, logger):
                 inflow_usd = signal['inflow_usd']
                 stablecoin = signal['stablecoin']
 
+                # Signal dokumentieren
+                signal_row = {
+                    'timestamp': datetime.now().isoformat(),
+                    'bridge': bridge_name,
+                    'symbol': symbol,
+                    'inflow_usd': round(inflow_usd, 0),
+                    'stablecoin': stablecoin,
+                    'tx_hash': signal.get('tx_hash', ''),
+                    'status': '',
+                }
+
                 # Cooldown pruefen
                 last = cooldowns.get(symbol)
                 if last:
@@ -69,6 +95,8 @@ def run_alp_loop(monitor, guard, exchange, settings, telegram_config, logger):
                     if elapsed < cooldown_minutes * 60:
                         remaining = cooldown_minutes - elapsed / 60
                         logger.info(f"Cooldown fuer {symbol}: noch {remaining:.0f} min.")
+                        signal_row['status'] = 'cooldown'
+                        _log_signal(signal_row)
                         continue
 
                 # Sentiment-Check
@@ -79,6 +107,8 @@ def run_alp_loop(monitor, guard, exchange, settings, telegram_config, logger):
                         f"Sentiment-Check negativ — Trade abgebrochen."
                     )
                     send_message(bot_token, chat_id, msg)
+                    signal_row['status'] = 'sentiment_blocked'
+                    _log_signal(signal_row)
                     continue
 
                 # Trade ausfuehren
@@ -91,6 +121,7 @@ def run_alp_loop(monitor, guard, exchange, settings, telegram_config, logger):
                 if result:
                     cooldowns[symbol] = datetime.now()
                     daily['count'] += 1
+                    signal_row['status'] = 'traded'
                     msg = (
                         f"{'🟡 SIMULATION' if simulation_mode else '✅ LIVE'} <b>ALP Trade</b>\n"
                         f"<b>LONG {symbol}</b>\n"
@@ -101,6 +132,10 @@ def run_alp_loop(monitor, guard, exchange, settings, telegram_config, logger):
                         f"Trades heute: {daily['count']}/{max_daily}"
                     )
                     send_message(bot_token, chat_id, msg)
+                else:
+                    signal_row['status'] = 'trade_failed'
+
+                _log_signal(signal_row)
 
         except KeyboardInterrupt:
             logger.info("ALP Loop durch Benutzer beendet.")

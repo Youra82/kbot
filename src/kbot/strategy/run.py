@@ -1,131 +1,111 @@
-# src/kbot/strategy/run.py
-# =============================================================================
-# KBot: Stoch-RSI Trading Bot
-# =============================================================================
+"""
+run.py — ALP Haupt-Strategie-Loop
 
-import os
-import sys
-import json
+Polling-Schleife:
+  1. Ethereum Bridge-Flows scannen (Alchemy)
+  2. Sentiment-Check (CryptoPanic)
+  3. Cooldown pruefen
+  4. Trade ausfuehren (Bitget)
+  5. Telegram-Benachrichtigung
+"""
 import logging
-from logging.handlers import RotatingFileHandler
-import argparse
+import time
+from datetime import datetime
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
-
-from kbot.utils.exchange import Exchange
+from kbot.utils.trade_manager import open_long
 from kbot.utils.telegram import send_message
-from kbot.utils.trade_manager import full_trade_cycle
+
+logger = logging.getLogger('kbot')
 
 
-def setup_logging(symbol: str, timeframe: str) -> logging.Logger:
-    """Richtet Logging für die Strategie ein."""
-    safe_filename = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-    log_dir = os.path.join(PROJECT_ROOT, 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, f'kbot_{safe_filename}.log')
-    
-    logger = logging.getLogger(f'kbot_{safe_filename}')
-    logger.setLevel(logging.INFO)
-    
-    if not logger.handlers:
-        # File Handler mit Rotation
-        fh = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3)
-        fh_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        fh.setFormatter(fh_formatter)
-        logger.addHandler(fh)
+def run_alp_loop(monitor, guard, exchange, settings, telegram_config, logger):
+    poll_interval = settings.get('poll_interval_seconds', 30)
+    cooldown_minutes = settings.get('cooldown_minutes', 60)
+    invest_usdt = settings.get('invest_per_trade_usdt', 100)
+    simulation_mode = settings.get('simulation_mode', True)
+    risk = settings.get('risk', {
+        'stop_loss_pct': 2.0,
+        'take_profit_pct': 5.0,
+        'leverage': 3,
+        'max_daily_trades': 5
+    })
+    max_daily = risk.get('max_daily_trades', 5)
 
-        # Console Handler
-        ch = logging.StreamHandler()
-        ch_formatter = logging.Formatter('%(levelname)s: %(message)s')
-        ch.setFormatter(ch_formatter)
-        logger.addHandler(ch)
-        
-    return logger
+    bot_token = telegram_config.get('bot_token', '')
+    chat_id = telegram_config.get('chat_id', '')
 
+    cooldowns = {}  # symbol -> datetime of last trade
+    daily = {'date': datetime.now().date(), 'count': 0}
 
-def load_config(symbol: str, timeframe: str) -> dict:
-    """Lädt die Konfiguration für das Symbol/Timeframe."""
-    configs_dir = os.path.join(PROJECT_ROOT, 'src', 'kbot', 'strategy', 'configs')
-    safe_filename = f"{symbol.replace('/', '').replace(':', '')}_{timeframe}"
-    config_filename = f"config_{safe_filename}.json"
-    config_path = os.path.join(configs_dir, config_filename)
-    
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Konfiguration nicht gefunden: {config_filename}")
-        
-    with open(config_path, 'r') as f:
-        return json.load(f)
+    logger.info(
+        f"ALP Loop gestartet | Poll: {poll_interval}s | "
+        f"Cooldown: {cooldown_minutes}min | "
+        f"Modus: {'SIMULATION' if simulation_mode else 'LIVE'}"
+    )
 
+    while True:
+        try:
+            today = datetime.now().date()
+            if daily['date'] != today:
+                daily = {'date': today, 'count': 0}
 
-def run_for_account(account: dict, telegram_config: dict, params: dict, 
-                    logger: logging.Logger):
-    """Führt den Bot für einen Account aus."""
-    account_name = account.get('name', 'Standard-Account')
-    symbol = params['market']['symbol']
-    timeframe = params['market']['timeframe']
-    
-    print(f"\n{'=' * 60}")
-    print(f"🤖 KBot Stoch-RSI")
-    print(f"   Symbol: {symbol} | Timeframe: {timeframe}")
-    print(f"   Account: {account_name}")
-    print(f"{'=' * 60}")
-    
-    logger.info(f"Starte KBot für {symbol} ({timeframe}) auf Account '{account_name}'")
-    
-    try:
-        exchange = Exchange(account)
-        full_trade_cycle(exchange, params, telegram_config, logger)
-    except Exception as e:
-        logger.error(f"Fehler bei der Ausführung: {e}", exc_info=True)
-
-
-def main():
-    parser = argparse.ArgumentParser(description="KBot Stoch‑RSI Trading Bot")
-    parser.add_argument('--symbol', required=True, type=str, 
-                       help='Trading Symbol (z.B. BTC/USDT:USDT)')
-    parser.add_argument('--timeframe', required=True, type=str, 
-                       help='Timeframe (z.B. 1h, 4h, 1d)')
-    parser.add_argument('--live', action='store_true',
-                       help='Live-Modus (führt echte Trades aus)')
-    args = parser.parse_args()
-
-    symbol = args.symbol
-    timeframe = args.timeframe
-    
-    logger = setup_logging(symbol, timeframe)
-
-    try:
-        # Konfiguration laden
-        params = load_config(symbol, timeframe)
-        
-        # Secrets laden
-        secret_path = os.path.join(PROJECT_ROOT, 'secret.json')
-        with open(secret_path, "r") as f:
-            secrets = json.load(f)
-        
-        accounts = secrets.get('kbot', [])
-        telegram_config = secrets.get('telegram', {})
-        
-        if not accounts:
-            logger.error("Keine Accounts in secret.json für 'kbot' konfiguriert!")
-            sys.exit(1)
-        
-        # Für jeden Account ausführen
-        for account in accounts:
-            try:
-                run_for_account(account, telegram_config, params, logger)
-            except Exception as e:
-                logger.error(f"Fehler bei Account {account.get('name', 'unknown')}: {e}")
+            if daily['count'] >= max_daily:
+                logger.info(f"Tageslimit erreicht ({max_daily} Trades) — warte bis morgen.")
+                time.sleep(poll_interval)
                 continue
-                
-    except FileNotFoundError as e:
-        logger.critical(f"Konfigurationsfehler: {e}")
-        sys.exit(1)
-    except Exception as e:
-        logger.critical(f"Kritischer Fehler: {e}", exc_info=True)
-        sys.exit(1)
 
+            signals = monitor.scan_bridge_flows()
 
-if __name__ == "__main__":
-    main()
+            for signal in signals:
+                symbol = signal['symbol']
+                bridge_name = signal['bridge_name']
+                inflow_usd = signal['inflow_usd']
+                stablecoin = signal['stablecoin']
+
+                # Cooldown pruefen
+                last = cooldowns.get(symbol)
+                if last:
+                    elapsed = (datetime.now() - last).total_seconds()
+                    if elapsed < cooldown_minutes * 60:
+                        remaining = cooldown_minutes - elapsed / 60
+                        logger.info(f"Cooldown fuer {symbol}: noch {remaining:.0f} min.")
+                        continue
+
+                # Sentiment-Check
+                if not guard.is_safe_to_trade(bridge_name, symbol):
+                    msg = (
+                        f"🛑 <b>ALP BLOCKIERT</b>\n"
+                        f"{inflow_usd:,.0f} {stablecoin} → {bridge_name}\n"
+                        f"Sentiment-Check negativ — Trade abgebrochen."
+                    )
+                    send_message(bot_token, chat_id, msg)
+                    continue
+
+                # Trade ausfuehren
+                logger.info(
+                    f"Signal: {inflow_usd:,.0f} {stablecoin} → {bridge_name} | "
+                    f"Trade: LONG {symbol}"
+                )
+                result = open_long(exchange, symbol, invest_usdt, risk, simulation_mode, logger)
+
+                if result:
+                    cooldowns[symbol] = datetime.now()
+                    daily['count'] += 1
+                    msg = (
+                        f"{'🟡 SIMULATION' if simulation_mode else '✅ LIVE'} <b>ALP Trade</b>\n"
+                        f"<b>LONG {symbol}</b>\n"
+                        f"Signal: {inflow_usd:,.0f} {stablecoin} → {bridge_name}\n"
+                        f"Invest: {invest_usdt} USDT | Hebel: {risk.get('leverage', 3)}x\n"
+                        f"SL: {risk.get('stop_loss_pct', 2.0)}% | "
+                        f"TP: {risk.get('take_profit_pct', 5.0)}%\n"
+                        f"Trades heute: {daily['count']}/{max_daily}"
+                    )
+                    send_message(bot_token, chat_id, msg)
+
+        except KeyboardInterrupt:
+            logger.info("ALP Loop durch Benutzer beendet.")
+            break
+        except Exception as e:
+            logger.error(f"Fehler im ALP Loop: {e}", exc_info=True)
+
+        time.sleep(poll_interval)

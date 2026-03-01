@@ -1,77 +1,42 @@
 {
-    "live_trading_settings": {
-        "active_strategies": [
-            {
-                "symbol": "DOGE/USDT:USDT",
-                "timeframe": "30m",
-                "use_macd_filter": false,
-                "active": true
-            },
-            {
-                "symbol": "SOL/USDT:USDT",
-                "timeframe": "30m",
-                "use_macd_filter": false,
-                "active": true
-            },
-            {
-                "symbol": "ETH/USDT:USDT",
-                "timeframe": "30m",
-                "use_macd_filter": false,
-                "active": true
-            },
-            {
-                "symbol": "ADA/USDT:USDT",
-                "timeframe": "2h",
-                "use_macd_filter": false,
-                "active": true
-            },
-            {
-                "symbol": "XRP/USDT:USDT",
-                "timeframe": "6h",
-                "use_macd_filter": false,
-                "active": true
-            },
-            {
-                "symbol": "AAVE/USDT:USDT",
-                "timeframe": "5m",
-                "use_macd_filter": false,
-                "active": true
-            },
-            {
-                "symbol": "BTC/USDT:USDT",
-                "timeframe": "4h",
-                "use_macd_filter": false,
-                "active": true
-            },
-            {
-                "symbol": "BTC/USDT:USDT",
-                "timeframe": "1d",
-                "use_macd_filter": false,
-                "active": false
-            }
-        ]
+    "simulation_mode": true,
+    "invest_per_trade_usdt": 100,
+    "poll_interval_seconds": 30,
+    "lookback_blocks": 10,
+    "cooldown_minutes": 60,
+
+    "bridges": {
+        "0x3154Cf16ccdb4C6D922629664174b904d80F2C35": {
+            "name": "BASE",
+            "symbol": "ETH/USDT:USDT",
+            "min_inflow_usdt": 500000
+        },
+        "0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5": {
+            "name": "ARBITRUM",
+            "symbol": "ARB/USDT:USDT",
+            "min_inflow_usdt": 500000
+        },
+        "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1": {
+            "name": "OPTIMISM",
+            "symbol": "OP/USDT:USDT",
+            "min_inflow_usdt": 300000
+        }
     },
-    "optimization_settings": {
+
+    "stablecoins": {
+        "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    },
+
+    "risk": {
+        "stop_loss_pct": 2.0,
+        "take_profit_pct": 5.0,
+        "max_daily_trades": 5,
+        "leverage": 3
+    },
+
+    "sentiment": {
         "enabled": true,
-        "schedule": {
-            "_info": "day_of_week: 0=Montag, 6=Sonntag | hour: 0-23 (24h Format, z.B. 3=03:00 nachts, 15=15:00 nachmittags)",
-            "day_of_week": 0,
-            "hour": 3,
-            "minute": 0,
-            "interval_days": 7
-        },
-        "symbols_to_optimize": "auto",
-        "timeframes_to_optimize": "auto",
-        "lookback_days": 365,
-        "start_capital": 1000,
-        "cpu_cores": -1,
-        "num_trials": 500,
-        "constraints": {
-            "max_drawdown_pct": 30,
-            "min_win_rate_pct": 50,
-            "min_pnl_pct": 0
-        },
-        "auto_clear_cache_days": 0,
-        "send_telegram_on_completion": true
+        "block_keywords": ["hack", "exploit", "drain", "vulnerability", "attack", "rugpull", "stolen", "breach"]
     }
 }

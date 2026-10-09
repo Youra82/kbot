@@ -69,7 +69,8 @@ werden, kann nur der Live-Test zeigen.
     Ausstieg per Buy-Limit am Bid, falls nicht gefüllt per Market. Maker 0,02 % je Seite.
   - **Market:** Einstieg am Bid, Ausstieg am Ask, Taker 0,06 % je Seite. Dient als Vergleich.
   - Liquidation wird geprüft: Höchstkurs im Trade ≥ Einstieg × (1 + 0,9 / Hebel).
-- **Telegram:** Meldung bei jedem Short und Ausstieg (beide Konten) sowie ein Tagesbericht um 07:00 UTC.
+- **Telegram:** Meldung bei jedem Short und Ausstieg (beide Konten) sowie ein Tagesbericht um 07:00 UTC,
+  jeweils mit aktuellem Kontostand beider Paper-Konten und Zahl der offenen Shorts.
 
 Geprüft: Der Live-Scanner findet dieselben Einzahlungen wie die Backtest-Daten (9/9, identische Mengen).
 

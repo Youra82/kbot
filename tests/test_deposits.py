@@ -109,3 +109,11 @@ def test_liquidation(tmp_path, monkeypatch):
     monkeypatch.setattr(ps, '_now', lambda: now + timedelta(minutes=61)); rows = p.check()
     assert all(r['status'] == 'liquidated' for r in rows)
     assert p.equity['market'] == pytest.approx(100 - 100 / 3)
+
+
+def test_balance_line_shows_both_accounts(tmp_path):
+    from kbot.strategy.deposit_watch import _balance_line
+    ex = FakeEx(9.99, 10.0, [])
+    p = _paper(tmp_path, ex)
+    p.equity = {'limit': 104.37, 'market': 101.92}
+    assert _balance_line(p) == "💰 Konto Limit 104.37 USDT | Market 101.92 USDT | offene Shorts: 0"

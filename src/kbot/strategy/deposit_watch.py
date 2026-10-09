@@ -67,6 +67,12 @@ def _tg(tg, text):
     send_message(tg.get('bot_token'), tg.get('chat_id'), text)
 
 
+def _balance_line(paper):
+    """Realisierte Kontostaende beider Paper-Konten + offene Shorts (offene Trades noch nicht eingerechnet)."""
+    return (f"💰 Konto Limit {paper.equity['limit']:.2f} USDT | Market {paper.equity['market']:.2f} USDT | "
+            f"offene Shorts: {len(paper.positions)}")
+
+
 def _close_message(rows):
     r0 = rows[0]
     if all(r['status'] == 'missed' for r in rows):
@@ -82,7 +88,7 @@ def _close_message(rows):
     return "\n".join(lines)
 
 
-def daily_report(tg, n_book):
+def daily_report(tg, n_book, paper=None):
     s = summary(TRADE_LOG)
     lines = ["📊 <b>KBOT Tagesbericht</b> (Dry-Run, Wal-Einzahlungen)", f"Bekannte Binance-Adressen: {n_book:,}"]
     for acc, label in (('limit', 'Limit (5x, Maker)'), ('market', 'Market (5x, Taker)')):
@@ -92,6 +98,8 @@ def daily_report(tg, n_book):
                          f"verpasst {v['missed']}")
     if len(lines) == 2:
         lines.append("Noch keine abgeschlossenen Trades.")
+    if paper is not None:
+        lines.append(_balance_line(paper))
     _tg(tg, "\n".join(lines))
 
 
@@ -160,16 +168,16 @@ def run_deposit_watch(client, exchange, settings, tg, log):
                         _tg(tg, f"🔴 <b>KBOT DRY-RUN — SHORT {p['token']}</b>\n"
                                 f"Einzahlung auf Binance: {p['amount']:,.0f} {p['token']} = <b>{p['usd'] / 1e6:.2f} Mio $</b> "
                                 f"(Absender: {who})\nLimit @ {pos['limit']['price']} | Market @ {pos['market']['price']}\n"
-                                f"Ausstieg in {cfg.get('hold_minutes', 60)} min")
+                                f"Ausstieg in {cfg.get('hold_minutes', 60)} min\n{_balance_line(paper)}")
             groups = {}
             for row in paper.check():
                 groups.setdefault((row['token'], row['signal_ts']), []).append(row)
             for (tok, sts), rows in groups.items():
                 if any(r['account'] == 'market' for r in rows) or all(r['status'] == 'missed' for r in rows):
-                    _tg(tg, _close_message(rows))
+                    _tg(tg, _close_message(rows) + "\n" + _balance_line(paper))
             today = _now().strftime('%Y-%m-%d')
             if _now().hour >= cfg.get('daily_report_hour_utc', 7) and last_report != today:
-                daily_report(tg, len(book))
+                daily_report(tg, len(book), paper)
                 last_report = today
             _save(LOOP_FILE, {'cursor': scanner.cursor, 'pending': pending, 'last_report': last_report,
                               'last_entry': {k: v.isoformat() for k, v in rule.last_entry.items()}})

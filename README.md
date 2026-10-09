@@ -11,11 +11,10 @@ KBot eröffnet dann einen **Short auf Bitget für 60 Minuten**.
 
 ## Warum das funktionieren kann
 
-```
-Wal ──► eigene Binance-Einzahladresse ──► (Bestätigungen, ~1–5 min) ──► Binance schreibt gut ──► Verkauf
-          │                                                                                  │
-          └── on-chain sofort sichtbar  ◄── KBot liest hier mit                Bitget folgt Binance
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/flow-dark.svg">
+  <img alt="Ablauf: Wal zahlt auf Binance ein, KBot liest on-chain mit und shortet auf Bitget" src="docs/img/flow-light.svg" width="100%">
+</picture>
 
 - Die Einzahlung ist auf der Blockchain sichtbar, **bevor** Binance sie gutschreibt und der Wal verkaufen kann.
 - Binance-Einzahladressen sind nicht beschriftet. KBot lernt sie selbst: Jede Adresse, die Coins an die
@@ -39,6 +38,11 @@ davon 1.513 ≥ 500k $ (~3 Signale pro Tag).
 | gegen BTC (marktneutral) | +0,23 % (t = 3,6) | +0,21 % (t = 3,0) |
 | Short netto nach 0,12 % Taker-Gebühr | +0,10 % | +0,03 % |
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/backtest-dark.svg">
+  <img alt="Backtest: Abweichung je Trade nach Wal-Einzahlung, Entwicklung und Test, Wal- vs. Börsen-Absender" src="docs/img/backtest-light.svg" width="100%">
+</picture>
+
 **Ergebnis: bestanden**, alle vorab festgelegten Kriterien erfüllt. Weitere Prüfungen
 ([`robust.py`](research/cex/robust.py)): Der Effekt kommt nicht von einem einzelnen Coin, bleibt beim
 Zusammenfassen gleichzeitiger Ereignisse signifikant und tritt **nur bei Wal-Absendern** auf.
@@ -52,12 +56,17 @@ Verschiebungen Börse → Binance (z. B. von Coinbase) zeigen keinen Effekt.
 | 3x | 183 USDT, Max-DD −26 % | 281 USDT, Max-DD −22 % |
 | **5x** | 255 USDT, Max-DD −40 % | **517 USDT, Max-DD −34 %** ← Dry-Run-Einstellung |
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/equity-dark.svg">
+  <img alt="Kapitalkurve: 100 USDT seit Mai 2026, Limit- vs. Market-Orders, 5x Hebel" src="docs/img/equity-light.svg" width="100%">
+</picture>
+
 \* *Limit-Orders unter der Annahme, dass jede Order gefüllt wird. Genau das misst der Dry-Run jetzt live.*
 
-**Ehrliche Einordnung:** Der Effekt ist echt, aber klein (~0,2 % brutto pro Trade). Der größte Teil
-des Simulationsgewinns entstand im Mai und Juni. Ab Juli lag die Market-Variante etwa bei null,
-die Limit-Variante bei +33 %. **Die Gebühren entscheiden.** Ob Limit-Orders in der Praxis gefüllt
-werden, kann nur der Live-Test zeigen.
+**Ehrliche Einordnung:** Der Effekt ist echt, aber klein (~0,2 % brutto pro Trade). Mit
+Market-Orders entstand fast der ganze Gewinn im Mai und Juni, danach lief die Kurve seitwärts.
+Mit Limit-Orders ging es auch im Testzeitraum weiter aufwärts. **Die Gebühren entscheiden.**
+Ob Limit-Orders in der Praxis so gefüllt werden, kann nur der Live-Test zeigen.
 
 ## Was der Dry-Run macht
 
@@ -150,6 +159,7 @@ Die ursprüngliche Bridge-Version hatte falsche Bridge-Adressen, eine tote News-
 eine Simulation ohne Ausstiege. Sie ist als `mode: bridge` nur noch als Archiv enthalten.
 
 Daten neu erzeugen: `python research/cex/collect.py` (~2 h, Alchemy Free Tier), danach `python research/cex/test.py`.
+Grafiken neu erzeugen: `python research/cex/make_figures.py` (schreibt `docs/img/*.svg`, hell + dunkel).
 
 ---
 

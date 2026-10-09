@@ -1,42 +1,81 @@
 {
+    "mode": "deposits",
+    "_info_mode": "deposits = Wal-Einzahlungs-Waechter (praeregistriert bestanden). bridge = alter Bridge-Inflow (widerlegt, nur Archiv).",
     "simulation_mode": true,
-    "invest_per_trade_usdt": 100,
-    "poll_interval_seconds": 30,
-    "lookback_blocks": 10,
-    "cooldown_minutes": 60,
-
-    "bridges": {
-        "0x3154Cf16ccdb4C6D922629664174b904d80F2C35": {
-            "name": "BASE",
-            "symbol": "ETH/USDT:USDT",
-            "min_inflow_usdt": 500000
+    "deposit_watch": {
+        "_info": "Einzahlung >= min_usd an bekannte Binance-Einzahladresse -> Paper-Short hold_minutes auf Bitget. Werte = research/cex/PRAEREGISTRIERUNG.md (primaer).",
+        "min_usd": 500000,
+        "hold_minutes": 60,
+        "start_equity_usdt": 100.0,
+        "leverage": 5,
+        "margin_fraction": 0.3333,
+        "limit_fill_minutes": 2,
+        "poll_interval_seconds": 15,
+        "max_catchup_blocks": 600,
+        "backfill_days": 60,
+        "daily_report_hour_utc": 7,
+        "tokens": [
+            "LINK",
+            "UNI",
+            "AAVE",
+            "LDO",
+            "ENA",
+            "ONDO",
+            "PENDLE",
+            "CRV",
+            "ETHFI",
+            "PEPE",
+            "SHIB",
+            "FET",
+            "COMP",
+            "SNX",
+            "GRT",
+            "IMX",
+            "SAND",
+            "MANA",
+            "APE",
+            "ENS",
+            "WLD",
+            "1INCH"
+        ]
+    },
+    "bridge_watch": {
+        "invest_per_trade_usdt": 20,
+        "poll_interval_seconds": 30,
+        "max_catchup_blocks": 600,
+        "backfill_days": 31,
+        "daily_report_hour_utc": 7,
+        "signal": {
+            "_info": "Event: Stundenzufluss zur Chain >= k x 30-Tage-Stundenschnitt UND >= min_hour_flow_usd. Primaervariante aus research/PREREG.md (Backtest 12 Monate: nicht bestanden, Excess ~0).",
+            "min_transfer_usd": 100000,
+            "k": 3,
+            "min_hour_flow_usd": 1000000,
+            "hold_hours": 24,
+            "tokens": [
+                "ARB",
+                "OP",
+                "ETH",
+                "SOL",
+                "AVAX",
+                "POL",
+                "APT",
+                "SUI",
+                "SEI",
+                "S",
+                "UNI",
+                "LINEA",
+                "WLD",
+                "HYPE",
+                "BNB",
+                "BERA",
+                "XPL"
+            ]
         },
-        "0x5c7BCd6E7De5423a257D81B442095A1a6ced35C5": {
-            "name": "ARBITRUM",
-            "symbol": "ARB/USDT:USDT",
-            "min_inflow_usdt": 500000
-        },
-        "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1": {
-            "name": "OPTIMISM",
-            "symbol": "OP/USDT:USDT",
-            "min_inflow_usdt": 300000
+        "risk": {
+            "_info": "Kein SL/TP: Backtest misst reinen 24h-Zeit-Exit. leverage nur fuer Paper-PnL.",
+            "stop_loss_pct": null,
+            "take_profit_pct": null,
+            "leverage": 1
         }
-    },
-
-    "stablecoins": {
-        "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-        "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-    },
-
-    "risk": {
-        "stop_loss_pct": 2.0,
-        "take_profit_pct": 5.0,
-        "max_daily_trades": 5,
-        "leverage": 3
-    },
-
-    "sentiment": {
-        "enabled": true,
-        "block_keywords": ["hack", "exploit", "drain", "vulnerability", "attack", "rugpull", "stolen", "breach"]
     }
 }

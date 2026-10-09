@@ -1,135 +1,155 @@
 """
-bridge_monitor.py — Ethereum On-Chain Bridge Flow Detection
+bridge_monitor.py — Ethereum -> L2/Alt-L1 Stablecoin-Bridge-Fluesse (Alchemy HTTP)
 
-Überwacht große Stablecoin-Transfers (USDC/USDT) zu bekannten
-Bridge-Contracts auf Ethereum. Wenn ein Whale Kapital über eine
-Bridge bewegt, ist das ein Frühwarnsignal für Kursbewegungen
-auf der Ziel-Chain.
+Live-Scan:
+  - eth_getLogs in Abschnitten von max. 10 Bloecken (Alchemy Free Tier Limit),
+    gefiltert auf Transfer(to = Bridge-Adresse) fuer USDC + USDT.
+  - Cursor rueckt NUR nach erfolgreichem Abschnitt vor (frueher: Bloecke still verloren).
+  - Ziel-Chain via Receipt (bridge_registry.decode_dest).
+
+Backfill (Baseline fuer das Signal, auch von research/ genutzt):
+  - alchemy_getAssetTransfers je Bridge-Adresse + Receipts (gebuendelt).
 """
 
-import json
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timezone, timedelta
 
 import requests
 
-logger = logging.getLogger(__name__)
+from kbot.utils.bridge_registry import (
+    BRIDGES, SRC_BY_ADDR, STABLECOINS, TRANSFER_TOPIC, FIXED_DEST, decode_dest, token_of,
+)
 
-# ERC-20 Transfer Event Topic (keccak256 von "Transfer(address,address,uint256)")
-TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+logger = logging.getLogger('kbot')
+
+MAX_LOG_RANGE = 10        # Bloecke inkl. from/to (Free Tier)
+BLOCKS_PER_HOUR = 300     # ~12 s Blockzeit
+
+
+class RpcError(RuntimeError):
+    pass
+
+
+class AlchemyClient:
+    def __init__(self, api_key: str):
+        self.url = f"https://eth-mainnet.g.alchemy.com/v2/{api_key}"
+
+    def call(self, method: str, params: list, retries: int = 4):
+        last = None
+        for i in range(retries):
+            try:
+                j = requests.post(self.url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+                                  timeout=60).json()
+                if 'error' in j:
+                    raise RpcError(f"{method}: {j['error']}")
+                return j['result']
+            except Exception as e:
+                last = e
+                time.sleep(2 * (i + 1))
+        raise RpcError(f"{method} fehlgeschlagen: {last}")
+
+    def receipts(self, tx_hashes: list, batch: int = 10) -> dict:
+        out = {}
+        for i in range(0, len(tx_hashes), batch):
+            chunk = tx_hashes[i:i + batch]
+            body = [{"jsonrpc": "2.0", "id": j, "method": "eth_getTransactionReceipt", "params": [h]}
+                    for j, h in enumerate(chunk)]
+            for attempt in range(6):
+                try:
+                    resp = requests.post(self.url, json=body, timeout=120).json()
+                    if isinstance(resp, dict) or any('error' in x for x in resp):
+                        raise RpcError(str(resp)[:200])
+                    break
+                except Exception as e:
+                    logger.debug(f"Receipt-Batch Retry {attempt + 1}: {e}")
+                    time.sleep(3 * (attempt + 1))
+            else:
+                raise RpcError("Receipt-Batch endgueltig fehlgeschlagen")
+            for x in resp:
+                out[chunk[x['id']]] = x['result'] or {}
+            time.sleep(0.5)
+        return out
+
+
+def _pad(addr: str) -> str:
+    return "0x" + "0" * 24 + addr[2:].lower()
+
+
+def resolve_flows(client: AlchemyClient, transfers: list) -> list:
+    """transfers: [{tx, src, usd, ts, block}] -> gleiche dicts + dest + token (Receipt nur wo noetig)."""
+    need = sorted({t['tx'] for t in transfers if t['src'] not in FIXED_DEST})
+    rec = client.receipts(need) if need else {}
+    out = []
+    for t in transfers:
+        dest = t['src'] if t['src'] in FIXED_DEST else decode_dest(t['src'], rec.get(t['tx']))
+        out.append({**t, 'dest': dest, 'token': token_of(t['src'], dest)})
+    return out
 
 
 class BridgeMonitor:
-    """
-    Überwacht Ethereum-Bridges auf große Stablecoin-Zuflüsse via
-    Alchemy HTTP-API (Polling, kein WebSocket nötig).
-    """
+    def __init__(self, alchemy_api_key: str, settings: dict, cursor: int = None):
+        self.client = AlchemyClient(alchemy_api_key)
+        sig = settings.get('signal', {})
+        self.min_transfer = float(sig.get('min_transfer_usd', 100_000))
+        self.max_catchup = int(settings.get('max_catchup_blocks', 2 * BLOCKS_PER_HOUR))
+        self.cursor = cursor          # letzter vollstaendig gescannter Block
+        self.lost_blocks = 0
 
-    def __init__(self, alchemy_api_key: str, settings: dict):
-        self.api_key = alchemy_api_key
-        self.rpc_url = f"https://eth-mainnet.g.alchemy.com/v2/{alchemy_api_key}"
-        self.bridges = settings.get("bridges", {})
-        self.stablecoins = settings.get("stablecoins", {})
-        self.lookback_blocks = settings.get("lookback_blocks", 10)
-        self._last_block = None
+    def poll(self) -> list:
+        """Scannt alle neuen Bloecke. Gibt aufgeloeste Fluesse >= min_transfer zurueck."""
+        latest = int(self.client.call("eth_blockNumber", []), 16)
+        if self.cursor is None:
+            self.cursor = latest - 1
+        if latest - self.cursor > self.max_catchup:
+            skipped = latest - self.max_catchup - self.cursor
+            self.lost_blocks += skipped
+            logger.warning(f"Scanner {latest - self.cursor} Bloecke im Rueckstand — ueberspringe {skipped} "
+                           f"(gesamt verloren: {self.lost_blocks}).")
+            self.cursor = latest - self.max_catchup
 
-    def _rpc_call(self, method: str, params: list) -> Optional[dict]:
-        """JSON-RPC Call an Alchemy."""
-        payload = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-            "params": params
-        }
-        try:
-            resp = requests.post(self.rpc_url, json=payload, timeout=10)
-            data = resp.json()
-            return data.get("result")
-        except Exception as e:
-            logger.error(f"Alchemy RPC Fehler: {e}")
-            return None
+        raw = []
+        topics = [TRANSFER_TOPIC, None, [_pad(a) for a in BRIDGES.values()]]
+        while self.cursor < latest:
+            frm = self.cursor + 1
+            to = min(frm + MAX_LOG_RANGE - 1, latest)
+            logs = self.client.call("eth_getLogs", [{
+                "fromBlock": hex(frm), "toBlock": hex(to),
+                "address": list(STABLECOINS.values()), "topics": topics}])
+            for lg in logs:
+                usd = int(lg['data'], 16) / 1e6          # USDC + USDT: 6 Dezimalen
+                if usd < self.min_transfer:
+                    continue
+                to_addr = "0x" + lg['topics'][2][-40:].lower()
+                raw.append({'tx': lg['transactionHash'], 'src': SRC_BY_ADDR[to_addr], 'usd': usd,
+                            'block': int(lg['blockNumber'], 16),
+                            'ts': datetime.now(timezone.utc).isoformat()})
+            self.cursor = to       # erst NACH Erfolg vorruecken
+        return resolve_flows(self.client, raw) if raw else []
 
-    def get_latest_block(self) -> Optional[int]:
-        """Aktuellen Block-Nummer abrufen."""
-        result = self._rpc_call("eth_blockNumber", [])
-        if result:
-            return int(result, 16)
-        return None
 
-    def get_transfer_logs(self, token_address: str, from_block: int, to_block: int) -> list:
-        """ERC-20 Transfer-Events für einen Token in einem Block-Bereich abrufen."""
-        params = [{
-            "fromBlock": hex(from_block),
-            "toBlock": hex(to_block),
-            "address": token_address,
-            "topics": [TRANSFER_TOPIC]
-        }]
-        result = self._rpc_call("eth_getLogs", params)
-        return result or []
-
-    def decode_transfer_log(self, log: dict, decimals: int = 6) -> dict:
-        """Transfer-Log dekodieren → from, to, value."""
-        topics = log.get("topics", [])
-        to_addr = "0x" + topics[2][-40:] if len(topics) > 2 else None
-        from_addr = "0x" + topics[1][-40:] if len(topics) > 1 else None
-        value_hex = log.get("data", "0x0")
-        value = int(value_hex, 16) / (10 ** decimals)
-        return {
-            "from": from_addr,
-            "to": to_addr,
-            "value_usd": value,
-            "tx_hash": log.get("transactionHash"),
-            "block": int(log.get("blockNumber", "0x0"), 16)
-        }
-
-    def scan_bridge_flows(self) -> list:
-        """
-        Scannt die letzten N Blöcke auf große Stablecoin-Transfers zu Bridge-Adressen.
-        Gibt eine Liste von Signalen zurück: [{bridge_name, symbol, inflow_usd, tx_hash}]
-        """
-        latest = self.get_latest_block()
-        if not latest:
-            logger.warning("Konnte aktuellen Block nicht abrufen.")
-            return []
-
-        from_block = (self._last_block + 1) if self._last_block else (latest - self.lookback_blocks)
-        to_block = latest
-
-        if from_block > to_block:
-            return []
-
-        self._last_block = to_block
-
-        signals = []
-        bridge_addresses_lower = {addr.lower(): info for addr, info in self.bridges.items()}
-
-        for coin_name, token_address in self.stablecoins.items():
-            logs = self.get_transfer_logs(token_address, from_block, to_block)
-
-            for log in logs:
-                transfer = self.decode_transfer_log(log, decimals=6)
-                to_addr = (transfer["to"] or "").lower()
-
-                if to_addr in bridge_addresses_lower:
-                    bridge_info = bridge_addresses_lower[to_addr]
-                    min_inflow = bridge_info.get("min_inflow_usdt", 500000)
-
-                    if transfer["value_usd"] >= min_inflow:
-                        signal = {
-                            "bridge_name": bridge_info["name"],
-                            "symbol": bridge_info["symbol"],
-                            "inflow_usd": transfer["value_usd"],
-                            "stablecoin": coin_name,
-                            "tx_hash": transfer["tx_hash"],
-                            "block": transfer["block"],
-                            "timestamp": datetime.now(timezone.utc).isoformat()
-                        }
-                        signals.append(signal)
-                        logger.info(
-                            f"🚨 BRIDGE SIGNAL: {transfer['value_usd']:,.0f} {coin_name} "
-                            f"→ {bridge_info['name']} | TX: {transfer['tx_hash']}"
-                        )
-
-        return signals
+def backfill(client: AlchemyClient, days: int, min_usd: float = 100_000, log=logger) -> list:
+    """Historische Fluesse der letzten `days` Tage (gleiche Aufloesung wie live)."""
+    latest = int(client.call("eth_blockNumber", []), 16)
+    frm = latest - int(days * 24 * BLOCKS_PER_HOUR)
+    raw = []
+    for name, addr in BRIDGES.items():
+        pk, pages = None, 0
+        while True:
+            p = {"fromBlock": hex(frm), "toBlock": hex(latest), "toAddress": addr,
+                 "contractAddresses": list(STABLECOINS.values()), "category": ["erc20"],
+                 "withMetadata": True, "maxCount": "0x3e8", "excludeZeroValue": True}
+            if pk:
+                p["pageKey"] = pk
+            res = client.call("alchemy_getAssetTransfers", [p], retries=6)
+            for t in res['transfers']:
+                v = float(t.get('value') or 0)
+                if v >= min_usd:
+                    raw.append({'tx': t['hash'], 'src': name, 'usd': v, 'block': int(t['blockNum'], 16),
+                                'ts': t['metadata']['blockTimestamp']})
+            pk = res.get('pageKey'); pages += 1
+            if not pk:
+                break
+        log.info(f"Backfill {name}: {pages} Seiten")
+    log.info(f"Backfill: {len(raw)} Transfers >= {min_usd:,.0f} $, loese Ziel-Chains auf...")
+    return resolve_flows(client, raw), latest

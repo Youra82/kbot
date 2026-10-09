@@ -27,3 +27,8 @@ open_trades.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Dry-Run-Zustand und Research-Rohdaten
+artifacts/state/
+research/data/
+research/cex/data/

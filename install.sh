@@ -11,7 +11,7 @@ NC='\033[0m'
 
 echo -e "${BLUE}======================================================="
 # *** TITEL GEÄNDERT ***
-echo "         StBot Installations-Skript"
+echo "         KBot Installations-Skript"
 echo "=======================================================${NC}"
 
 # --- System-Abhängigkeiten installieren ---
@@ -51,34 +51,8 @@ deactivate
 echo -e "\n${YELLOW}4/5: Erstelle notwendige Verzeichnisse...${NC}"
 mkdir -p data/cache
 mkdir -p logs
-mkdir -p artifacts/results
-mkdir -p artifacts/optimal_configs
-mkdir -p artifacts/models
+mkdir -p artifacts/state
 echo -e "${GREEN}✔ Verzeichnisstruktur wurde erstellt.${NC}"
-
-# --- Symlink für /home/ubuntu/stbot erstellen (falls als root installiert) ---
-CURRENT_DIR=$(pwd)
-UBUNTU_HOME="/home/ubuntu"
-BOT_NAME="stbot"
-
-if [ "$(id -u)" -eq 0 ] && [ -d "$UBUNTU_HOME" ]; then
-    # Wir sind root und /home/ubuntu existiert
-    TARGET_LINK="$UBUNTU_HOME/$BOT_NAME"
-    
-    if [ "$CURRENT_DIR" != "$TARGET_LINK" ]; then
-        if [ -L "$TARGET_LINK" ]; then
-            echo -e "${YELLOW}  → Symlink $TARGET_LINK existiert bereits${NC}"
-        elif [ -d "$TARGET_LINK" ]; then
-            echo -e "${YELLOW}  → Lösche existierendes Verzeichnis $TARGET_LINK und erstelle Symlink...${NC}"
-            rm -rf "$TARGET_LINK"
-            ln -s "$CURRENT_DIR" "$TARGET_LINK"
-            echo -e "${GREEN}✔ Symlink erstellt: $TARGET_LINK -> $CURRENT_DIR${NC}"
-        else
-            ln -s "$CURRENT_DIR" "$TARGET_LINK"
-            echo -e "${GREEN}✔ Symlink erstellt: $TARGET_LINK -> $CURRENT_DIR${NC}"
-        fi
-    fi
-fi
 
 # --- Abschluss ---
 echo -e "\n${YELLOW}5/5: Setze Ausführungsrechte für alle .sh-Skripte...${NC}"
@@ -89,14 +63,8 @@ echo "✅  Installation erfolgreich abgeschlossen!"
 echo ""
 # *** MELDUNGEN ANGEPASST ***
 echo "Nächste Schritte:"
-echo "  1. Erstelle/Bearbeite die 'secret.json' Datei mit deinen API-Keys."
+echo "  1. secret.json anlegen (alchemy_api_key + telegram)."
 echo "     ( nano secret.json )"
-echo "  2. Führe die Optimierungs-Pipeline aus, um SMC-Strategien zu finden:"
-echo "     ( ./run_pipeline.sh )"
-echo "  3. Bearbeite 'settings.json', um die gewünschten Strategien zu aktivieren."
-echo "     ( nano settings.json )"
-echo "  4. Richte einen Cronjob ein, um 'master_runner.py' regelmäßig zu starten."
-echo "     ( crontab -e )"
-echo "  5. Starte den Live-Bot manuell (optional zum Testen):"
-echo "     ( python3 master_runner.py )"
+echo "  2. Dry-Run starten (simulation_mode=true in settings.json):"
+echo "     ( nohup .venv/bin/python3 master_runner.py >> logs/stdout.log 2>&1 & )"
 echo -e "=======================================================${NC}"

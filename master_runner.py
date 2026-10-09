@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-master_runner.py — KBot Agentic Liquidity Pulse (ALP)
+master_runner.py — KBot (Dry-Run)
 
 Entry point: laedt Konfiguration, verbindet alle Komponenten,
 startet den kontinuierlichen ALP-Loop.
@@ -15,9 +15,10 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(PROJECT_ROOT, 'src'))
 
 from kbot.utils.bridge_monitor import BridgeMonitor
-from kbot.utils.sentiment import SentimentGuard
 from kbot.utils.exchange import Exchange
 from kbot.strategy.run import run_alp_loop
+from kbot.strategy.deposit_watch import run_deposit_watch
+from kbot.utils.bridge_monitor import AlchemyClient
 
 
 def setup_logging() -> logging.Logger:
@@ -52,30 +53,38 @@ def main():
         secrets = json.load(f)
 
     alchemy_key = secrets.get('alchemy_api_key', '')
-    cryptopanic_key = secrets.get('cryptopanic_api_key', '')
     telegram_config = secrets.get('telegram', {})
-    account_config = secrets.get('kbot', [{}])[0]
+    account_config = (secrets.get('kbot') or [{}])[0]
 
-    mode = "SIMULATION" if settings.get('simulation_mode', True) else "LIVE"
-    bridges = settings.get('bridges', {})
-
-    print("=" * 55)
-    print("  KBot — Agentic Liquidity Pulse (ALP)")
-    print(f"  Modus    : {mode}")
-    print(f"  Bridges  : {', '.join(b['name'] for b in bridges.values())}")
-    print(f"  Poll     : {settings.get('poll_interval_seconds', 30)}s")
-    print(f"  Cooldown : {settings.get('cooldown_minutes', 60)} min")
-    print("=" * 55)
+    if not settings.get('simulation_mode', True):
+        logger.error("Live-Modus ist deaktiviert: erst Dry-Run-Vorwaertstest (siehe README). "
+                     "simulation_mode=true setzen.")
+        sys.exit(1)
 
     if not alchemy_key:
         logger.error("Kein Alchemy API-Key in secret.json! Bot kann nicht starten.")
         sys.exit(1)
 
-    monitor = BridgeMonitor(alchemy_key, settings)
-    guard = SentimentGuard(cryptopanic_key, settings.get('sentiment', {}))
-    exchange = Exchange(account_config)
-
-    run_alp_loop(monitor, guard, exchange, settings, telegram_config, logger)
+    exchange = Exchange(account_config)   # nur oeffentliche Kurse im Dry-Run
+    mode = settings.get('mode', 'deposits')
+    print("=" * 60)
+    if mode == 'deposits':
+        cfg = settings['deposit_watch']
+        print("  KBot — Wal-Einzahlungen auf Binance -> Short (DRY-RUN)")
+        print(f"  Coins    : {len(cfg['tokens'])} ERC-20-Alts")
+        print(f"  Signal   : Einzahlung >= {cfg['min_usd']:,.0f} $ an bekannte Binance-Adresse")
+        print(f"  Paper    : {cfg['start_equity_usdt']} USDT | {cfg['leverage']}x | Margin {cfg['margin_fraction']:.0%} | "
+              f"Short {cfg['hold_minutes']} min")
+        print("=" * 60)
+        run_deposit_watch(AlchemyClient(alchemy_key), exchange, settings, telegram_config, logger)
+    elif mode == 'bridge':
+        bw = settings['bridge_watch']
+        print("  KBot — Bridge-Inflow (ARCHIV, Backtest widerlegt) — DRY-RUN")
+        print("=" * 60)
+        run_alp_loop(BridgeMonitor(alchemy_key, bw), exchange, bw, telegram_config, logger)
+    else:
+        logger.error(f"Unbekannter mode '{mode}' in settings.json (erlaubt: deposits, bridge).")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

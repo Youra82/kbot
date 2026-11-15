@@ -56,10 +56,19 @@ def main():
     telegram_config = secrets.get('telegram', {})
     account_config = (secrets.get('kbot') or [{}])[0]
 
-    if not settings.get('simulation_mode', True):
-        logger.error("Live-Modus ist deaktiviert: erst Dry-Run-Vorwaertstest (siehe README). "
-                     "simulation_mode=true setzen.")
+    echtgeld = settings.get('echtgeld') or {}
+    if echtgeld.get('aktiv') or not settings.get('simulation_mode', True):
+        logger.error("Echtgeld ist nicht verfuegbar: KBot handelt nur auf Papier (keine Order-Funktionen). "
+                     "In settings.json \"echtgeld\": {\"aktiv\": false} setzen.")
         sys.exit(1)
+    if 'papier_startkapital' in echtgeld:      # Startkapital NEUER Papierkonten (bestehende bleiben)
+        settings['deposit_watch']['start_equity_usdt'] = float(echtgeld['papier_startkapital'])
+
+    # PID fuer update.sh (Neustart nach Update; der Cron-Waechter startet den Bot dann neu)
+    pid_file = os.path.join(PROJECT_ROOT, 'artifacts', 'state', 'kbot.pid')
+    os.makedirs(os.path.dirname(pid_file), exist_ok=True)
+    with open(pid_file, 'w') as f:
+        f.write(str(os.getpid()))
 
     if not alchemy_key:
         logger.error("Kein Alchemy API-Key in secret.json! Bot kann nicht starten.")

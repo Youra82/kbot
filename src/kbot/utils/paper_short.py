@@ -36,6 +36,9 @@ class PaperShort:
         st = self._load()
         self.equity = st.get('equity', {'limit': start_equity, 'market': start_equity})
         self.positions = st.get('positions', [])
+        self.start = st.get('start', start_equity)
+        if not st:
+            self._save()                   # Papierkonto sofort anlegen (Cockpit zeigt es ab dem Start)
 
     # --- Zustand ---
     def _load(self):
@@ -49,7 +52,7 @@ class PaperShort:
         os.makedirs(os.path.dirname(self.state_path), exist_ok=True)
         tmp = self.state_path + '.tmp'
         with open(tmp, 'w') as f:
-            json.dump({'equity': self.equity, 'positions': self.positions}, f, indent=2)
+            json.dump({'equity': self.equity, 'positions': self.positions, 'start': self.start}, f, indent=2)
         os.replace(tmp, self.state_path)
 
     def open_tokens(self):

@@ -1,4 +1,9 @@
 {
+    "echtgeld": {
+        "aktiv": false,
+        "papier_startkapital": 100,
+        "_info": "KBot handelt nur auf Papier (echte Bitget-Kurse, keine Orders, kein Bitget-Schlüssel). true wird abgelehnt. papier_startkapital = Startkapital je Papierkonto (Limit und Market), gilt nur für ein neues Konto. Das Cockpit zeigt das Papierkonto automatisch."
+    },
     "mode": "deposits",
     "_info_mode": "deposits = Wal-Einzahlungs-Waechter (praeregistriert bestanden). bridge = alter Bridge-Inflow (widerlegt, nur Archiv).",
     "simulation_mode": true,

@@ -118,6 +118,9 @@ def run_deposit_watch(client, exchange, settings, tg, log):
             log.error(f"OHLCV {symbol}: {e}")
             return []
 
+    paper = PaperShort(ticker, ohlcv, POS_FILE, TRADE_LOG, start_equity=cfg.get('start_equity_usdt', 100.0),
+                       leverage=cfg.get('leverage', 5), margin_frac=cfg.get('margin_fraction', 1 / 3),
+                       hold_minutes=cfg.get('hold_minutes', 60), fill_window_minutes=cfg.get('limit_fill_minutes', 2))
     book = AddressBook(BOOK_FILE)
     st = _load(LOOP_FILE, {})
     scanner = DepositScanner(client, book, cursor=st.get('cursor'), max_catchup=cfg.get('max_catchup_blocks', 600))
@@ -128,9 +131,6 @@ def run_deposit_watch(client, exchange, settings, tg, log):
 
     rule = DepositRule(cfg.get('min_usd', 500_000), cfg.get('hold_minutes', 60))
     rule.last_entry = {k: pd.Timestamp(v) for k, v in st.get('last_entry', {}).items()}
-    paper = PaperShort(ticker, ohlcv, POS_FILE, TRADE_LOG, start_equity=cfg.get('start_equity_usdt', 100.0),
-                       leverage=cfg.get('leverage', 5), margin_frac=cfg.get('margin_fraction', 1 / 3),
-                       hold_minutes=cfg.get('hold_minutes', 60), fill_window_minutes=cfg.get('limit_fill_minutes', 2))
     pending = st.get('pending', [])
     last_report = st.get('last_report', '')
     symbols = {t: f"{t}/USDT:USDT" for t in cfg['tokens']}

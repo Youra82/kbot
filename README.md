@@ -89,35 +89,64 @@ Ob Limit-Orders in der Praxis so gefüllt werden, kann nur der Live-Test zeigen.
 
 Geprüft: Der Live-Scanner findet dieselben Einzahlungen wie die Backtest-Daten (9/9, identische Mengen).
 
-## Installation
+## Installation (MiniPC / VPS)
+
+Voraussetzung: Linux (Ubuntu/Debian) mit `sudo`; `install.sh` installiert Python 3.12, legt `.venv` an und lädt die Pakete.
 
 ```bash
-git clone https://github.com/Youra82/kbot.git
-cd kbot
-chmod +x install.sh && ./install.sh
+git clone https://github.com/Youra82/kbot.git ~/kbot
+cd ~/kbot
+./install.sh
 ```
 
-`secret.json` anlegen (wird nicht von Git getrackt):
-
+**1. `secret.json` anlegen** (nicht versioniert):
+```bash
+nano ~/kbot/secret.json
+```
 ```json
 {
     "alchemy_api_key": "dein-alchemy-key",
-    "telegram": { "bot_token": "...", "chat_id": "..." },
-    "kbot": [ { "name": "kbot", "apiKey": "", "secret": "", "password": "" } ]
+    "telegram": { "bot_token": "...", "chat_id": "..." }
 }
 ```
+- **Alchemy** (kostenlos, nötig): https://www.alchemy.com → Konto anlegen → „Create new app“ → Chain **Ethereum**,
+  Netzwerk **Mainnet** → den **API Key** kopieren. Der Free Tier reicht.
+- **Telegram** ist optional (gleicher Bot/Chat wie bei den anderen Bots möglich).
+- **Bitget-Schlüssel braucht der KBot nicht** – er handelt nur auf Papier und nutzt öffentliche Kurse.
 
-- **Alchemy** (kostenlos): https://www.alchemy.com. Der Free Tier reicht.
-- **Bitget-Keys** sind für den Dry-Run nicht nötig, KBot nutzt nur öffentliche Kurse.
-- Beim **ersten Start** baut KBot das Adressbuch aus 60 Tagen Sweeps auf. Das dauert einmalig ca. 20–40 min.
+**2. `settings.json` prüfen:** `"echtgeld": {"aktiv": false}` (Standard, `true` wird abgelehnt) und `"mode": "deposits"`.
+`papier_startkapital` = Startkapital je Papierkonto (Standard 100 USDT, gilt nur für ein neues Konto).
 
-## Starten
-
+**3. Wächter-Cronjob eintragen** (`crontab -e`, ganz unten anfügen):
+```cron
+# kbot -> Wächter, startet den Dauerprozess falls er nicht läuft
+*/5 * * * * /usr/bin/flock -n /home/<user>/kbot/kbot.lock /bin/sh -c "cd /home/<user>/kbot && .venv/bin/python3 master_runner.py >> logs/stdout.log 2>&1"
+```
+`<user>` durch den eigenen Benutzernamen ersetzen (`echo $USER`). Der KBot ist ein **Dauerprozess**: `flock` hält die
+Sperre, solange er läuft – der Cronjob prüft also nur alle 5 Minuten, ob er noch lebt, und startet ihn sonst neu
+(nach Absturz, Update oder Neustart des Rechners). Wer nicht warten will, startet ihn einmal sofort mit derselben Zeile:
 ```bash
 cd ~/kbot && nohup /usr/bin/flock -n kbot.lock .venv/bin/python3 master_runner.py >> logs/stdout.log 2>&1 &
 ```
 
-Stoppen: `pkill -f master_runner.py`. Nach `./update.sh` muss der Bot neu gestartet werden.
+**4. Erster Start:** KBot baut einmalig das Binance-Adressbuch aus 60 Tagen Sweeps auf (**ca. 20–40 min**,
+Telegram: „baue Binance-Adressbuch auf …“). Danach: „▶️ KBOT Dry-Run gestartet“. In dieser Zeit zeigt das Cockpit
+„veraltet“ – das ist normal.
+
+**Cockpit:** Liegt `~/kbot` neben `~/cockpit`, erscheint der KBot automatisch unter „Papierkonten“ (spätestens nach
+10 Minuten oder sofort nach `cd ~/cockpit && ./update.sh`). Angezeigt wird das **Market-Konto** (Taker, jedes Signal
+gefüllt); das Limit-Konto (Maker) steht als Vergleich darüber.
+
+## Bedienung
+
+| Befehl | Was er tut |
+|---|---|
+| `tail -f ~/kbot/logs/kbot.log` | laufendes Protokoll (Signale, Paper-Shorts, Ausstiege) |
+| `cat ~/kbot/logs/paper_shorts.csv` | alle Paper-Trades beider Konten |
+| `cat ~/kbot/logs/deposits.csv` | alle Binance-Einzahlungen ≥ 100k $ mit Signal-Status |
+| `pgrep -af "kbot.*master_runner"` | läuft er? |
+| `kill $(cat ~/kbot/artifacts/state/kbot.pid)` | anhalten (der Cron-Wächter startet ihn binnen 5 min neu; dauerhaft stoppen: Cron-Zeile auskommentieren) |
+| `cd ~/kbot && ./update.sh` | neue Version holen; `secret.json`, Zustand und Trades bleiben; der Bot wird beendet und vom Wächter mit dem neuen Code neu gestartet |
 
 ## Einstellungen (`settings.json` → `deposit_watch`)
 
